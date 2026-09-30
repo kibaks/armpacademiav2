@@ -1,0 +1,2759 @@
+import React, { useState, useRef } from 'react';
+import { 
+  User, 
+  Mail, 
+  Building2, 
+  Award, 
+  BookOpen, 
+  ShieldCheck, 
+  LogOut, 
+  CheckCircle2, 
+  Clock, 
+  FileText, 
+  AlertCircle,
+  ExternalLink,
+  ChevronRight,
+  Shield,
+  Smartphone,
+  KeyRound,
+  Lock,
+  X,
+  QrCode,
+  Edit3,
+  Save,
+  Phone,
+  RefreshCw,
+  Camera,
+  Plus,
+  MoreHorizontal,
+  ThumbsUp,
+  MessageCircle,
+  Share2,
+  Image as ImageIcon,
+  Send,
+  Download,
+  Printer,
+  Sparkles,
+  MapPin,
+  Globe,
+  Calendar,
+  Briefcase,
+  GraduationCap,
+  Users,
+  Bell,
+  MessageSquare,
+  Check,
+  Video,
+  Music,
+  Smile,
+  Hash,
+  BadgeCheck,
+  Upload,
+  Trash2,
+  Play,
+  Link as LinkIcon,
+  FolderOpen,
+  TrendingUp,
+  BarChart3,
+  Activity,
+  Target,
+  Timer,
+  Flame
+} from 'lucide-react';
+import { UserProfile, UserRole, CourseModule, TrainingRequest, SocialPost } from '../types';
+import { firebaseResetPassword, savePostToFirestore, fetchPostsFromFirestore, deletePostFromFirestore } from '../firebase';
+import { ArmpLogo } from './ArmpLogo';
+import { uploadFile, uploadBlob, type AcademiaFile } from '../lib/academiaStorage';
+import { AcademiaMediaUploader, AcademiaMediaPreview } from './AcademiaMediaUploader';
+import { computeUserLearningStats } from '../utils/learningStats';
+
+import imgMentor from '../assets/images/mentor_juriste_africain_1789983212035.jpg';
+import imgCoverSeminar from '../assets/images/marches_publics_seminar_1789983166275.jpg';
+import imgCoverFormation from '../assets/images/formation_numerique_1789983181347.jpg';
+import imgCoverAudit from '../assets/images/expert_audit_cgpmp_1789983194702.jpg';
+
+export type ProfileTab = 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications';
+
+interface UserProfileViewProps {
+  currentProfile: UserProfile;
+  allProfiles: Record<string, UserProfile>;
+  onSelectRole: (role: UserRole) => void;
+  onLogout: () => void;
+  courses: CourseModule[];
+  requests: TrainingRequest[];
+  onOpenCourse?: (course: CourseModule) => void;
+  onOpenCoursePlayer?: (course: CourseModule) => void;
+  onNavigateToCourses: () => void;
+  onOpenPlacementQuiz: () => void;
+  onOpenTuteur?: () => void;
+  onOpenCgpmpRequests?: () => void;
+  onToggleTwoFactor?: (enabled: boolean) => void;
+  onUpdateProfile?: (profile: UserProfile) => Promise<void> | void;
+  onShowToast?: (msg: string) => void;
+  activeTab?: ProfileTab;
+  initialTab?: ProfileTab;
+  onTabChange?: (tab: ProfileTab) => void;
+}
+
+interface PostItem {
+  id: string;
+  author: string;
+  roleTitle: string;
+  avatar: string;
+  timeAgo: string;
+  content: string;
+  badgeTag?: string;
+  certificateData?: {
+    title: string;
+    code: string;
+    score: number;
+    sealText: string;
+  };
+  image?: string;
+  video?: string;
+  videoTitle?: string;
+  audio?: string;
+  audioTitle?: string;
+  likes: number;
+  userLiked: boolean;
+  comments: {
+    id: string;
+    author: string;
+    avatar: string;
+    text: string;
+    timeAgo: string;
+  }[];
+}
+
+export const UserProfileView: React.FC<UserProfileViewProps> = ({
+  currentProfile,
+  allProfiles,
+  onSelectRole,
+  onLogout,
+  courses,
+  requests,
+  onOpenCourse,
+  onOpenCoursePlayer,
+  onNavigateToCourses,
+  onOpenPlacementQuiz,
+  onOpenTuteur,
+  onOpenCgpmpRequests,
+  onToggleTwoFactor,
+  onUpdateProfile,
+  onShowToast,
+  activeTab,
+  initialTab,
+  onTabChange
+}) => {
+  // Navigation tabs (Facebook menus)
+  const [currentTab, setCurrentTab] = useState<ProfileTab>(activeTab || initialTab || 'publications');
+
+  // Sync prop changes
+  React.useEffect(() => {
+    const target = activeTab || initialTab;
+    if (target) {
+      setCurrentTab(target);
+    }
+  }, [activeTab, initialTab]);
+
+  const handleTabClick = (tab: ProfileTab) => {
+    setCurrentTab(tab);
+    if (onTabChange) {
+      onTabChange(tab);
+    }
+  };
+
+  // 2FA Security Modal
+  const [show2FASetupModal, setShow2FASetupModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+
+  // Password reset state
+  const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
+
+  // Edit Profile Modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState(currentProfile.name);
+  const [editRoleTitle, setEditRoleTitle] = useState(currentProfile.roleTitle);
+  const [editInstitution, setEditInstitution] = useState(currentProfile.institution);
+  const [editPhone, setEditPhone] = useState(currentProfile.phone || '');
+  const [editWhatsapp, setEditWhatsapp] = useState(currentProfile.whatsapp || '');
+  const [editMatricule, setEditMatricule] = useState(currentProfile.matricule || '');
+  const [editLocation, setEditLocation] = useState(currentProfile.location || 'Kinshasa, RDC');
+  const [editWebsite, setEditWebsite] = useState(currentProfile.website || 'https://armp-rdc.org');
+  const [editBio, setEditBio] = useState(currentProfile.bio || '');
+  const [editCoverBio, setEditCoverBio] = useState(currentProfile.coverBio || '');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Avatar upload modal dédié (formulaire d'upload seul, pas édition infos perso)
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(null);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Cover Image picker modal — formulaire d'upload dédié avec prévisualisation
+  const [showCoverModal, setShowCoverModal] = useState(false);
+  const [coverDraftUrl, setCoverDraftUrl] = useState<string | null>(null);
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const availableCovers = [
+    { name: 'Séminaire National ARMP', url: imgCoverSeminar },
+    { name: 'Formation Numérique ACADEMIA', url: imgCoverFormation },
+    { name: 'Audit & Contrôle CGPMP', url: imgCoverAudit },
+  ];
+
+  // Role Switcher Dropdown in profile header
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  // Certificate Printable Modal
+  const [previewCertificate, setPreviewCertificate] = useState<{
+    courseTitle: string;
+    courseCode: string;
+    issuedTo: string;
+    role: string;
+    date: string;
+  } | null>(null);
+
+  // Facebook Feed Posts State (synchronisé avec Firestore + localStorage)
+  const defaultPosts: PostItem[] = [
+    {
+      id: 'post-1',
+      author: currentProfile.name,
+      roleTitle: currentProfile.roleTitle,
+      avatar: currentProfile.avatarUrl,
+      timeAgo: 'Il y a 3 heures • Kinshasa • 🌐',
+      badgeTag: 'Certification Officielle',
+      content: "Fier d'avoir validé avec succès le module d'excellence ARMP MOD-002 sur « L'Élaboration du Plan de Passation des Marchés (PPM) et Rédaction des DAO Types ». Une étape clé pour la régularité des marchés publics de notre institution et la réduction des délais d'ANO DGCMP !",
+      certificateData: {
+        title: 'Élaboration du PPM et Rédaction des DAO Types ARMP',
+        code: 'CERT-ARMP-2026-0884',
+        score: currentProfile.placementScore || 92,
+        sealText: 'République Démocratique du Congo • Autorité de Régulation des Marchés Publics'
+      },
+      image: imgCoverSeminar,
+      likes: 38,
+      userLiked: false,
+      comments: [
+        {
+          id: 'c-1',
+          author: 'Me Christian Ilunga (DGCMP)',
+          avatar: imgMentor,
+          text: 'Toutes nos félicitations confrère ! La maîtrise des DAO types facilite grandement le contrôle a priori.',
+          timeAgo: 'Il y a 2h'
+        }
+      ]
+    },
+    {
+      id: 'post-2',
+      author: currentProfile.name,
+      roleTitle: currentProfile.roleTitle,
+      avatar: currentProfile.avatarUrl,
+      timeAgo: 'Hier à 14:30 • 🏛️',
+      badgeTag: 'Dossier CGPMP',
+      content: `Dossier de renforcement des capacités soumis à la DFAT/ARMP pour les membres de notre cellule (${currentProfile.institution}). La modernisation des procédures de la Loi 10/010 avance résolument grâce à ACADEMIA ITECH !`,
+      likes: 24,
+      userLiked: true,
+      comments: []
+    }
+  ];
+
+  const [posts, setPosts] = useState<PostItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('armp_social_posts');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return defaultPosts;
+  });
+
+  // Charger les publications depuis Firestore au montage
+  React.useEffect(() => {
+    let mounted = true;
+    fetchPostsFromFirestore().then(remote => {
+      if (mounted && remote && remote.length > 0) {
+        setPosts(prev => {
+          const map = new Map<string, PostItem>();
+          [...remote, ...prev].forEach(p => map.set(p.id, p as PostItem));
+          const merged = Array.from(map.values());
+          try {
+            localStorage.setItem('armp_social_posts', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [isGalleryUploading, setIsGalleryUploading] = useState(false);
+
+  // New Post Form State with Media Attachments — Academia Storage (images/vidéos/audios)
+  const [newPostText, setNewPostText] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<AcademiaFile | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [selectedVideoName, setSelectedVideoName] = useState<string | null>(null);
+  const [selectedVideoFile, setSelectedVideoFile] = useState<AcademiaFile | null>(null);
+  const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+  const [selectedAudioName, setSelectedAudioName] = useState<string | null>(null);
+  const [selectedAudioFile, setSelectedAudioFile] = useState<AcademiaFile | null>(null);
+  const [mediaPickerModal, setMediaPickerModal] = useState<'image' | 'video' | 'audio' | null>(null);
+  const [customMediaUrl, setCustomMediaUrl] = useState('');
+  const [mediaUploading, setMediaUploading] = useState<'image' | 'video' | 'audio' | null>(null);
+
+  // Hidden File Inputs Refs
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  // Active cover photo
+  const currentCover = currentProfile.coverUrl || imgCoverSeminar;
+
+  // --- Apprentissage : dernier cours + stats courbe (persistés dans UserProfile / Firestore) ---
+  const learningStats = React.useMemo(
+    () => computeUserLearningStats(currentProfile, courses),
+    [currentProfile, courses]
+  );
+  const lastLearningCourse = learningStats.lastLearningCourse;
+  const avgScoreDisplay = learningStats.averageScore;
+  const completedCount = learningStats.completedCoursesCount;
+  const inProgressCount = learningStats.inProgressCoursesCount;
+  const certificationsCount = learningStats.certificationsCount;
+  const totalCourses = learningStats.totalCourses;
+  const overallProgress = learningStats.overallProgress;
+  const lastCourseProgress = learningStats.lastCourseProgress;
+  const lastCourseCompletedChapters = learningStats.lastCourseCompletedChapters;
+  const lastCourseTotalChapters = learningStats.lastCourseTotalChapters;
+  const lastCourseNextLesson = learningStats.lastCourseNextLessonLabel;
+  const persistedHistory = learningStats.studyHoursHistory;
+  const sparkValues = persistedHistory.map(h => h.score);
+  const sparkLabels = persistedHistory.map(h => h.month);
+  const monthlyHours = persistedHistory.map(h => h.hours);
+  const totalStudyHours = learningStats.totalStudyHours;
+  const monthlyDeltaPct = learningStats.monthlyDeltaPct;
+  const currentStreak = learningStats.streakDays;
+
+  const handleLogStudySession = async () => {
+    const nextHistory = persistedHistory.map((h, idx) =>
+      idx === persistedHistory.length - 1
+        ? { ...h, hours: Number((h.hours + 1.5).toFixed(1)), score: Math.min(100, h.score + 2) }
+        : h
+    );
+    const nextScore = Math.min(100, (currentProfile.placementScore || 82) + 2);
+    const updated: UserProfile = {
+      ...currentProfile,
+      placementScore: nextScore,
+      studyHoursHistory: nextHistory,
+      totalStudyMinutes: (currentProfile.totalStudyMinutes || 180) + 90,
+      streakDays: currentStreak + 1,
+      lastActiveDate: new Date().toISOString().slice(0, 10)
+    };
+    if (onUpdateProfile) await onUpdateProfile(updated);
+    onShowToast?.('Séance d’étude (+1h30) enregistrée et synchronisée avec Firestore ✓');
+  };
+
+  const handleGalleryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsGalleryUploading(true);
+    try {
+      const acad = await uploadFile(file, { category: 'images', visibility: 'public', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      const newPhoto = {
+        id: `photo-${Date.now()}`,
+        url: acad.url,
+        label: file.name.replace(/\.[^/.]+$/, ''),
+        createdAt: new Date().toLocaleDateString('fr-FR')
+      };
+      const updated: UserProfile = {
+        ...currentProfile,
+        galleryPhotos: [newPhoto, ...(currentProfile.galleryPhotos || [])]
+      };
+      if (onUpdateProfile) await onUpdateProfile(updated);
+      onShowToast?.('Photo ajoutée à votre galerie et persistée dans Firestore ✓');
+    } catch {
+      onShowToast?.("Erreur lors de l'ajout de la photo.");
+    } finally {
+      setIsGalleryUploading(false);
+      e.target.value = '';
+    }
+  };
+  // Helpers courbe
+  const gaugeAngle = (avgScoreDisplay / 100) * 180; // 0-180
+  const gaugeCirc = Math.PI * 70; // r=70
+  const gaugeDash = (gaugeAngle / 180) * gaugeCirc;
+
+  const handleOpenEditModal = () => {
+    setEditName(currentProfile.name);
+    setEditRoleTitle(currentProfile.roleTitle);
+    setEditInstitution(currentProfile.institution);
+    setEditPhone(currentProfile.phone || '');
+    setEditWhatsapp(currentProfile.whatsapp || '');
+    setEditMatricule(currentProfile.matricule || '');
+    setEditLocation(currentProfile.location || 'Kinshasa, RDC');
+    setEditWebsite(currentProfile.website || 'https://armp-rdc.org');
+    setEditBio(currentProfile.bio || '');
+    setEditCoverBio(currentProfile.coverBio || '');
+    setShowEditModal(true);
+  };
+
+  const handleOpenAvatarModal = () => {
+    setAvatarDraftUrl(null);
+    setShowAvatarModal(true);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const updatedProfile: UserProfile = {
+        ...currentProfile,
+        name: editName.trim() || currentProfile.name,
+        roleTitle: editRoleTitle.trim() || currentProfile.roleTitle,
+        institution: editInstitution.trim() || currentProfile.institution,
+        phone: editPhone.trim(),
+        whatsapp: editWhatsapp.trim(),
+        whatsappLinked: !!editWhatsapp.trim(),
+        matricule: editMatricule.trim(),
+        location: editLocation.trim(),
+        website: editWebsite.trim(),
+        bio: editBio.trim(),
+        coverBio: editCoverBio.trim()
+      };
+      if (onUpdateProfile) {
+        await onUpdateProfile(updatedProfile);
+      }
+      onShowToast?.('Profil mis à jour et synchronisé avec succès !');
+      setShowEditModal(false);
+    } catch {
+      onShowToast?.('Erreur lors de la mise à jour du profil.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleOpenCoverModal = () => {
+    console.log('[ARMP] open cover modal');
+    setCoverDraftUrl(null);
+    setShowCoverModal(true);
+  };
+
+  const handleChangeCover = async (newUrl: string) => {
+    try {
+      const updated: UserProfile = {
+        ...currentProfile,
+        coverUrl: newUrl
+      };
+      if (onUpdateProfile) {
+        await onUpdateProfile(updated);
+      }
+      setShowCoverModal(false);
+      setCoverDraftUrl(null);
+      onShowToast?.('Photo de couverture mise à jour !');
+    } catch {
+      onShowToast?.('Erreur lors du changement de couverture.');
+    }
+  };
+
+  const handleCoverFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onShowToast?.('Veuillez sélectionner une image (JPG, PNG, WebP).');
+      return;
+    }
+    setIsCoverUploading(true);
+    try {
+      onShowToast?.(`Envoi couverture « ${file.name} » vers Academia…`);
+      const acad = await uploadFile(file, { category: 'covers', visibility: 'public', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      setCoverDraftUrl(acad.url);
+      onShowToast?.('Couverture téléversée sur Academia ✓ — prévisualisation prête');
+    } catch (err: any) {
+      onShowToast?.(err.message || 'Échec upload couverture');
+    } finally {
+      setIsCoverUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveCover = async () => {
+    if (!coverDraftUrl) return;
+    await handleChangeCover(coverDraftUrl);
+  };
+
+  const handleSelectPresetCover = (url: string) => {
+    setCoverDraftUrl(url);
+  };
+
+  // Avatar dédié : upload vers Academia (avatars, public) avec preview dans sa propre modale
+  const handleAvatarPickerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onShowToast?.('Veuillez sélectionner une image (JPG, PNG, WebP).');
+      return;
+    }
+    setIsAvatarUploading(true);
+    try {
+      onShowToast?.(`Envoi avatar « ${file.name} » vers Academia…`);
+      const acad = await uploadFile(file, { category: 'avatars', visibility: 'public', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      setAvatarDraftUrl(acad.url);
+      onShowToast?.('Photo téléversée sur Academia ✓ — prévisualisation prête');
+    } catch (err: any) {
+      onShowToast?.(err.message || 'Échec upload avatar');
+    } finally {
+      setIsAvatarUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!avatarDraftUrl) return;
+    try {
+      const updated: UserProfile = { ...currentProfile, avatarUrl: avatarDraftUrl };
+      if (onUpdateProfile) await onUpdateProfile(updated);
+      setShowAvatarModal(false);
+      setAvatarDraftUrl(null);
+      onShowToast?.('Photo de profil mise à jour avec succès ✓');
+    } catch {
+      onShowToast?.('Erreur lors de la mise à jour de la photo.');
+    }
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!currentProfile.email) return;
+    setIsSendingResetEmail(true);
+    try {
+      await firebaseResetPassword(currentProfile.email);
+      onShowToast?.(`Email de réinitialisation sécurisé envoyé à ${currentProfile.email}`);
+    } catch {
+      onShowToast?.("Impossible d'envoyer l'email de réinitialisation.");
+    } finally {
+      setIsSendingResetEmail(false);
+    }
+  };
+
+  const is2FAActive = !!currentProfile.twoFactorEnabled;
+
+  const handleOpen2FASetup = () => {
+    setOtpInput('');
+    setShow2FASetupModal(true);
+  };
+
+  const handleConfirm2FAActivation = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsVerifying2FA(true);
+    setTimeout(() => {
+      setIsVerifying2FA(false);
+      setShow2FASetupModal(false);
+      if (onToggleTwoFactor) {
+        onToggleTwoFactor(true);
+      }
+      onShowToast?.('Authentification à double facteur (2FA) activée.');
+    }, 400);
+  };
+
+  const handleDirectDisable2FA = () => {
+    if (onToggleTwoFactor) {
+      onToggleTwoFactor(false);
+    }
+    onShowToast?.('Authentification à double facteur (2FA) désactivée.');
+  };
+
+  // Media Upload & Selection Handlers — Academia Storage (137.184.59.184)
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onShowToast?.('Veuillez sélectionner un fichier image valide (JPG, PNG, WebP).');
+      return;
+    }
+    setMediaUploading('image');
+    try {
+      onShowToast?.(`Envoi image « ${file.name} » vers Academia…`);
+      const acad = await uploadFile(file, { category: 'posts_images', visibility: 'public', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      setSelectedImage(acad.url);
+      setSelectedImageName(file.name);
+      setSelectedImageFile(acad);
+      setMediaPickerModal(null);
+      onShowToast?.(`Image « ${file.name} » stockée sur Academia ✓`);
+    } catch (err: any) {
+      onShowToast?.(err.message || 'Échec upload image');
+    } finally {
+      setMediaUploading(null);
+      e.target.value = '';
+    }
+  };
+
+  const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('video/')) {
+      onShowToast?.('Veuillez sélectionner un fichier vidéo valide (MP4, WebM, MOV).');
+      return;
+    }
+    setMediaUploading('video');
+    try {
+      onShowToast?.(`Envoi vidéo « ${file.name} » vers Academia…`);
+      const acad = await uploadFile(file, { category: 'posts_videos', visibility: 'private', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      setSelectedVideo(acad.url);
+      setSelectedVideoName(file.name);
+      setSelectedVideoFile(acad);
+      setMediaPickerModal(null);
+      onShowToast?.(`Vidéo « ${file.name} » stockée sur Academia ✓`);
+    } catch (err: any) {
+      onShowToast?.(err.message || 'Échec upload vidéo');
+    } finally {
+      setMediaUploading(null);
+      e.target.value = '';
+    }
+  };
+
+  const handleAudioFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) {
+      onShowToast?.('Veuillez sélectionner un fichier audio valide (MP3, WAV, M4A).');
+      return;
+    }
+    setMediaUploading('audio');
+    try {
+      onShowToast?.(`Envoi audio « ${file.name} » vers Academia…`);
+      const acad = await uploadFile(file, { category: 'posts_audios', visibility: 'private', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      setSelectedAudio(acad.url);
+      setSelectedAudioName(file.name);
+      setSelectedAudioFile(acad);
+      setMediaPickerModal(null);
+      onShowToast?.(`Audio « ${file.name} » stocké sur Academia ✓`);
+    } catch (err: any) {
+      onShowToast?.(err.message || 'Échec upload audio');
+    } finally {
+      setMediaUploading(null);
+      e.target.value = '';
+    }
+  };
+
+  const handleSelectLibraryImage = (url: string, name: string) => {
+    setSelectedImage(url);
+    setSelectedImageName(name);
+    setMediaPickerModal(null);
+    onShowToast?.(`Photo « ${name} » ajoutée.`);
+  };
+
+  const handleSelectLibraryVideo = (url: string, name: string) => {
+    setSelectedVideo(url);
+    setSelectedVideoName(name);
+    setMediaPickerModal(null);
+    onShowToast?.(`Extrait vidéo « ${name} » ajouté.`);
+  };
+
+  const handleApplyCustomMediaUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUrl = customMediaUrl.trim();
+    if (!cleanUrl) return;
+
+    if (mediaPickerModal === 'image') {
+      setSelectedImage(cleanUrl);
+      setSelectedImageName('Image Web importée');
+      onShowToast?.('Image Web insérée avec succès.');
+    } else if (mediaPickerModal === 'video') {
+      setSelectedVideo(cleanUrl);
+      setSelectedVideoName('Vidéo Web importée');
+      onShowToast?.('Vidéo Web insérée avec succès.');
+    } else if (mediaPickerModal === 'audio') {
+      setSelectedAudio(cleanUrl);
+      setSelectedAudioName('Audio Web importé');
+      onShowToast?.('Audio Web inséré avec succès.');
+    }
+    setCustomMediaUrl('');
+    setMediaPickerModal(null);
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setSelectedImageName(null);
+    setSelectedImageFile(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+    onShowToast?.('Image retirée de la publication.');
+  };
+
+  const handleRemoveVideo = () => {
+    setSelectedVideo(null);
+    setSelectedVideoName(null);
+    setSelectedVideoFile(null);
+    if (videoInputRef.current) {
+      videoInputRef.current.value = '';
+    }
+    onShowToast?.('Vidéo retirée de la publication.');
+  };
+
+  const handleRemoveAudio = () => {
+    setSelectedAudio(null);
+    setSelectedAudioName(null);
+    setSelectedAudioFile(null);
+    if (audioInputRef.current) {
+      audioInputRef.current.value = '';
+    }
+    onShowToast?.('Audio retiré de la publication.');
+  };
+
+  // Create post in the Facebook feed (supports Text, Image, Video, Audio ou combinaisons — Academia + Firestore)
+  const handleCreatePost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPostText.trim() && !selectedImage && !selectedVideo && !selectedAudio) return;
+    setIsPosting(true);
+
+    const newPost: SocialPost = {
+      id: `post-${Date.now()}`,
+      authorId: currentProfile.id,
+      author: currentProfile.name,
+      roleTitle: currentProfile.roleTitle,
+      avatar: currentProfile.avatarUrl,
+      timeAgo: "À l'instant • 🌐 (Academia 137.184.59.184)",
+      createdAt: new Date().toISOString(),
+      content: newPostText.trim(),
+      image: selectedImage || undefined,
+      video: selectedVideo || undefined,
+      videoTitle: selectedVideoName || undefined,
+      audio: selectedAudio || undefined,
+      audioTitle: selectedAudioName || undefined,
+      likes: 0,
+      userLiked: false,
+      comments: []
+    };
+
+    const nextPosts = [newPost as PostItem, ...posts];
+    setPosts(nextPosts);
+    try {
+      localStorage.setItem('armp_social_posts', JSON.stringify(nextPosts));
+    } catch {}
+    savePostToFirestore(newPost).catch(() => {});
+
+    setNewPostText('');
+    setSelectedImage(null);
+    setSelectedImageName(null);
+    setSelectedImageFile(null);
+    setSelectedVideo(null);
+    setSelectedVideoName(null);
+    setSelectedVideoFile(null);
+    setSelectedAudio(null);
+    setSelectedAudioName(null);
+    setSelectedAudioFile(null);
+    setIsPosting(false);
+    onShowToast?.('Publication partagée et persistée dans Firestore ✓');
+  };
+
+  const handleToggleLike = (postId: string) => {
+    setPosts(prev => {
+      const next = prev.map(p => {
+        if (p.id === postId) {
+          const nextLiked = !p.userLiked;
+          const updated = {
+            ...p,
+            userLiked: nextLiked,
+            likes: nextLiked ? p.likes + 1 : Math.max(0, p.likes - 1)
+          };
+          savePostToFirestore(updated as SocialPost).catch(() => {});
+          return updated;
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem('armp_social_posts', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleAddComment = (postId: string, commentText: string) => {
+    if (!commentText.trim()) return;
+    setPosts(prev => {
+      const next = prev.map(p => {
+        if (p.id === postId) {
+          const updated = {
+            ...p,
+            comments: [
+              ...p.comments,
+              {
+                id: `c-${Date.now()}`,
+                author: currentProfile.name,
+                avatar: currentProfile.avatarUrl,
+                text: commentText.trim(),
+                timeAgo: "À l'instant"
+              }
+            ]
+          };
+          savePostToFirestore(updated as SocialPost).catch(() => {});
+          return updated;
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem('armp_social_posts', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleOpenCoursePlayer = onOpenCourse || onOpenCoursePlayer || (() => {});
+  const userRequests = requests.filter(r => 
+    r.applicantEmail === currentProfile.email || 
+    currentProfile.role === 'dfat_admin' || 
+    currentProfile.role === 'armp_agent'
+  );
+
+  return (
+    <div className="w-full space-y-6 pb-10 animate-in fade-in duration-200">
+      
+      {/* ========================================================================= */}
+      {/* 1. FACEBOOK HERO BANNER & IDENTITY CARD (FULL WIDTH)                     */}
+      {/* ========================================================================= */}
+      <div className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        
+        {/* Cover Photo Container — clic image ou bouton ouvre le formulaire d'upload dédié */}
+        <div className="h-48 sm:h-72 md:h-88 w-full relative overflow-hidden bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 group">
+          <button
+            onClick={handleOpenCoverModal}
+            className="absolute inset-0 w-full h-full cursor-pointer focus:outline-hidden"
+            title="Modifier la photo de couverture"
+            type="button"
+            aria-label="Modifier la photo de couverture"
+          >
+            <img
+              src={currentCover}
+              alt="Couverture"
+              className="w-full h-full object-cover object-center transition duration-500 group-hover:scale-105"
+            />
+          </button>
+          {/* Subtle gradient vignette at bottom — pointer-events-none pour laisser le clic passer */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
+
+          {/* Institutional Badge Watermark */}
+          <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center space-x-2 bg-black/40 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/20 text-white text-[10px] sm:text-xs font-mono pointer-events-none max-w-[75vw] truncate">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="font-bold truncate">ARMP ACADEMIA • PROFIL CERTIFIÉ</span>
+          </div>
+
+          {/* Change Cover Button (Facebook camera icon) — formulaire d'upload dédié — z-10 pour être au-dessus de l'image cliquable */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleOpenCoverModal(); }}
+            className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-10 bg-white/90 hover:bg-white text-slate-800 dark:bg-slate-900/90 dark:hover:bg-slate-900 dark:text-white px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold shadow-lg backdrop-blur-md border border-slate-200/50 flex items-center space-x-2 transition transform active:scale-95 cursor-pointer"
+            title="Modifier la photo de couverture"
+            type="button"
+          >
+            <Camera className="w-4 h-4 text-blue-600" />
+            <span className="hidden sm:inline">Modifier la couverture</span>
+          </button>
+        </div>
+
+        {/* Profile Identity Details (Facebook Avatar Overlap — Full Width) */}
+        <div className="w-full px-4 sm:px-8 lg:px-12 pb-4 pt-0 relative">
+          <div className="w-full flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 -mt-14 sm:-mt-20 mb-4">
+            
+            {/* Left Avatar & Identity */}
+            <div className="w-full flex-1 flex flex-col sm:flex-row sm:items-end space-y-3 sm:space-y-0 sm:space-x-5">
+              
+              {/* Circular Avatar with Camera Badge */}
+              <div className="relative group mx-auto sm:mx-0 shrink-0">
+                <button
+                  onClick={handleOpenAvatarModal}
+                  className="block rounded-full focus:outline-hidden focus:ring-4 focus:ring-blue-500/30"
+                  title="Changer la photo de profil"
+                  type="button"
+                >
+                  <img
+                    src={currentProfile.avatarUrl}
+                    alt={currentProfile.name}
+                    referrerPolicy="no-referrer"
+                    className="w-28 h-28 sm:w-40 sm:h-40 rounded-full object-cover border-4 border-white dark:border-slate-900 shadow-xl bg-slate-100 ring-2 ring-blue-500/20 hover:brightness-95 transition"
+                  />
+                </button>
+                
+                {/* Facebook Camera badge — ouvre le formulaire d'upload photo dédié */}
+                <button
+                  onClick={handleOpenAvatarModal}
+                  className="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 p-2.5 rounded-full bg-slate-100 hover:bg-white dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-2 border-white dark:border-slate-900 shadow-lg transition active:scale-95 cursor-pointer"
+                  title="Changer la photo de profil"
+                  type="button"
+                  aria-label="Changer la photo de profil"
+                >
+                  <Camera className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+                </button>
+              </div>
+
+              {/* Names, Titles, and Facebook Slogan */}
+              <div className="w-full flex-1 space-y-1 text-center sm:text-left bg-white dark:bg-slate-900 rounded-2xl px-4 sm:px-6 py-3.5 shadow-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                    {currentProfile.name}
+                  </h1>
+                  {/* Verified Badge */}
+                  <span className="text-[#1877F2] inline-flex items-center" title="Compte institutionnel certifié par l'ARMP">
+                    <BadgeCheck className="w-6 h-6 fill-[#1877F2] text-white" />
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs">
+                  <span className="px-3 py-0.5 rounded-full font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300">
+                    {currentProfile.roleTitle}
+                  </span>
+                  <span className="text-slate-400 font-semibold">•</span>
+                  <span className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    {currentProfile.institution}
+                  </span>
+                </div>
+
+                {/* Slogan / Cover Bio */}
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 w-full font-medium pt-1 italic">
+                  « {currentProfile.coverBio || currentProfile.bio || 'Engagé pour la transparence, la rigueur et la bonne gouvernance de la commande publique en RDC.'} »
+                </p>
+
+                {/* Colleague stack (Like Facebook mutual friends) */}
+                <div className="flex items-center justify-center sm:justify-start space-x-2 pt-2 text-[11px] text-slate-600 dark:text-slate-300">
+                  <div className="flex -space-x-2 overflow-hidden">
+                    <img className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-slate-900 object-cover" src={imgMentor} alt="Colleague" />
+                    <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 ring-2 ring-white dark:ring-slate-900 text-[9px] font-bold text-white">AR</div>
+                    <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900 text-[9px] font-bold text-white">DG</div>
+                  </div>
+                  <span className="font-semibold">
+                    <strong className="text-slate-800 dark:text-slate-200">142 confrères & régulateurs</strong> certifiés ARMP connectés
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Facebook Action Buttons */}
+            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 pt-2 lg:pt-0 shrink-0">
+              
+              {/* Blue Action Button (Facebook "+ Ajouter à la story / Publication") */}
+              <button
+                onClick={() => {
+                  handleTabClick('publications');
+                  const el = document.getElementById('new-post-input');
+                  el?.focus();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition flex items-center space-x-2 active:scale-95"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Publier un retour</span>
+              </button>
+
+              {/* Grey Action Button (Facebook "Modifier le profil") */}
+              <button
+                onClick={handleOpenEditModal}
+                className="px-4 py-2.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs shadow-xs transition flex items-center space-x-1.5 active:scale-95"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Modifier le profil</span>
+              </button>
+
+              {/* Role switch button (Démo & Habilitations) */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+                  className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition flex items-center space-x-1"
+                  title="Changer de rôle pour tester les vues"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Rôles</span>
+                </button>
+
+                {showRoleSwitcher && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowRoleSwitcher(false)} />
+                    <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-2rem)] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-2 z-40 space-y-1">
+                      <p className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Basculer le rôle institutionnel :
+                      </p>
+                      {Object.values(allProfiles).map((p) => (
+                        <button
+                          key={p.role}
+                          onClick={() => {
+                            onSelectRole(p.role);
+                            setShowRoleSwitcher(false);
+                            onShowToast?.(`Session basculée : ${p.roleTitle}`);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition ${
+                            currentProfile.role === p.role 
+                              ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="truncate">{p.roleTitle}</span>
+                          {currentProfile.role === p.role && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Facebook "..." Options menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition"
+                  title="Plus d'actions"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+
+                {showMoreMenu && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowMoreMenu(false)} />
+                    <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-2 z-40 space-y-1 text-xs">
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          navigator.clipboard?.writeText?.(window.location.href);
+                          onShowToast?.('Lien du profil copié dans le presse-papier !');
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center space-x-2"
+                      >
+                        <Share2 className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Partager le profil</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          handleSendPasswordReset();
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center space-x-2"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Réinitialiser mot de passe</span>
+                      </button>
+                      <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          onLogout();
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 flex items-center space-x-2 font-bold"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Se déconnecter</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* Niveau d'évolution — indicateurs réels synchronisés */}
+          <div className="mt-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-4 relative overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900 dark:text-white leading-tight">Niveau d’évolution</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    {currentProfile.level} • Score moyen : {avgScoreDisplay}% • +{monthlyDeltaPct}% ce trimestre
+                  </div>
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <Activity className="w-3.5 h-3.5" /> {inProgressCount > 0 ? `${inProgressCount} en cours` : 'En progression'}
+              </span>
+            </div>
+
+            {/* ProgressBar — progression réelle du cursus + score de maîtrise */}
+            <div className="mt-3 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-bold">
+                <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-blue-600" /> Progression globale du cursus ({completedCount}/{totalCourses} validés)
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-black">{overallProgress}%</span>
+              </div>
+              <div
+                className="h-4 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden relative p-1"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={overallProgress}
+              >
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 relative overflow-hidden transition-all duration-[1.2s] ease-out"
+                  style={{ width: `${Math.min(100, Math.max(0, overallProgress))}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[shimmer_1.6s_ease-in-out_infinite]" />
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 dark:text-slate-500 px-1">
+                <span>0%</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  Maîtrise évaluée : {avgScoreDisplay}% • Objectif 85% ({currentProfile.level})
+                </span>
+                <span>100%</span>
+              </div>
+              <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-2 pt-1">
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 text-center">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{completedCount}/{totalCourses} modules</div>
+                  <div className="text-xs font-black text-slate-900 dark:text-white">{overallProgress}% complété</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 text-center">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-center gap-1"><Timer className="w-3 h-3" /> {totalStudyHours.toFixed(1)}h</div>
+                  <div className="text-xs font-black text-slate-900 dark:text-white">ce trimestre</div>
+                </div>
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
+                  <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-center gap-1"><Flame className="w-3 h-3" /> {currentStreak} j</div>
+                  <div className="text-xs font-black text-emerald-700 dark:text-emerald-300">streak</div>
+                </div>
+              </div>
+              <div className="pt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleLogStudySession}
+                  className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold transition flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Enregistrer une séance d'étude (+1h30)</span>
+                </button>
+              </div>
+            </div>
+            <style>{`@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}`}</style>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* 2. FACEBOOK SUB-NAVBAR MENUS (TABS)                                      */}
+          {/* ========================================================================= */}
+          <div className="mt-4 pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar">
+            {[
+              { id: 'publications' as const, label: 'Publications', icon: FileText },
+              { id: 'apropos' as const, label: 'À propos', icon: User },
+              { id: 'forum' as const, label: 'Attestations & Diplômes', icon: Award },
+              { id: 'photos' as const, label: 'Photos & Documents', icon: ImageIcon },
+              { id: 'securite' as const, label: 'Sécurité & Accès', icon: ShieldCheck },
+              { id: 'notifications' as const, label: 'WhatsApp & Alertes', icon: Smartphone },
+            ].map((tab) => {
+              const isActive = currentTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id)}
+                  className={`px-3.5 py-3 rounded-xl text-xs font-bold transition flex items-center space-x-2 flex-shrink-0 relative ${
+                    isActive
+                      ? 'text-[#1877F2] bg-blue-50/80 dark:bg-blue-950/60 dark:text-blue-400'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-[#1877F2] dark:text-blue-400' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                  {isActive && (
+                    <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-[#1877F2] rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. TAB CONTENT VIEWS                                                      */}
+      {/* ========================================================================= */}
+      <div className="w-full px-4 sm:px-8 lg:px-12">
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB A: PUBLICATIONS (CLASSIC FACEBOOK 2-COLUMN LAYOUT)                   */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'publications' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* LEFT COLUMN: INTRO, BADGES, MEDIA, COLLEAGUES (lg:col-span-5) */}
+          <div className="lg:col-span-5 space-y-6">
+            
+            {/* Intro Card (Présentation) */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Présentation
+              </h3>
+
+              {/* Bio block */}
+              <div className="text-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <p className="text-xs text-slate-700 dark:text-slate-300 italic leading-relaxed">
+                  « {currentProfile.bio || currentProfile.coverBio || "Spécialiste de la commande publique en RDC, engagé pour l'application rigoureuse de la Loi 10/010."} »
+                </p>
+                <button
+                  onClick={handleOpenEditModal}
+                  className="mt-2 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1"
+                >
+                  <Edit3 className="w-3 h-3" /> Modifier la bio
+                </button>
+              </div>
+
+              {/* Facebook style intro items */}
+              <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-start space-x-3">
+                  <Briefcase className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Fonction : </span>
+                    <strong className="text-slate-900 dark:text-white">{currentProfile.roleTitle}</strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Building2 className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Institution : </span>
+                    <strong className="text-slate-900 dark:text-white">{currentProfile.institution}</strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Hash className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Matricule ARMP : </span>
+                    <strong className="font-mono text-slate-900 dark:text-white">
+                      {currentProfile.matricule || 'CGPMP-MITP-2024-042'}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Résidence : </span>
+                    <strong className="text-slate-900 dark:text-white">{currentProfile.location || 'Kinshasa, RDC'}</strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Globe className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Portail web : </span>
+                    <a href={currentProfile.website || 'https://armp-rdc.org'} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold">
+                      {currentProfile.website || 'https://armp-rdc.org'}
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Calendar className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Inscrit sur ACADEMIA : </span>
+                    <strong className="text-slate-900 dark:text-white">{currentProfile.joinDate || 'Mars 2021'}</strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Smartphone className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>WhatsApp certifié : </span>
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {currentProfile.whatsapp || '+243 81 234 5678'}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <GraduationCap className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span>Niveau certifié : </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                      {currentProfile.level} ({currentProfile.placementScore || 85}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit info button */}
+              <button
+                onClick={handleOpenEditModal}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition flex items-center justify-center space-x-2"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Modifier les informations</span>
+              </button>
+            </div>
+
+            {/* Parcours d'apprentissage — Dernier cours en apprentissage */}
+            {lastLearningCourse && (
+              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <GraduationCap className="w-4 h-4 text-blue-600" />
+                    <span>Parcours d'apprentissage</span>
+                  </h3>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold text-white flex items-center gap-1 ${lastCourseProgress >= 100 ? 'bg-emerald-600' : 'bg-blue-600'}`}>
+                    <Activity className="w-3 h-3" /> {lastCourseProgress >= 100 ? 'Validé ✓' : 'En cours'}
+                  </span>
+                </div>
+
+                {/* Dernier cours en apprentissage */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 group">
+                  <div className="relative h-28 overflow-hidden">
+                    <img src={lastLearningCourse.coverImage} alt={lastLearningCourse.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                      <span className="w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center shadow">
+                        <Play className="w-4 h-4 text-blue-600 fill-blue-600 ml-0.5" />
+                      </span>
+                      <span className="px-2 py-1 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow">{lastLearningCourse.level}</span>
+                    </div>
+                    <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-full bg-white/90 backdrop-blur-xs text-slate-800 text-[10px] font-bold">
+                        {lastLearningCourse.code} • {lastLearningCourse.category}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow">{lastCourseProgress}%</span>
+                    </div>
+                  </div>
+                  <div className="p-3 space-y-2.5">
+                    <h4 className="font-black text-sm leading-tight line-clamp-2 text-slate-900 dark:text-white">{lastLearningCourse.title}</h4>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{lastLearningCourse.duration} • {lastCourseNextLesson}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold">
+                        <span className="text-slate-600 dark:text-slate-400">Progression du cours</span>
+                        <span className="text-blue-600">{lastCourseProgress}% • {lastCourseCompletedChapters}/{lastCourseTotalChapters} chapitres</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all" style={{ width: `${lastCourseProgress}%` }} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button onClick={() => handleOpenCoursePlayer(lastLearningCourse)} className="py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 transition">
+                        <Play className="w-3.5 h-3.5 fill-white" /> {lastCourseProgress >= 100 ? 'Revoir' : lastCourseProgress > 0 ? 'Reprendre' : 'Démarrer'}
+                      </button>
+                      <button onClick={() => onNavigateToCourses()} className="py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition">Catalogue</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Certificats & Badges Card (Facebook showcase) */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-amber-500" />
+                  <span>Attestations & Titres</span>
+                </h3>
+                <button
+                  onClick={() => handleTabClick('forum')}
+                  className="text-xs font-bold text-blue-600 hover:underline"
+                >
+                  Tout voir
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { title: 'Passation DAO', code: 'MOD-002', color: 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300' },
+                  { title: 'Contrôle a Priori', code: 'MOD-003', color: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' },
+                  { title: 'Règlement Contentieux', code: 'MOD-004', color: 'border-purple-500 bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300' },
+                  { title: 'Déontologie & Éthique', code: 'MOD-001', color: 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' }
+                ].map((cert, i) => (
+                  <div key={i} className={`p-2.5 rounded-xl border ${cert.color} text-center space-y-1`}>
+                    <div className="text-[10px] font-mono font-bold uppercase">{cert.code}</div>
+                    <div className="text-xs font-black truncate">{cert.title}</div>
+                    <span className="inline-block text-[9px] font-bold px-1.5 py-0.2 rounded bg-white/70 dark:bg-slate-900/80">Sceau ARMP</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Photos & Moments Récents Card (Facebook 6-grid photos) */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-pink-500" />
+                  <span>Photos & Médias</span>
+                </h3>
+                <button
+                  onClick={() => handleTabClick('photos')}
+                  className="text-xs font-bold text-blue-600 hover:underline"
+                >
+                  Toutes les photos
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 rounded-2xl overflow-hidden">
+                {[
+                  imgCoverSeminar,
+                  imgCoverFormation,
+                  imgCoverAudit,
+                  imgMentor,
+                  imgCoverSeminar,
+                  imgCoverFormation
+                ].map((img, i) => (
+                  <img
+                    key={i}
+                    src={img}
+                    alt="Média"
+                    className="w-full h-20 object-cover hover:opacity-90 transition cursor-pointer"
+                    onClick={() => handleTabClick('photos')}
+                  />
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN: FEED, CREATOR BOX, POSTS (lg:col-span-7) */}
+          <div className="lg:col-span-7 space-y-6">
+            
+            {/* "Créer une publication" Card (Facebook Post Box) */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-sm space-y-4">
+              
+              {/* Hidden File Inputs — Academia Storage (images/vidéos/audios) */}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageFileChange}
+              />
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleVideoFileChange}
+              />
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={handleAudioFileChange}
+              />
+
+              <div className="flex items-center space-x-3">
+                <img
+                  src={currentProfile.avatarUrl}
+                  alt={currentProfile.name}
+                  className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 flex-shrink-0"
+                />
+                <form onSubmit={handleCreatePost} className="flex-1">
+                  <input
+                    id="new-post-input"
+                    type="text"
+                    value={newPostText}
+                    onChange={(e) => setNewPostText(e.target.value)}
+                    placeholder={`Quoi de neuf ou quel retour d'expérience sur la Loi 10/010, ${currentProfile.name.split(' ')[0]} ?`}
+                    className="w-full px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs sm:text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 transition focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </form>
+              </div>
+
+              {/* Attached Image Preview (Academia) */}
+              {selectedImage && (
+                <div className="relative rounded-2xl overflow-hidden border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/30 dark:bg-slate-800/80 group">
+                  <img
+                    src={selectedImage}
+                    alt="Aperçu importé"
+                    className="w-full h-48 sm:h-64 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 hover:bg-black text-white shadow-lg transition"
+                    title="Supprimer cette image"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-2 left-2 px-3 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] text-white font-bold flex items-center space-x-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="truncate max-w-xs">{selectedImageName || 'Photo prête à publier'} {selectedImageFile ? '• Academia ✓' : ''}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Attached Video Preview (Academia) */}
+              {selectedVideo && (
+                <div className="relative rounded-2xl overflow-hidden border border-rose-200 dark:border-rose-800/60 bg-black group">
+                  <video
+                    src={selectedVideo}
+                    controls
+                    playsInline
+                    className="w-full max-h-60 object-contain mx-auto"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveVideo}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 hover:bg-black text-white shadow-lg transition z-10"
+                    title="Supprimer cette vidéo"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-2 left-2 px-3 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] text-white font-bold flex items-center space-x-1.5 z-10">
+                    <Video className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="truncate max-w-xs">{selectedVideoName || 'Vidéo prête à publier'} {selectedVideoFile ? '• Academia ✓' : ''}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Attached Audio Preview (Academia) */}
+              {selectedAudio && (
+                <div className="relative rounded-2xl overflow-hidden border border-purple-200 dark:border-purple-800/60 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800 group p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+                      <Music className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold truncate">{selectedAudioName || 'Audio prêt'}</div>
+                      <audio controls src={selectedAudio} className="w-full mt-1 h-8" />
+                      {selectedAudioFile && <span className="text-[10px] text-purple-600 font-bold">Academia 137.184.59.184 ✓ • {selectedAudioFile.size ? `${(selectedAudioFile.size/1024/1024).toFixed(1)} Mo` : ''}</span>}
+                    </div>
+                    <button type="button" onClick={handleRemoveAudio} className="p-1.5 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-600 shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {mediaUploading && (
+                <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-2">
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <span>Envoi {mediaUploading} vers Academia 137.184.59.184…</span>
+                </div>
+              )}
+
+              {/* Action Buttons Bar — Academia Images/Vidéos/Audios */}
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between">
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                  
+                  <button
+                    type="button"
+                    onClick={() => setMediaPickerModal('video')}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition ${
+                      selectedVideo
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 ring-1 ring-rose-500'
+                        : 'hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                    }`}
+                    title="Importer une vidéo → Academia (videos)"
+                  >
+                    <Video className="w-4 h-4 text-rose-500" />
+                    <span className="hidden sm:inline">Vidéo</span>
+                    {selectedVideo && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMediaPickerModal('image')}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition ${
+                      selectedImage
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 ring-1 ring-emerald-500'
+                        : 'hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+                    }`}
+                    title="Importer une image → Academia (images)"
+                  >
+                    <ImageIcon className="w-4 h-4 text-emerald-500" />
+                    <span className="hidden sm:inline">Photo</span>
+                    {selectedImage && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMediaPickerModal('audio')}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition ${
+                      selectedAudio
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 ring-1 ring-purple-500'
+                        : 'hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-600 dark:text-purple-400'
+                    }`}
+                    title="Importer un audio → Academia (audios)"
+                  >
+                    <Music className="w-4 h-4 text-purple-500" />
+                    <span className="hidden sm:inline">Audio</span>
+                    {selectedAudio && <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { if (onOpenTuteur) onOpenTuteur(); }}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center space-x-1.5 transition"
+                    title="Consulter le Tuteur IA"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span className="hidden sm:inline">Tuteur IA</span>
+                  </button>
+                </div>
+
+                {(newPostText.trim() || selectedImage || selectedVideo || selectedAudio) && (
+                  <button
+                    onClick={handleCreatePost}
+                    disabled={isPosting || !!mediaUploading}
+                    className="px-4 py-1.5 rounded-xl bg-[#1877F2] hover:bg-blue-600 text-white text-xs font-bold shadow-xs transition flex items-center space-x-1.5 active:scale-95 disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Publier</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* List of Facebook Posts */}
+            <div className="space-y-5">
+              {posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
+                >
+                  {/* Post Header */}
+                  <div className="p-4 sm:p-5 flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <img
+                        src={post.avatar}
+                        alt={post.author}
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                      />
+                      <div>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                            {post.author}
+                          </span>
+                          <BadgeCheck className="w-4 h-4 fill-[#1877F2] text-white" />
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {post.roleTitle} • {post.timeAgo}
+                        </div>
+                      </div>
+                    </div>
+
+                    {post.badgeTag && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        {post.badgeTag}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Post Content */}
+                  <div className="px-4 sm:px-5 pb-3">
+                    <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
+                      {post.content}
+                    </p>
+                  </div>
+
+                  {/* Certificate showcase inside post */}
+                  {post.certificateData && (
+                    <div className="mx-4 sm:mx-5 mb-4 p-4 rounded-2xl bg-gradient-to-br from-amber-50 via-white to-blue-50 dark:from-slate-800 dark:via-slate-850 dark:to-slate-800 border border-amber-200/80 dark:border-amber-900/50 shadow-inner flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center space-x-3 text-left">
+                        <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                          <Award className="w-7 h-7" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
+                            Attestation Officielle ARMP
+                          </span>
+                          <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                            {post.certificateData.title}
+                          </h4>
+                          <span className="text-[11px] font-mono text-slate-500">
+                            Réf: {post.certificateData.code} • Score: {post.certificateData.score}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setPreviewCertificate({
+                            courseTitle: post.certificateData?.title || 'Attestation ARMP',
+                            courseCode: post.certificateData?.code || 'CERT-2026',
+                            issuedTo: currentProfile.name,
+                            role: currentProfile.roleTitle,
+                            date: new Date().toLocaleDateString('fr-FR')
+                          });
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 flex-shrink-0"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Voir le diplôme</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Optional Post Video — Academia (videos) */}
+                  {post.video && (
+                    <div className="w-full bg-black border-y border-slate-100 dark:border-slate-800 overflow-hidden relative">
+                      <video
+                        src={post.video}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="w-full max-h-96 object-contain mx-auto"
+                      />
+                      {post.videoTitle && (
+                        <div className="px-4 py-2 bg-slate-900/95 text-slate-200 text-xs flex items-center space-x-2 border-t border-slate-800">
+                          <Video className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                          <span className="font-semibold truncate">{post.videoTitle} • Academia</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Optional Post Audio — Academia (audios) */}
+                  {(post as any).audio && (
+                    <div className="w-full border-y border-slate-100 dark:border-slate-800 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900 p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+                        <Music className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold truncate">{(post as any).audioTitle || 'Audio Academia'}</div>
+                        <audio controls src={(post as any).audio} className="w-full mt-1 h-8" />
+                      </div>
+                      <a href={(post as any).audio} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-purple-600 hover:underline shrink-0">
+                        Télécharger
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Optional Post Image — Academia (images) */}
+                  {post.image && (
+                    <div className="max-h-96 w-full overflow-hidden border-y border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                      <img
+                        src={post.image}
+                        alt="Média de publication"
+                        className="w-full h-full object-cover max-h-96"
+                      />
+                    </div>
+                  )}
+
+                  {/* Likes & Comments Count Bar */}
+                  <div className="px-4 sm:px-5 py-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="w-4 h-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center text-[9px]">
+                        👍
+                      </span>
+                      <span>{post.likes} mentions J'aime</span>
+                    </div>
+                    <div>
+                      <span>{post.comments.length} commentaire(s)</span>
+                    </div>
+                  </div>
+
+                  {/* Facebook Action Buttons (Like, Comment, Share) */}
+                  <div className="px-4 sm:px-5 py-1.5 grid grid-cols-3 gap-1 text-xs font-bold text-slate-600 dark:text-slate-400">
+                    <button
+                      onClick={() => handleToggleLike(post.id)}
+                      className={`py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-2 transition ${
+                        post.userLiked ? 'text-[#1877F2]' : ''
+                      }`}
+                    >
+                      <ThumbsUp className={`w-4 h-4 ${post.userLiked ? 'fill-[#1877F2]' : ''}`} />
+                      <span>J'aime</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const input = document.getElementById(`comment-input-${post.id}`);
+                        input?.focus();
+                      }}
+                      className="py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-2 transition"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Commenter</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText?.(window.location.href);
+                        onShowToast?.('Lien de la publication copié !');
+                      }}
+                      className="py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-2 transition"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Partager</span>
+                    </button>
+                  </div>
+
+                  {/* Comments Section */}
+                  <div className="p-4 bg-slate-50/50 dark:bg-slate-850/50 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    {post.comments.map((c) => (
+                      <div key={c.id} className="flex items-start space-x-2 text-xs">
+                        <img src={c.avatar} alt={c.author} className="w-7 h-7 rounded-full object-cover mt-0.5" />
+                        <div className="bg-white dark:bg-slate-800 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 flex-1">
+                          <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
+                            <span>{c.author}</span>
+                            <span className="text-[10px] text-slate-400 font-normal">{c.timeAgo}</span>
+                          </div>
+                          <p className="text-slate-700 dark:text-slate-300 mt-0.5">{c.text}</p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Comment Input */}
+                    <div className="flex items-center space-x-2 pt-1">
+                      <img src={currentProfile.avatarUrl} alt="Avatar" className="w-7 h-7 rounded-full object-cover" />
+                      <input
+                        id={`comment-input-${post.id}`}
+                        type="text"
+                        placeholder="Écrivez un commentaire institutionnel..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleAddComment(post.id, (e.target as HTMLInputElement).value);
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB B: À PROPOS (FACEBOOK ABOUT INFO SECTIONS)                            */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'apropos' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                Informations Personnelles & Institutionnelles
+              </h3>
+              <p className="text-xs text-slate-500">
+                Coordonnées de l'agent, affectation ministérielle et habilitations ARMP
+              </p>
+            </div>
+
+            <button
+              onClick={handleOpenEditModal}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center space-x-1.5 shadow-xs"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Modifier</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+            
+            {/* Emploi & Cellule CGPMP */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <h4 className="font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <span>Emploi & Institution de Rattachement</span>
+              </h4>
+              <div className="space-y-2 text-slate-700 dark:text-slate-300">
+                <div><span className="text-slate-400">Institution :</span> <strong className="text-slate-900 dark:text-white">{currentProfile.institution}</strong></div>
+                <div><span className="text-slate-400">Fonction officielle :</span> <strong>{currentProfile.roleTitle}</strong></div>
+                <div><span className="text-slate-400">Rôle système :</span> <span className="font-mono">{currentProfile.role}</span></div>
+                <div><span className="text-slate-400">Matricule agent :</span> <strong className="font-mono text-blue-600">{currentProfile.matricule || 'CGPMP-2026-REG'}</strong></div>
+              </div>
+            </div>
+
+            {/* Coordonnées & WhatsApp */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <h4 className="font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Phone className="w-4 h-4 text-emerald-600" />
+                <span>Coordonnées & Canaux Officiels</span>
+              </h4>
+              <div className="space-y-2 text-slate-700 dark:text-slate-300">
+                <div><span className="text-slate-400">Email professionnel :</span> <strong>{currentProfile.email}</strong></div>
+                <div><span className="text-slate-400">Téléphone d'appel :</span> <strong>{currentProfile.phone || '+243 81 234 5678'}</strong></div>
+                <div><span className="text-slate-400">Numéro WhatsApp :</span> <strong className="text-emerald-600">{currentProfile.whatsapp || '+243 81 234 5678'}</strong></div>
+                <div><span className="text-slate-400">Lieu d'exercice :</span> <strong>{currentProfile.location || 'Kinshasa, RDC'}</strong></div>
+              </div>
+            </div>
+
+            {/* Profil Pédagogique ARMP */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <h4 className="font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-purple-600" />
+                <span>Profil Pédagogique & Certifications</span>
+              </h4>
+              <div className="space-y-2 text-slate-700 dark:text-slate-300">
+                <div><span className="text-slate-400">Niveau actuel :</span> <strong className="text-purple-600">{currentProfile.level}</strong></div>
+                <div><span className="text-slate-400">Score moyen évalué :</span> <strong>{avgScoreDisplay}%</strong></div>
+                <div><span className="text-slate-400">Modules validés :</span> <strong>{completedCount} / {totalCourses} modules ({overallProgress}%)</strong></div>
+                <div><span className="text-slate-400">Attestations délivrées :</span> <strong>{certificationsCount} diplômes</strong></div>
+              </div>
+            </div>
+
+            {/* Paramètres de Confidentialité */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+              <h4 className="font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-600" />
+                <span>Visibilité & Confidentialité</span>
+              </h4>
+              <div className="space-y-2 text-slate-700 dark:text-slate-300">
+                <div><span className="text-slate-400">Visibilité des attestations :</span> <strong>Publique (Annuaire ARMP)</strong></div>
+                <div><span className="text-slate-400">Partage hiérarchique :</span> <strong className="text-emerald-600">Activé (DFAT & Ministère)</strong></div>
+                <div><span className="text-slate-400">Double facteur 2FA :</span> <strong className={is2FAActive ? 'text-emerald-600' : 'text-amber-600'}>{is2FAActive ? 'Activé' : 'Désactivé'}</strong></div>
+                <div><span className="text-slate-400">Dernier changement mot de passe :</span> <span>{currentProfile.passwordLastChanged || 'Il y a 10 jours'}</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB C: FORUM & ATTESTATIONS DIPLÔMES                                      */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'forum' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                Passeport de Compétences & Attestations Officielles ARMP
+              </h3>
+              <p className="text-xs text-slate-500">
+                Diplômes numériques certifiés conformes à la Loi n° 10/010 du 27 avril 2010
+              </p>
+            </div>
+            <button
+              onClick={onNavigateToCourses}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center space-x-1.5 shadow-xs"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Suivre un nouveau module</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {courses.slice(0, 4).map((c, i) => (
+              <div
+                key={c.id}
+                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4 hover:border-blue-400 transition"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center font-bold">
+                      <Award className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {c.code} • {c.category}
+                      </span>
+                      <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-snug">
+                        {c.title}
+                      </h4>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    Validé
+                  </span>
+                </div>
+
+                <div className="text-xs text-slate-500 line-clamp-2">
+                  {c.description}
+                </div>
+
+                <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between text-xs">
+                  <span className="font-mono text-[11px] text-slate-400">
+                    Sceau n° ARMP-RDC-{2026000 + i}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setPreviewCertificate({
+                        courseTitle: c.title,
+                        courseCode: c.code,
+                        issuedTo: currentProfile.name,
+                        role: currentProfile.roleTitle,
+                        date: new Date().toLocaleDateString('fr-FR')
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold flex items-center space-x-1.5 transition"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Visualiser & Imprimer</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB D: PHOTOS & DOCUMENTS                                                 */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'photos' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                Galerie Photos & Documents Officiels
+              </h3>
+              <p className="text-xs text-slate-500">
+                Clichés de sessions de renforcement des capacités, séminaires et attestations
+              </p>
+            </div>
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleGalleryPhotoUpload}
+            />
+            <button
+              onClick={() => galleryInputRef.current?.click()}
+              disabled={isGalleryUploading}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isGalleryUploading ? 'Envoi en cours...' : 'Ajouter une photo'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {[
+              ...(currentProfile.galleryPhotos || []).map(p => ({ src: p.url, label: `${p.label} (${p.createdAt})` })),
+              { src: imgCoverSeminar, label: 'Séminaire National ARMP 2026' },
+              { src: imgCoverFormation, label: 'Atelier DAO Type Kinshasa' },
+              { src: imgCoverAudit, label: 'Session de Contrôle CGPMP' },
+              { src: imgMentor, label: 'Mentorat Juridique de la Commande Publique' },
+              { src: imgCoverSeminar, label: 'Remise des Diplômes DFAT' },
+              { src: imgCoverFormation, label: 'Module Numérique E-Procurement' }
+            ].map((item, index) => (
+              <div key={index} className="group relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 aspect-4/3">
+                <img src={item.src} alt={item.label} className="w-full h-full object-cover transition duration-300 group-hover:scale-110" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition p-3 flex items-end">
+                  <span className="text-[11px] font-bold text-white leading-tight">{item.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB E: SÉCURITÉ & CONNEXION                                               */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'securite' && (
+        <div className="space-y-6">
+          
+          {/* 2FA Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold ${
+                  is2FAActive 
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' 
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                }`}>
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    Authentification à Double Facteur (2FA)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Protégez vos signatures et visas officiels de passation de marchés
+                  </p>
+                </div>
+              </div>
+
+              {is2FAActive ? (
+                <div className="flex items-center space-x-3">
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>2FA Activé</span>
+                  </span>
+                  <button
+                    onClick={handleDirectDisable2FA}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition"
+                  >
+                    Désactiver
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleOpen2FASetup}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition flex items-center space-x-2"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Activer la 2FA</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Password Reset Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center font-bold">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    Mot de passe & Clé de chiffrement
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Réinitialisez votre mot de passe officiel via un lien sécurisé envoyé par Firebase Auth
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSendPasswordReset}
+                disabled={isSendingResetEmail}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition flex items-center space-x-2"
+              >
+                {isSendingResetEmail ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Mail className="w-3.5 h-3.5 text-blue-600" />
+                )}
+                <span>Envoyer email de réinitialisation</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB F: WHATSAPP & NOTIFICATIONS                                           */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'notifications' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                  Liaison WhatsApp & Alertes Légales Directes
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Recevez les nouveaux décrets, avis DFAT et rappels de cours directement sur votre smartphone
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+              Canal Actif
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Numéro WhatsApp enregistré : {currentProfile.whatsapp || '+243 81 234 5678'}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Notifications instantanées lors de la publication d'un nouveau modèle de DAO ou d'un visa DFAT.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                window.open(`https://wa.me/243812345678?text=Bonjour%20ACADEMIA%20ARMP%20RDC`, '_blank');
+              }}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 flex-shrink-0"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Ouvrir dans WhatsApp</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div
+              onClick={() => {
+                const next = !(currentProfile.whatsappNotifications ?? true);
+                onUpdateProfile?.({ ...currentProfile, whatsappNotifications: next });
+                onShowToast?.(`Alertes Décrets & Arrêtés ARMP : ${next ? 'Activées' : 'Désactivées'}`);
+              }}
+              className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between cursor-pointer"
+            >
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white block">Alertes Décrets & Arrêtés ARMP</span>
+                <span className="text-[11px] text-slate-500">Notification en temps réel</span>
+              </div>
+              <span className={`w-9 h-5 rounded-full flex items-center px-1 transition ${currentProfile.whatsappNotifications !== false ? 'bg-emerald-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start'}`}>
+                <span className="w-3.5 h-3.5 bg-white rounded-full shadow-xs" />
+              </span>
+            </div>
+
+            <div
+              onClick={() => {
+                const next = !(currentProfile.tutorReminders ?? true);
+                onUpdateProfile?.({ ...currentProfile, tutorReminders: next });
+                onShowToast?.(`Rappels du Tuteur IA Aïsha : ${next ? 'Activés' : 'Désactivés'}`);
+              }}
+              className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between cursor-pointer"
+            >
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white block">Rappels du Tuteur IA</span>
+                <span className="text-[11px] text-slate-500">Exercices et révisions Loi 10/010</span>
+              </div>
+              <span className={`w-9 h-5 rounded-full flex items-center px-1 transition ${currentProfile.tutorReminders !== false ? 'bg-emerald-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start'}`}>
+                <span className="w-3.5 h-3.5 bg-white rounded-full shadow-xs" />
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 4. MODALS (EDIT PROFILE, 2FA, CERTIFICATE PREVIEW, COVER SELECTOR)        */}
+      {/* ========================================================================= */}
+
+      {/* Edit Profile Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-lg w-full p-6 space-y-4 my-8 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-blue-600" />
+                <span>Modifier le profil (Style Facebook)</span>
+              </h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Nom complet & Titre</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Fonction officielle</label>
+                <input
+                  type="text"
+                  value={editRoleTitle}
+                  onChange={(e) => setEditRoleTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Institution ou Ministère</label>
+                <input
+                  type="text"
+                  value={editInstitution}
+                  onChange={(e) => setEditInstitution(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Téléphone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">WhatsApp</label>
+                  <input
+                    type="text"
+                    value={editWhatsapp}
+                    onChange={(e) => setEditWhatsapp(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Matricule</label>
+                  <input
+                    type="text"
+                    value={editMatricule}
+                    onChange={(e) => setEditMatricule(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Ville & Pays</label>
+                  <input
+                    type="text"
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Citation / Slogan de profil</label>
+                <input
+                  type="text"
+                  value={editCoverBio}
+                  onChange={(e) => setEditCoverBio(e.target.value)}
+                  placeholder="Ex: Passionné par la régulation et la transparence des marchés."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Biographie détaillée</label>
+                <textarea
+                  rows={2}
+                  value={editBio}
+                  onChange={(e) => setEditBio(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center space-x-1.5 shadow-md shadow-blue-500/20 disabled:opacity-50"
+                >
+                  {isSavingProfile ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Enregistrer</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cover Upload Modal — formulaire d'upload dédié (Academia covers) avec prévisualisation — au-dessus de tout */}
+      {showCoverModal && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-lg w-full p-5 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-blue-600" />
+                <span>Mettre à jour la photo de couverture</span>
+              </h3>
+              <button onClick={() => { setShowCoverModal(false); setCoverDraftUrl(null); }} className="p-1 rounded-lg text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Prévisualisation couverture */}
+            <div className="space-y-3">
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 h-44">
+                <img
+                  src={coverDraftUrl || currentCover}
+                  alt="Aperçu couverture"
+                  className="w-full h-full object-cover"
+                />
+                {isCoverUploading && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="bg-white/90 dark:bg-slate-900/90 px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                      <span>Envoi vers Academia…</span>
+                    </div>
+                  </div>
+                )}
+                {!coverDraftUrl && !isCoverUploading && (
+                  <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-bold backdrop-blur-xs">Photo actuelle</div>
+                )}
+                {coverDraftUrl && !isCoverUploading && (
+                  <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Aperçu — Academia ✓</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload perso vers Academia */}
+              <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
+                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser votre propre couverture (Academia 137.184.59.184 — covers / public, 100 Mo)</p>
+                <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isCoverUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
+                  <Upload className="w-4 h-4" />
+                  <span>{isCoverUploading ? 'Envoi vers Academia…' : coverDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
+                  <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFileUpload} disabled={isCoverUploading} />
+                </label>
+                <p className="text-[10px] text-slate-500">Stockée en public /storage/academia/covers/… • visible immédiatement après enregistrement</p>
+              </div>
+
+              {/* Presets institutionnels — sélectionne un draft */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Ou choisir une couverture institutionnelle ARMP :</span>
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {availableCovers.map((cov, idx) => {
+                    const isSelected = coverDraftUrl === cov.url;
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => handleSelectPresetCover(cov.url)}
+                        className={`rounded-2xl overflow-hidden border-2 transition cursor-pointer group relative ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/30' : 'border-slate-200 dark:border-slate-700 hover:border-blue-400'}`}
+                      >
+                        <img src={cov.url} alt={cov.name} className="w-full h-24 object-cover group-hover:scale-105 transition duration-300" />
+                        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 flex items-center justify-center text-white font-bold text-xs transition">
+                          {cov.name}
+                        </div>
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center">
+                            <Check className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => { setShowCoverModal(false); setCoverDraftUrl(null); }} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs">Annuler</button>
+              <button onClick={handleSaveCover} disabled={!coverDraftUrl || isCoverUploading} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5">
+                <Save className="w-4 h-4" />
+                <span>Enregistrer comme couverture</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Avatar Upload Modal — formulaire d'upload dédié (Academia avatars) */}
+      {showAvatarModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-md w-full p-5 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-blue-600" />
+                <span>Mettre à jour la photo de profil</span>
+              </h3>
+              <button onClick={() => { setShowAvatarModal(false); setAvatarDraftUrl(null); }} className="p-1 rounded-lg text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex flex-col items-center gap-3 py-2">
+                <div className="relative">
+                  <img src={avatarDraftUrl || currentProfile.avatarUrl} alt="Aperçu photo" className="w-36 h-36 rounded-full object-cover border-4 border-white dark:border-slate-700 shadow-xl" />
+                  {isAvatarUploading && <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center"><RefreshCw className="w-6 h-6 text-white animate-spin" /></div>}
+                </div>
+                <div className="text-center">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{currentProfile.name}</div>
+                  <div className="text-[11px] text-slate-500">{avatarDraftUrl ? 'Aperçu — cliquez sur Enregistrer' : 'Photo actuelle'}</div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
+                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser une nouvelle photo (Academia 137.184.59.184 — avatars / public, 100 Mo)</p>
+                <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isAvatarUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
+                  <Upload className="w-4 h-4" />
+                  <span>{isAvatarUploading ? 'Envoi vers Academia…' : avatarDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
+                  <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarPickerFileChange} disabled={isAvatarUploading} />
+                </label>
+                <p className="text-[10px] text-slate-500">Stockée en public /storage/academia/avatars/… • visible immédiatement</p>
+              </div>
+
+              {avatarDraftUrl && !isAvatarUploading && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Photo prête — Academia ✓</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => { setShowAvatarModal(false); setAvatarDraftUrl(null); }} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs">Annuler</button>
+              <button onClick={handleSaveAvatar} disabled={!avatarDraftUrl || isAvatarUploading} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5">
+                <Save className="w-4 h-4" />
+                <span>Enregistrer comme photo de profil</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Certificate Modal */}
+      {previewCertificate && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border-8 border-amber-500/30 max-w-2xl w-full p-8 space-y-6 text-slate-900 shadow-2xl relative my-8">
+            <button
+              onClick={() => setPreviewCertificate(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-2 border-b-2 border-slate-200 pb-6">
+              <div className="flex justify-center mb-2">
+                <ArmpLogo size="lg" />
+              </div>
+              <h2 className="text-xs font-bold tracking-widest text-slate-500 uppercase">
+                RÉPUBLIQUE DÉMOCRATIQUE DU CONGO • AUTORITÉ DE RÉGULATION DES MARCHÉS PUBLICS
+              </h2>
+              <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                Certificat Officiel de Réussite
+              </h1>
+              <p className="text-xs text-amber-700 font-semibold font-mono">
+                Délivré conformément à la Loi n° 10/010 du 27 avril 2010
+              </p>
+            </div>
+
+            <div className="text-center space-y-3 py-4">
+              <p className="text-xs text-slate-500">Il est certifié par la présente que :</p>
+              <h3 className="text-xl font-extrabold text-blue-900 tracking-tight">
+                {previewCertificate.issuedTo}
+              </h3>
+              <p className="text-xs text-slate-600 font-medium">
+                {previewCertificate.role} • {currentProfile.institution}
+              </p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto pt-2">
+                A validé avec succès l'ensemble des épreuves d'évaluation portant sur le module certifiant :
+              </p>
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 max-w-lg mx-auto">
+                <span className="text-xs font-mono font-bold text-amber-800">{previewCertificate.courseCode}</span>
+                <h4 className="text-sm font-black text-slate-900">{previewCertificate.courseTitle}</h4>
+              </div>
+            </div>
+
+            <div className="border-t-2 border-slate-200 pt-6 flex items-center justify-between text-xs">
+              <div>
+                <div className="font-mono text-[10px] text-slate-400">Date d'émission : {previewCertificate.date}</div>
+                <div className="font-mono text-[10px] text-slate-400">Identifiant : ARMP-CERT-{Math.floor(100000 + Math.random() * 900000)}</div>
+              </div>
+              <div className="text-right">
+                <span className="font-bold text-slate-800 block">La Direction de la Formation (DFAT)</span>
+                <span className="text-[10px] text-emerald-700 font-bold">✓ Sceau officiel validé</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Imprimer l'attestation</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2FA Setup Modal */}
+      {show2FASetupModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-blue-600" />
+                <span>Configuration de la 2FA</span>
+              </h3>
+              <button onClick={() => setShow2FASetupModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-center space-y-3 text-xs">
+              <div className="w-32 h-32 mx-auto rounded-2xl bg-white p-2 border-2 border-slate-300 flex items-center justify-center shadow-inner">
+                <QrCode className="w-24 h-24 text-slate-900" />
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">
+                Scannez ce QR Code avec Google Authenticator ou entrez le code de sécurité envoyé par SMS à votre numéro WhatsApp.
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirm2FAActivation} className="space-y-3 pt-2">
+              <input
+                type="text"
+                maxLength={6}
+                value={otpInput}
+                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="Entrez le code à 6 chiffres (ex: 123456)"
+                className="w-full text-center tracking-widest text-lg font-mono px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
+                required
+              />
+
+              <button
+                type="submit"
+                disabled={isVerifying2FA || otpInput.length < 4}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-2"
+              >
+                {isVerifying2FA ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                <span>Confirmer et Activer la 2FA</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Media Picker Modal (Upload local file OR select from ARMP archives) */}
+      {mediaPickerModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className={`p-2 rounded-xl ${mediaPickerModal === 'image' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600' : mediaPickerModal === 'video' ? 'bg-rose-100 dark:bg-rose-950 text-rose-600' : 'bg-purple-100 dark:bg-purple-950 text-purple-600'}`}>
+                  {mediaPickerModal === 'image' ? <ImageIcon className="w-5 h-5" /> : mediaPickerModal === 'video' ? <Video className="w-5 h-5" /> : <Music className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    {mediaPickerModal === 'image' ? 'Importer ou choisir une photo' : mediaPickerModal === 'video' ? 'Importer ou choisir une vidéo' : 'Importer ou choisir un audio'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {mediaPickerModal === 'audio' ? 'Audio stocké sur Academia 137.184.59.184 (audios, 100 Mo)' : 'Fichier depuis votre appareil — stockage Academia 137.184.59.184'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMediaPickerModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Option 1: Direct File Upload from Device — Academia */}
+            <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 text-center space-y-3">
+              <div className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                {mediaPickerModal === 'image' 
+                  ? 'Téléverser une image → Academia (images / public)'
+                  : mediaPickerModal === 'video'
+                  ? 'Téléverser une vidéo → Academia (videos / privé, 100 Mo)'
+                  : 'Téléverser un audio → Academia (audios / privé, 100 Mo)'
+                }
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (mediaPickerModal === 'image') imageInputRef.current?.click();
+                  else if (mediaPickerModal === 'video') videoInputRef.current?.click();
+                  else audioInputRef.current?.click();
+                }}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition flex items-center justify-center space-x-2"
+              >
+                <Upload className="w-4 h-4" />
+                <span>
+                  {mediaPickerModal === 'image' ? 'Choisir un fichier image' : mediaPickerModal === 'video' ? 'Choisir un fichier vidéo' : 'Choisir un fichier audio'}
+                </span>
+              </button>
+              <p className="text-[10px] text-slate-500">Stockage serveur 137.184.59.184 • {mediaUploading ? `Envoi ${mediaUploading}…` : 'JPG/PNG/WebP • MP4/WebM/MOV • MP3/WAV/M4A' }</p>
+            </div>
+
+            {/* Option 2: Preloaded Library / Official Archives — avec audios */}
+            {mediaPickerModal === 'image' ? (
+              <div className="space-y-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Ou sélectionner une photo institutionnelle ARMP :
+                </span>
+                <div className="grid grid-cols-2 gap-2.5 max-h-52 overflow-y-auto pr-1">
+                  {[
+                    { title: 'Séminaire National ARMP', url: imgCoverSeminar },
+                    { title: 'Atelier Numérique E-Procurement', url: imgCoverFormation },
+                    { title: 'Audit & Contrôle CGPMP', url: imgCoverAudit },
+                    { title: 'Praticiens & Juristes', url: imgMentor }
+                  ].map((item, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectLibraryImage(item.url, item.title)}
+                      className="group rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition cursor-pointer relative aspect-16/10"
+                    >
+                      <img src={item.url} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                      <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 flex items-end p-2 transition">
+                        <span className="text-[10px] font-bold text-white line-clamp-1">{item.title}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : mediaPickerModal === 'video' ? (
+              <div className="space-y-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Ou choisir un extrait Masterclass ARMP officiel :
+                </span>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {[
+                    {
+                      title: 'Masterclass : Passation & Rédaction des DAO',
+                      desc: 'Méthodologie standardisée ARMP',
+                      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+                    },
+                    {
+                      title: 'Contrôle a Priori & Avis de Non-Objection',
+                      desc: 'Dossiers soumis à la DGCMP',
+                      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+                    }
+                  ].map((vid, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectLibraryVideo(vid.url, vid.title)}
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-rose-500 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition cursor-pointer flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-600 flex items-center justify-center flex-shrink-0">
+                          <Play className="w-4 h-4 fill-current ml-0.5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{vid.title}</h4>
+                          <span className="text-[10px] text-slate-500">{vid.desc}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        Choisir
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Audios pédagogiques — stockés sur Academia (audios)
+                </span>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="p-3 rounded-xl border border-dashed border-purple-300 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-xs text-slate-600 dark:text-slate-300">
+                    Aucun audio prédéfini. Téléversez votre MP3/WAV/M4A via Academia ci-dessus — il sera accessible en <code className="font-mono text-purple-700">/api/files/{'{id}'}/preview</code> avec lecteur &lt;audio&gt;.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Option 3: Web URL input */}
+            <form onSubmit={handleApplyCustomMediaUrl} className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                Ou insérer via un lien direct (URL) :
+              </span>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="url"
+                  value={customMediaUrl}
+                  onChange={(e) => setCustomMediaUrl(e.target.value)}
+                  placeholder={mediaPickerModal === 'image' ? 'https://exemple.com/photo.jpg' : 'https://exemple.com/video.mp4'}
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!customMediaUrl.trim()}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold transition disabled:opacity-50"
+                >
+                  Valider
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

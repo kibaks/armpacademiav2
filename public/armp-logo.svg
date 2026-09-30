@@ -1,0 +1,172 @@
+<svg width="800" height="260" viewBox="0 0 800 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Text arc for circular seal header text -->
+    <path id="sealArcTop" d="M 32 130 A 98 98 0 1 1 228 130" fill="none"/>
+    
+    <!-- Primary Royal Blue Gradient -->
+    <linearGradient id="armpBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1954A3"/>
+      <stop offset="100%" stop-color="#0E3D7D"/>
+    </linearGradient>
+
+    <!-- 3D Block / Extrusion Shadow (Top-Right facets) -->
+    <linearGradient id="armp3DShadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#08254F"/>
+      <stop offset="100%" stop-color="#061B3B"/>
+    </linearGradient>
+
+    <!-- Gold Ribbon Gradient -->
+    <linearGradient id="goldRibbon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#DAA830"/>
+      <stop offset="25%" stop-color="#F7D875"/>
+      <stop offset="50%" stop-color="#CF961D"/>
+      <stop offset="75%" stop-color="#F7D875"/>
+      <stop offset="100%" stop-color="#B27E12"/>
+    </linearGradient>
+
+    <linearGradient id="goldFoldShadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#724C06"/>
+      <stop offset="100%" stop-color="#3D2802"/>
+    </linearGradient>
+
+    <filter id="subtleDropShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0E3D7D" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- ==================== LEFT CIRCULAR SEAL ==================== -->
+  <g id="official-seal" filter="url(#subtleDropShadow)">
+    <!-- Outer concentric fine rings -->
+    <circle cx="130" cy="130" r="126" stroke="#0E3D7D" stroke-width="2.5" fill="#FFFFFF"/>
+    <circle cx="130" cy="130" r="121" stroke="#0E3D7D" stroke-width="1.2" stroke-dasharray="2 3"/>
+
+    <!-- Broad royal blue disc border with gold trim -->
+    <circle cx="130" cy="130" r="114" fill="url(#armpBlue)" stroke="#D4A024" stroke-width="3"/>
+
+    <!-- Clean white interior medallion with gold border -->
+    <circle cx="130" cy="130" r="84" fill="#FFFFFF" stroke="#D4A024" stroke-width="2.5"/>
+
+    <!-- Circular Top Text: AUTORITE DE REGULATION DES MARCHES PUBLICS -->
+    <text fill="#FFFFFF" font-size="11.8" font-weight="900" font-family="'Segoe UI', -apple-system, Arial, sans-serif" letter-spacing="3.2">
+      <textPath href="#sealArcTop" startOffset="50%" text-anchor="middle">
+        AUTORITE DE REGULATION DES MARCHES PUBLICS
+      </textPath>
+    </text>
+
+    <!-- Center Stylized 'A' in seal -->
+    <g id="seal-A">
+      <path d="M 74 175 L 122 62 L 138 62 L 92 175 Z" fill="url(#armpBlue)"/>
+      <path d="M 122 62 L 165 62 L 188 175 L 167 175 L 154 102 L 133 102 Z" fill="url(#armpBlue)"/>
+      <polygon points="130,94 107,142 153,142" fill="#D81A21"/>
+    </g>
+
+    <!-- Golden Ribbon across lower section: TRANSPARENCE • EQUITE • PROBITE -->
+    <g id="seal-gold-ribbon">
+      <!-- Shadow folds -->
+      <polygon points="41,168 67,168 53,184" fill="url(#goldFoldShadow)"/>
+      <polygon points="219,168 193,168 207,184" fill="url(#goldFoldShadow)"/>
+
+      <!-- Left fold: TRANSPARENCE -->
+      <path d="M 33 162 L 88 157 L 88 181 L 33 186 Z" fill="url(#goldRibbon)" stroke="#785108" stroke-width="1"/>
+      <text x="60" y="174" fill="#FFFFFF" font-size="7.6" font-weight="900" font-family="Arial, sans-serif" letter-spacing="0.9" text-anchor="middle">
+        TRANSPARENCE
+      </text>
+
+      <!-- Right fold: PROBITE -->
+      <path d="M 172 157 L 227 162 L 227 186 L 172 181 Z" fill="url(#goldRibbon)" stroke="#785108" stroke-width="1"/>
+      <text x="200" y="174" fill="#FFFFFF" font-size="7.8" font-weight="900" font-family="Arial, sans-serif" letter-spacing="1.1" text-anchor="middle">
+        PROBITE
+      </text>
+
+      <!-- Center lowered fold: EQUITE -->
+      <path d="M 83 166 L 177 166 L 170 192 L 90 192 Z" fill="url(#goldRibbon)" stroke="#785108" stroke-width="1.2"/>
+      <text x="130" y="184" fill="#FFFFFF" font-size="10.5" font-weight="900" font-family="Arial, sans-serif" letter-spacing="2.2" text-anchor="middle">
+        EQUITE
+      </text>
+    </g>
+
+    <!-- Bottom Crescent: White laurel branches + • ARMP • -->
+    <g id="seal-bottom">
+      <!-- Left Laurel Branch -->
+      <path d="M 68 212 C 78 221 94 227 107 230" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+      <ellipse cx="73" cy="208" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(-30 73 208)"/>
+      <ellipse cx="83" cy="214" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(-15 83 214)"/>
+      <ellipse cx="95" cy="221" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(0 95 221)"/>
+      <ellipse cx="104" cy="227" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(15 104 227)"/>
+
+      <!-- Right Laurel Branch -->
+      <path d="M 192 212 C 182 221 166 227 153 230" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+      <ellipse cx="187" cy="208" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(30 187 208)"/>
+      <ellipse cx="177" cy="214" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(15 177 214)"/>
+      <ellipse cx="165" cy="221" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(0 165 221)"/>
+      <ellipse cx="156" cy="227" rx="4.5" ry="2.2" fill="#FFFFFF" transform="rotate(-15 156 227)"/>
+
+      <!-- Text: • ARMP • -->
+      <text x="130" y="233" fill="#FFFFFF" font-size="13" font-weight="900" font-family="'Segoe UI', Arial, sans-serif" letter-spacing="3" text-anchor="middle">
+        • ARMP •
+      </text>
+    </g>
+  </g>
+
+  <!-- ==================== RIGHT LOGOTYPE (ARMP + SUBTEXT) ==================== -->
+  <g id="official-logotype" transform="translate(300, 36)">
+    
+    <!-- Stylized 'A' -->
+    <g id="logotype-A" transform="translate(0, 10)">
+      <path d="M 6 122 L 54 2 L 77 2 L 28 122 Z" fill="url(#armpBlue)"/>
+      <path d="M 54 2 L 109 2 L 131 122 L 105 122 L 91 44 L 68 44 Z" fill="url(#armpBlue)"/>
+      <polygon points="72,40 48,93 96,93" fill="#D81A21"/>
+    </g>
+
+    <!-- Letter 'R' with Top-Right 3D Blocks -->
+    <g id="logotype-R" transform="translate(142, 10)">
+      <!-- 3D Extrusion facets (offset up and right) -->
+      <polygon points="26,0 36,-10 46,-10 36,0" fill="url(#armp3DShadow)"/>
+      <polygon points="70,0 80,-10 108,2 98,12" fill="url(#armp3DShadow)"/>
+
+      <!-- Main face of R -->
+      <path d="M 0 10 L 10 0 L 28 0 L 28 122 L 2 122 L 2 10 Z" fill="url(#armpBlue)"/>
+      <path d="M 28 0 L 70 0 C 90 0 100 12 100 34 C 100 52 89 64 68 66 L 98 122 L 68 122 L 44 70 L 28 70 L 28 0 Z" fill="url(#armpBlue)"/>
+      <!-- Inner cutout -->
+      <path d="M 28 20 L 62 20 C 70 20 76 25 76 34 C 76 43 70 48 62 48 L 28 48 Z" fill="#FFFFFF"/>
+    </g>
+
+    <!-- Letter 'M' with Top-Right 3D Blocks -->
+    <g id="logotype-M" transform="translate(248, 10)">
+      <!-- 3D Extrusion facets -->
+      <polygon points="24,0 34,-10 44,-10 34,0" fill="url(#armp3DShadow)"/>
+      <polygon points="62,76 72,66 80,74 70,84" fill="url(#armp3DShadow)"/>
+      <polygon points="124,0 134,-10 144,-10 134,0" fill="url(#armp3DShadow)"/>
+
+      <!-- Main face of M -->
+      <path d="M 0 10 L 10 0 L 26 0 L 26 122 L 2 122 L 2 10 Z" fill="url(#armpBlue)"/>
+      <path d="M 26 0 L 62 76 L 98 0 L 124 0 L 134 10 L 134 122 L 110 122 L 110 24 L 75 96 L 49 96 L 26 24 Z" fill="url(#armpBlue)"/>
+    </g>
+
+    <!-- Letter 'P' with Top-Right 3D Blocks -->
+    <g id="logotype-P" transform="translate(390, 10)">
+      <!-- 3D Extrusion facets -->
+      <polygon points="26,0 36,-10 46,-10 36,0" fill="url(#armp3DShadow)"/>
+      <polygon points="72,0 82,-10 112,4 102,14" fill="url(#armp3DShadow)"/>
+
+      <!-- Main face of P -->
+      <path d="M 0 10 L 10 0 L 28 0 L 28 122 L 2 122 L 2 10 Z" fill="url(#armpBlue)"/>
+      <path d="M 28 0 L 72 0 C 94 0 104 14 104 36 C 104 58 94 72 72 72 L 28 72 Z" fill="url(#armpBlue)"/>
+      <!-- Inner cutout -->
+      <path d="M 28 20 L 64 20 C 72 20 78 26 78 36 C 78 46 72 52 64 52 L 28 52 Z" fill="#FFFFFF"/>
+    </g>
+
+    <!-- Dual Line Official Subtitle: Classic Roman Serif Trajan Typography -->
+    <g id="logo-subtext" transform="translate(4, 154)">
+      <!-- Line 1: AUTORITE DE REGULATION -->
+      <text x="0" y="16" fill="#1E293B" font-size="27" font-weight="800" font-family="'Times New Roman', 'Baskerville', 'Georgia', serif" letter-spacing="4.6">
+        AUTORITE DE REGULATION
+      </text>
+
+      <!-- Line 2: DES MARCHES PUBLICS -->
+      <text x="0" y="48" fill="#334155" font-size="24.5" font-weight="700" font-family="'Times New Roman', 'Baskerville', 'Georgia', serif" letter-spacing="5.4">
+        DES MARCHES PUBLICS
+      </text>
+    </g>
+  </g>
+</svg>

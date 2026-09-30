@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Plus Jakarta Sans", sans-serif;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Uniformisation : tous les titres utilisent la même famille */
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: var(--font-sans);
+  letter-spacing: -0.025em;
+  font-feature-settings: "ss01" 1, "ss02" 1;
+}
+
+/* Poids uniformes */
+.font-black { font-weight: 800; letter-spacing: -0.03em; }
+.font-extrabold { font-weight: 700; letter-spacing: -0.02em; }
+.font-bold { font-weight: 600; }
+
+/* Responsive & Scrollbar Utilities */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
+  }
+}
+

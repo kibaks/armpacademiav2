@@ -1,0 +1,6 @@
+{
+  "name": "ACADEMIA ITECH - Marchés Publics RDC",
+  "description": "Plateforme e-learning intelligente pour la commande publique en RDC (CGPMP, ARMP, DGCMP, Loi n° 10/010 du 27 avril 2010).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

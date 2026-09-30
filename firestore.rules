@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email == 'landrykibakweto123@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.name is string && data.name.size() <= 120 &&
+        data.email is string && data.email.size() <= 120 &&
+        data.role in ['cgpmp_member', 'armp_agent', 'dgcmp_agent', 'particulier', 'dfat_admin', 'formateur'];
+    }
+
+    function isValidTrainingRequest(data) {
+      return data.keys().hasAll(['id', 'applicantEmail', 'moduleId', 'participantsCount', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.applicantEmail is string && data.applicantEmail.size() <= 120 &&
+        data.moduleId is string && data.moduleId.size() <= 50 &&
+        data.participantsCount is number && data.participantsCount > 0;
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['id', 'code', 'title', 'category']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.code is string && data.code.size() <= 50 &&
+        data.title is string && data.title.size() <= 250 &&
+        data.category is string && data.category.size() <= 80;
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['id', 'author', 'content']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.author is string && data.author.size() <= 120 &&
+        data.content is string && data.content.size() <= 3000;
+    }
+
+    function isValidCourseQA(data) {
+      return data.keys().hasAll(['id', 'courseId', 'author', 'question']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.courseId is string && data.courseId.size() <= 128 &&
+        data.author is string && data.author.size() <= 120 &&
+        data.question is string && data.question.size() <= 1500;
+    }
+
+    function isValidStudioVideo(data) {
+      return data.keys().hasAll(['id', 'title', 'blobUrl']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.title is string && data.title.size() <= 200 &&
+        data.blobUrl is string && data.blobUrl.size() <= 500;
+    }
+
+    function isValidQuizBank(data) {
+      return data.keys().hasAll(['id', 'code', 'theme', 'q', 'rep']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.code is string && data.code.size() <= 50 &&
+        data.theme is string && data.theme.size() <= 120 &&
+        data.q is string && data.q.size() <= 1000 &&
+        data.rep is string && data.rep.size() <= 1500;
+    }
+
+    function isValidAnalyticsReport(data) {
+      return data.keys().hasAll(['id', 'reportTitle', 'executiveSummary']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.reportTitle is string && data.reportTitle.size() <= 250 &&
+        data.executiveSummary is string && data.executiveSummary.size() <= 3000;
+    }
+
+    // User Profiles collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // CGPMP Training Requests collection
+    match /trainingRequests/{requestId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.applicantEmail == request.auth.token.email || isAdmin());
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(requestId) && isValidTrainingRequest(incoming());
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Custom Courses collection
+    match /courses/{courseId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && isValidId(courseId) && isValidCourse(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Social Feed Posts collection
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(postId) && isValidPost(incoming());
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // Course Q&A collection
+    match /courseQA/{qaId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(qaId) && isValidCourseQA(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Studio Videos collection
+    match /studioVideos/{videoId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(videoId) && isValidStudioVideo(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // National Quiz Bank collection
+    match /quizBank/{questionId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(questionId) && isValidQuizBank(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Analytics Reports collection
+    match /analyticsReports/{reportId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(reportId) && isValidAnalyticsReport(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Tutor Conversations collection
+    match /tutorConversations/{userId} {
+      allow get, create, update, delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Connection testing doc
+    match /test/{testId} {
+      allow read: if true;
+    }
+  }
+}

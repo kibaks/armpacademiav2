@@ -1,0 +1,203 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil utilisateur persistant pour les agents et particuliers de la commande publique RDC",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["cgpmp_member", "armp_agent", "dgcmp_agent", "particulier", "dfat_admin", "formateur"] },
+        "roleTitle": { "type": "string", "maxLength": 120 },
+        "institution": { "type": "string", "maxLength": 150 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "level": { "type": "string", "maxLength": 50 },
+        "matricule": { "type": "string", "maxLength": 50 },
+        "bio": { "type": "string", "maxLength": 1000 },
+        "twoFactorEnabled": { "type": "boolean" },
+        "completedModulesCount": { "type": "number" },
+        "certificationsCount": { "type": "number" },
+        "offlineDownloads": { "type": "array" },
+        "completedCourseIds": { "type": "array" },
+        "courseProgress": { "type": "object" },
+        "completedLessonsByCourse": { "type": "object" },
+        "quizScoresByCourse": { "type": "object" },
+        "notesByCourse": { "type": "object" },
+        "studyHoursHistory": { "type": "array" },
+        "totalStudyMinutes": { "type": "number" },
+        "streakDays": { "type": "number" },
+        "galleryPhotos": { "type": "array" },
+        "certificates": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "TrainingRequest": {
+      "title": "TrainingRequest",
+      "description": "Demande officielle de formation institutionnelle CGPMP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "cgpmpCellule": { "type": "string", "maxLength": 150 },
+        "ministereOrEntite": { "type": "string", "maxLength": 150 },
+        "applicantName": { "type": "string", "maxLength": 120 },
+        "applicantEmail": { "type": "string", "maxLength": 120 },
+        "moduleId": { "type": "string", "maxLength": 50 },
+        "moduleTitle": { "type": "string", "maxLength": 200 },
+        "participantsCount": { "type": "number" },
+        "justification": { "type": "string", "maxLength": 1000 },
+        "requestedDate": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 50 },
+        "dfatNote": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "applicantEmail", "moduleId", "participantsCount", "status"]
+    },
+    "CourseModule": {
+      "title": "CourseModule",
+      "description": "Module de formation certifiant publié par un formateur homologué DFAT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 250 },
+        "category": { "type": "string", "maxLength": 80 },
+        "duration": { "type": "string", "maxLength": 80 },
+        "level": { "type": "string", "maxLength": 50 },
+        "legalRef": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "coverImage": { "type": "string", "maxLength": 500 },
+        "lessons": { "type": "array" },
+        "quiz": { "type": "array" }
+      },
+      "required": ["id", "code", "title", "category"]
+    },
+    "SocialPost": {
+      "title": "SocialPost",
+      "description": "Publication institutionnelle, retour d'expérience, mentions J'aime et commentaires",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "author": { "type": "string", "maxLength": 120 },
+        "roleTitle": { "type": "string", "maxLength": 120 },
+        "avatar": { "type": "string", "maxLength": 500 },
+        "content": { "type": "string", "maxLength": 3000 },
+        "likes": { "type": "number" },
+        "comments": { "type": "array" }
+      },
+      "required": ["id", "author", "content"]
+    },
+    "CourseQAItem": {
+      "title": "CourseQAItem",
+      "description": "Question/réponse pédagogique posée dans un module de formation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "courseId": { "type": "string", "maxLength": 128 },
+        "author": { "type": "string", "maxLength": 120 },
+        "question": { "type": "string", "maxLength": 1500 },
+        "answer": { "type": "string", "maxLength": 2000 },
+        "likes": { "type": "number" }
+      },
+      "required": ["id", "courseId", "author", "question"]
+    },
+    "StudioVideoItem": {
+      "title": "StudioVideoItem",
+      "description": "Capsule vidéo Masterclass enregistrée dans le Studio Formateur ARMP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "duration": { "type": "string", "maxLength": 50 },
+        "blobUrl": { "type": "string", "maxLength": 500 },
+        "date": { "type": "string", "maxLength": 80 },
+        "courseCode": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "title", "blobUrl"]
+    },
+    "QuizBankItem": {
+      "title": "QuizBankItem",
+      "description": "Question certifiante de la Banque Nationale d'Évaluation ARMP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 50 },
+        "theme": { "type": "string", "maxLength": 120 },
+        "q": { "type": "string", "maxLength": 1000 },
+        "rep": { "type": "string", "maxLength": 1500 },
+        "article": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["id", "code", "theme", "q", "rep"]
+    },
+    "SavedAnalyticsReport": {
+      "title": "SavedAnalyticsReport",
+      "description": "Synthèse décisionnelle IA générée et archivée pour la Direction DFAT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "reportTitle": { "type": "string", "maxLength": 250 },
+        "generatedAt": { "type": "string", "maxLength": 80 },
+        "period": { "type": "string", "maxLength": 80 },
+        "institution": { "type": "string", "maxLength": 150 },
+        "executiveSummary": { "type": "string", "maxLength": 3000 },
+        "complianceScore": { "type": "number" },
+        "recommendationsDFAT": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["id", "reportTitle", "executiveSummary"]
+    },
+    "TutorConversation": {
+      "title": "TutorConversation",
+      "description": "Historique de conversation persistant avec la tutrice IA Aïsha",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "messages": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "messages"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Profil utilisateur et progression"
+    },
+    "/trainingRequests/{requestId}": {
+      "schema": "TrainingRequest",
+      "description": "Demandes officielles de formation CGPMP"
+    },
+    "/courses/{courseId}": {
+      "schema": "CourseModule",
+      "description": "Formations certifiantes créées par les formateurs"
+    },
+    "/posts/{postId}": {
+      "schema": "SocialPost",
+      "description": "Publications du réseau professionnel ARMP"
+    },
+    "/courseQA/{qaId}": {
+      "schema": "CourseQAItem",
+      "description": "Questions et réponses pédagogiques par cours"
+    },
+    "/studioVideos/{videoId}": {
+      "schema": "StudioVideoItem",
+      "description": "Vidéos Masterclass enregistrées au Studio"
+    },
+    "/quizBank/{questionId}": {
+      "schema": "QuizBankItem",
+      "description": "Banque nationale de questions QCM ARMP"
+    },
+    "/analyticsReports/{reportId}": {
+      "schema": "SavedAnalyticsReport",
+      "description": "Rapports décisionnels IA archivés"
+    },
+    "/tutorConversations/{userId}": {
+      "schema": "TutorConversation",
+      "description": "Conversations persistées avec la tutrice Aïsha"
+    }
+  }
+}
