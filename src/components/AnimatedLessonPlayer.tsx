@@ -512,7 +512,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const handleCycleSpeed = () => {
     speechService.unlockAudio();
-    const speeds = [1.0, 0.9, 0.85];
+    const speeds = [1.0, 1.1, 0.92];
     const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 1.0;
     setPlaybackSpeed(nextSpeed);
     if (isPlaying && !voiceMuted) startVoiceAtProgress(filmProgress, nextSpeed);
@@ -571,18 +571,16 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     return calibratedLesson.acts[idx] || calibratedLesson.acts[0];
   }, [isVoiceDriving, playbackState?.currentSentence, calibratedLesson.acts, filmProgress]);
 
-  // Exact 0..1 progress inside the active screen (smoothly locked to live audio wordProgressPct)
+  // Exact 0..1 progress inside the active screen (strictly locked 1:1 to live audio wordProgressPct when voice is speaking)
   const actVoiceProgress = useMemo(() => {
     if (isPreloading) {
       return 0;
     }
-    const actSpan = Math.max(1, activeAct.endPct - activeAct.startPct);
-    const smoothRatio = clamp01((filmProgress - activeAct.startPct) / actSpan);
     if (isSpeaking && playbackState) {
-      const wp = clamp01((playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0) / 100);
-      return clamp01(smoothRatio * 0.45 + wp * 0.55);
+      return clamp01((playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0) / 100);
     }
-    return smoothRatio;
+    const actSpan = Math.max(1, activeAct.endPct - activeAct.startPct);
+    return clamp01((filmProgress - activeAct.startPct) / actSpan);
   }, [isSpeaking, isPreloading, playbackState, filmProgress, activeAct]);
 
   const currentScreenCard =
@@ -1380,7 +1378,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
               className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-black transition cursor-pointer"
               title="Vitesse de diction posée d'Aïsha"
             >
-              {playbackSpeed}x • {playbackSpeed <= 0.86 ? 'Très posé' : playbackSpeed <= 0.95 ? 'Posé' : 'Naturel'}
+              {playbackSpeed}x • {playbackSpeed >= 1.08 ? 'Dynamique' : playbackSpeed <= 0.94 ? 'Posé' : 'Naturel'}
             </button>
 
             <button

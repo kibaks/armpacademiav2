@@ -158,12 +158,13 @@ function calibrateWordBoundariesToEnvelope(
   envelope5ms: Float32Array | null,
   durationMs?: number
 ): TtsWordBoundary[] {
-  const base =
-    Array.isArray(rawBoundaries) && rawBoundaries.length > 0
-      ? rawBoundaries.map((w) => ({ ...w }))
-      : buildClientEstimatedBoundaries(sentence, durationMs);
+  const hasNativeBoundaries = Array.isArray(rawBoundaries) && rawBoundaries.length > 0;
+  const base = hasNativeBoundaries
+    ? rawBoundaries.map((w) => ({ ...w }))
+    : buildClientEstimatedBoundaries(sentence, durationMs);
 
-  if (base.length === 0 || !envelope5ms || envelope5ms.length < 10) {
+  // When native millisecond WordBoundaries are returned by Edge Neural TTS, preserve their exact neural timing!
+  if (hasNativeBoundaries || base.length === 0 || !envelope5ms || envelope5ms.length < 10) {
     return base;
   }
 
@@ -1373,8 +1374,12 @@ class SpeechService {
       const nowMs = performance.now();
       const streamElapsedMs = this.getExactAudioStreamElapsedMs(nowMs);
       const elapsedSec = streamElapsedMs / 1000 / Math.max(0.5, playbackRate);
-      // Subtle +35ms natural human gesture lead for pointing hand & board highlights
-      const leadStreamMs = streamElapsedMs + 35;
+      // Lock pointer & whiteboard directly to the spoken audio timestamp (0ms artificial jump)
+      const leadStreamMs = streamElapsedMs;
+      const audioTimeRatio = Math.min(
+        0.995,
+        Math.max(0, elapsedSec / Math.max(0.25, effectiveDurationSec))
+      );
 
       // 1. Measure real acoustic energy from 5ms PCM envelope or Web Audio AnalyserNode
       let boostedRms = 0;
@@ -1395,16 +1400,16 @@ class SpeechService {
         boostedRms = Math.min(1, rms * 5.2);
       }
 
-      // 2. High-precision Word-Boundary Lookup
+      // 2. High-precision Word-Boundary Lookup locked to audio time
       let activeWord = '';
       let mouthOpenness = 0;
       let viseme: LipViseme = 'closed';
       let isPauseBetweenWords = false;
-      let leadCharIdx = 0;
-      let leadRatio = Math.min(
-        0.995,
-        elapsedSec / Math.max(0.25, effectiveDurationSec) + 0.02
+      let leadCharIdx = Math.min(
+        sentence.length - 1,
+        Math.max(0, Math.floor(audioTimeRatio * sentence.length))
       );
+      let leadRatio = audioTimeRatio;
 
       if (wordBoundaries && wordBoundaries.length > 0) {
         let currentWb: TtsWordBoundary | undefined;
@@ -1446,17 +1451,19 @@ class SpeechService {
             0,
             Math.min(1, (leadStreamMs - resolvedLead.offsetMs) / Math.max(40, resolvedLead.durationMs))
           );
-          leadCharIdx = Math.min(
+          const wbCharIdx = Math.min(
             sentence.length - 1,
             Math.floor(resolvedLead.charIndex + wProg * resolvedLead.text.length)
           );
-          leadRatio = Math.min(0.995, Math.max(0, leadCharIdx / Math.max(1, sentence.length)));
+          const charRatio = Math.min(0.995, Math.max(0, wbCharIdx / Math.max(1, sentence.length)));
+          // Blend exact audio clock ratio with word-boundary character ratio so video never runs ahead of voice
+          leadRatio = Math.min(0.995, Math.max(0, audioTimeRatio * 0.55 + charRatio * 0.45));
+          leadCharIdx = Math.min(
+            sentence.length - 1,
+            Math.max(0, Math.floor(leadRatio * sentence.length))
+          );
         }
       } else {
-        leadCharIdx = Math.min(
-          sentence.length - 1,
-          Math.max(0, Math.floor(leadRatio * sentence.length))
-        );
         mouthOpenness = boostedRms > 0.025 ? Math.min(1, boostedRms * 0.9 + 0.15) : 0.0;
         viseme = mouthOpenness < 0.05 ? 'closed' : 'open';
       }
@@ -1551,7 +1558,7 @@ class SpeechService {
     timeoutMs: number = 15000
   ): Promise<DecodedNeuralEntry | null> {
     if (!this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `prof_vivienne_smile_v21::${voice}::${sentence}`;
+    const cacheKey = `prof_vivienne_smile_v22::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1830,7 +1837,7 @@ class SpeechService {
 
     // 1. Primary: Reference Expressive Neural Voice (fr-FR-VivienneMultilingualNeural)
     if (this.neuralTtsAvailable) {
-      const cacheKey = `prof_vivienne_smile_v21::${voiceName}::${sentence}`;
+      const cacheKey = `prof_vivienne_smile_v22::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -1860,7 +1867,7 @@ class SpeechService {
         const ctx = this.getAudioContext();
         // Keep playbackRate at 1.000 for normal speeds so Web Audio API preserves the exact reference voice timbre & tempo!
         const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
-        const playbackRate = userSpeed <= 0.86 ? 0.94 : userSpeed >= 1.08 ? 1.08 : 1.0;
+        const playbackRate = userSpeed <= 0.88 ? 0.95 : userSpeed >= 1.06 ? 1.08 : 1.02;
         let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
 
         if (ctx && ctx.state === 'suspended') {
@@ -2000,7 +2007,7 @@ class SpeechService {
                 if (this.isCancelled) return;
                 this.currentSentenceIndex++;
                 this.playNextInQueue();
-              }, 680);
+              }, 220);
             };
 
             const exactStartAt = ctx.currentTime;
@@ -2084,15 +2091,19 @@ class SpeechService {
                 return;
               }
               const streamElapsedMs = Math.max(0, (audioEl.currentTime || 0) * 1000);
-              const leadStreamMs = streamElapsedMs + 35;
+              const leadStreamMs = streamElapsedMs;
+              const audioTimeRatio = Math.min(
+                0.995,
+                Math.max(0, (audioEl.currentTime || 0) / Math.max(0.25, audioEl.duration || estimatedDuration))
+              );
 
               let activeWord = '';
               let isPauseBetweenWords = false;
-              let leadCharIdx = 0;
-              let leadRatio = Math.min(
-                0.995,
-                (audioEl.currentTime || 0) / Math.max(0.25, audioEl.duration || estimatedDuration)
+              let leadCharIdx = Math.min(
+                sentence.length - 1,
+                Math.max(0, Math.floor(audioTimeRatio * sentence.length))
               );
+              let leadRatio = audioTimeRatio;
 
               if (wordBoundaries.length > 0) {
                 let currentWb: TtsWordBoundary | undefined;
@@ -2123,13 +2134,18 @@ class SpeechService {
                     0,
                     Math.min(1, (leadStreamMs - resolvedLead.offsetMs) / Math.max(40, resolvedLead.durationMs))
                   );
-                  leadCharIdx = Math.min(
+                  const wbCharIdx = Math.min(
                     sentence.length - 1,
                     Math.floor(resolvedLead.charIndex + wProg * resolvedLead.text.length)
                   );
-                  leadRatio = Math.min(
+                  const charRatio = Math.min(
                     0.995,
-                    Math.max(0, leadCharIdx / Math.max(1, sentence.length))
+                    Math.max(0, wbCharIdx / Math.max(1, sentence.length))
+                  );
+                  leadRatio = Math.min(0.995, Math.max(0, audioTimeRatio * 0.55 + charRatio * 0.45));
+                  leadCharIdx = Math.min(
+                    sentence.length - 1,
+                    Math.max(0, Math.floor(leadRatio * sentence.length))
                   );
                 }
               }

@@ -119,7 +119,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [requestedScreenJump, setRequestedScreenJump] = useState<{ idx: number; ts: number } | null>(null);
   const [openSummaryVideoNow, setOpenSummaryVideoNow] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechRate, setSpeechRate] = useState<number>(0.92);
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
   const [autoReadLessons, setAutoReadLessons] = useState<boolean>(() => {
     try {

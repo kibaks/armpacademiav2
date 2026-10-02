@@ -595,7 +595,7 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
         sequences.map((s) => s.spoken).join(' '),
         summaryId,
         {
-          speed: 0.9,
+          speed: 1.0,
           voice: speechService.getVoicePersona(),
           startSentenceIndex: clamped,
           customSentences: sequences.map((s) => s.spoken)

@@ -938,22 +938,28 @@ const ttsMemoryCache = new Map<string, CachedTtsPayload>();
 const inFlightServerTts = new Map<string, Promise<CachedTtsPayload | null>>();
 let geminiTtsCooldownUntil = 0;
 
-// Map spoken words sequentially to their character index in the sentence
+// Map spoken words sequentially to their character index in the sentence (with bounded lookahead so cursor never jumps ahead)
 function attachCharIndices(
   sentence: string,
   rawWords: Array<{ text: string; offsetMs: number; durationMs: number }>
 ): TtsWordBoundary[] {
   const result: TtsWordBoundary[] = [];
   let cursor = 0;
-  const lowerSentence = sentence.toLowerCase();
+  const normSentence = sentence.toLowerCase().replace(/[’‘]/g, "'");
 
   for (const w of rawWords) {
     const cleanWord = (w.text || '').trim();
     if (!cleanWord) continue;
-    const foundIdx = lowerSentence.indexOf(cleanWord.toLowerCase(), cursor);
-    const charIndex = foundIdx !== -1 ? foundIdx : Math.min(sentence.length - 1, cursor);
-    if (foundIdx !== -1) {
+    const normWord = cleanWord.toLowerCase().replace(/[’‘]/g, "'");
+    const foundIdx = normSentence.indexOf(normWord, cursor);
+    const isValidMatch = foundIdx !== -1 && foundIdx - cursor <= 48;
+    const charIndex = isValidMatch
+      ? foundIdx
+      : Math.min(sentence.length - 1, cursor);
+    if (isValidMatch) {
       cursor = foundIdx + cleanWord.length;
+    } else {
+      cursor = Math.min(sentence.length - 1, cursor + Math.max(1, Math.min(cleanWord.length, 6)));
     }
     result.push({
       text: cleanWord,
@@ -1214,7 +1220,7 @@ async function synthesizeWithStudioNeuralHD(
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
     const { voice, tag } = candidateVoices[attempt];
     try {
-      const result = await runSingleEdgeSynthesis(text, voice, tag, '+0%', '+0Hz');
+      const result = await runSingleEdgeSynthesis(text, voice, tag, '+8%', '+0Hz');
       if (result) return result;
     } catch {
       // Wait briefly before retrying
@@ -1397,7 +1403,7 @@ async function getOrSynthesizeTtsPayload(
 
   const voiceKey = 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `prof_vivienne_smile_v21::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `prof_vivienne_smile_v22::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey);
   if (cached) return cached;
 

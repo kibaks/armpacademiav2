@@ -987,9 +987,9 @@ export function buildSynchronizedLessonScreens(
 
     const shortLabel = pillarMeta.tab;
 
-    // Clean, eloquent explanation & practical rule
-    const explanationText = truncateClean(parsed.explanationBody, 240);
-    const fieldRuleText = truncateClean(parsed.terrainRule, 155);
+    // Clean, eloquent & concise explanation & practical rule matched to whiteboard drawing speed
+    const explanationText = truncateClean(parsed.explanationBody, 195);
+    const fieldRuleText = truncateClean(parsed.terrainRule, 130);
 
     const variation =
       PEDAGOGICAL_TRANSITION_VARIATIONS[
@@ -1003,11 +1003,11 @@ export function buildSynchronizedLessonScreens(
         : parsed.visualTitle;
 
     const ELOQUENT_OPENERS = [
-      `Bonjour et bienvenue, ${precedence.spokenFullName}, c'est un vrai plaisir de vous retrouver aujourd'hui. Prenons un instant ensemble, si vous le voulez bien, pour comprendre ${naturalTitleSpoken}. `,
-      `Voyez-vous, au cœur du sujet, tout repose sur une règle essentielle. Penchons-nous maintenant, posément, sur ${naturalTitleSpoken}. `,
-      `Mais alors, comment cela se traduit-il concrètement sur le terrain ? Regardons de près ${naturalTitleSpoken}. `,
-      `Respirons un instant, et faisons maintenant le point sur l'essentiel à retenir concernant ${naturalTitleSpoken}. `,
-      `Terminons enfin, avec calme et assurance, par la validation et la prise de décision autour de ${naturalTitleSpoken}. `
+      `Bonjour et bienvenue, ${precedence.spokenFullName}, ravie de vous retrouver pour explorer ${naturalTitleSpoken}. `,
+      `Voyez-vous, au cœur du sujet, penchons-nous maintenant sur ${naturalTitleSpoken}. `,
+      `Concrètement sur le terrain, regardons de près ${naturalTitleSpoken}. `,
+      `Faisons maintenant le point sur l'essentiel à retenir concernant ${naturalTitleSpoken}. `,
+      `Terminons enfin par la validation et la prise de décision autour de ${naturalTitleSpoken}. `
     ];
 
     const introPrefix = ELOQUENT_OPENERS[idx] || `${parsed.visualTitle}... `;
@@ -1018,12 +1018,13 @@ export function buildSynchronizedLessonScreens(
       fieldRuleText.length > 1 && !/^[A-Z]{2,}/.test(fieldRuleText)
         ? fieldRuleText.charAt(0).toLowerCase() + fieldRuleText.slice(1)
         : fieldRuleText;
-    const part2Rule = `... ${personalizedLeadIn} ${spokenRuleBody}`;
+    const part2Rule = `${personalizedLeadIn} ${spokenRuleBody}`;
 
     const fullSpoken = `${part1Explanation} ${part2Rule}`;
     const totalSpokenLen = Math.max(1, fullSpoken.length);
     const exactExplanationStartRatio = clamp01(introPrefix.length / totalSpokenLen);
-    const ruleStartChar = part1Explanation.length + 1;
+    // Start drawing the bottom field rule box when Aïsha enters the practical rule segment
+    const ruleStartChar = part1Explanation.length + Math.floor(personalizedLeadIn.length * 0.55);
     const shortRoleTag = precedence.roleBadgeLabel.replace(/^RÔLE ACTIF\s*:\s*/i, '').slice(0, 32);
 
     return {
@@ -2459,7 +2460,7 @@ function extractVisualSketchDiagrams(card: SingleScreenCardData): VisualSketchDi
   const fLen1 = Math.max(6, fieldClauses[1].length);
   const totalFieldLen = fLen0 + fLen1;
 
-  const sealStartRatio = 0.94;
+  const sealStartRatio = 0.985;
   const fieldDrawSpan = Math.max(0.1, sealStartRatio - fieldStart);
   const check1Start = fieldStart;
   const check1End = check1Start + (fLen0 / totalFieldLen) * fieldDrawSpan;
@@ -3538,8 +3539,13 @@ export const ProfessorContextualStage: React.FC<{
     (localProgress - sketchData.terrainCheck1.startRatio) /
       Math.max(0.02, sketchData.sealStartRatio - sketchData.terrainCheck1.startRatio)
   );
-  const fieldLine1Ratio = clamp01(fieldTotalRatio / 0.55);
-  const fieldLine2Ratio = clamp01((fieldTotalRatio - 0.55) / 0.45);
+  const f1Len = Math.max(1, (sketchData.terrainCheck1.line1 || '').length);
+  const f2Len = Math.max(0, (sketchData.terrainCheck2.line1 || '').length);
+  const f1Share = f2Len > 0 ? f1Len / Math.max(1, f1Len + f2Len) : 1;
+  const fieldLine1Ratio = clamp01(fieldTotalRatio / Math.max(0.1, f1Share));
+  const fieldLine2Ratio = f2Len > 0 ? clamp01((fieldTotalRatio - f1Share) / Math.max(0.1, 1 - f1Share)) : 0;
+  const fieldW1 = estimateLinePixelWidth(sketchData.terrainCheck1.line1, 6.2, 455) + 18;
+  const fieldW2 = estimateLinePixelWidth(sketchData.terrainCheck2.line1, 5.9, 455) + 18;
 
   const sealRatio = clamp01(
     (localProgress - sketchData.sealStartRatio) / Math.max(0.02, 1 - sketchData.sealStartRatio)
@@ -3585,29 +3591,35 @@ export const ProfessorContextualStage: React.FC<{
           />
         </clipPath>
 
-        {/* Per-Row Fundamental Text Clip Masks */}
+        {/* Per-Row Fundamental Text Clip Masks (scaled to exact pixel width of each line so text reveals at exact voice speed) */}
         {[0, 1, 2].map((nIdx) => {
+          const node = sketchData.nodes[nIdx];
           const r = nodeRatios[nIdx];
-          const writeR = clamp01((r - 0.22) / 0.78);
-          const l1R = clamp01(writeR / 0.55);
-          const l2R = clamp01((writeR - 0.55) / 0.45);
+          const writeR = clamp01((r - 0.16) / 0.84);
+          const len1 = Math.max(1, (node.line1 || '').length);
+          const len2 = Math.max(0, (node.line2 || '').length);
+          const l1Share = len2 > 0 ? len1 / Math.max(1, len1 + len2) : 1;
+          const l1R = clamp01(writeR / Math.max(0.1, l1Share));
+          const l2R = len2 > 0 ? clamp01((writeR - l1Share) / Math.max(0.1, 1 - l1Share)) : 0;
+          const w1Px = estimateLinePixelWidth(node.line1, 6.4, 430) + 16;
+          const w2Px = estimateLinePixelWidth(node.line2, 6.0, 430) + 16;
           return (
             <React.Fragment key={nIdx}>
               <clipPath id={`${clipIdBase}-fund-${nIdx}-l1`}>
-                <rect x="64" y="20" width={430 * l1R} height="24" />
+                <rect x="64" y="20" width={w1Px * l1R} height="24" />
               </clipPath>
               <clipPath id={`${clipIdBase}-fund-${nIdx}-l2`}>
-                <rect x="64" y="42" width={430 * l2R} height="24" />
+                <rect x="64" y="42" width={w2Px * l2R} height="24" />
               </clipPath>
             </React.Fragment>
           );
         })}
 
         <clipPath id={`${clipIdBase}-field-l1`}>
-          <rect x="48" y="24" width={455 * fieldLine1Ratio} height="24" />
+          <rect x="48" y="24" width={fieldW1 * fieldLine1Ratio} height="24" />
         </clipPath>
         <clipPath id={`${clipIdBase}-field-l2`}>
-          <rect x="48" y="46" width={455 * fieldLine2Ratio} height="24" />
+          <rect x="48" y="46" width={fieldW2 * fieldLine2Ratio} height="24" />
         </clipPath>
       </defs>
 
