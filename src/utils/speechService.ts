@@ -1386,19 +1386,20 @@ class SpeechService {
 
       const nowMs = performance.now();
       const streamElapsedMs = this.getExactAudioStreamElapsedMs(nowMs);
+      const totalAudioMs = effectiveDurationSec * playbackRate * 1000;
       const lastWb =
         wordBoundaries && wordBoundaries.length > 0
           ? wordBoundaries[wordBoundaries.length - 1]
           : undefined;
-      // Actual vocal speech span (excludes trailing MP3 silence at the end of Edge TTS buffers)
+      // Actual audible speech span: reaches end smoothly with sentence cadence
       const speechSpanMs = lastWb
-        ? Math.max(400, lastWb.offsetMs + lastWb.durationMs)
-        : Math.max(400, effectiveDurationSec * playbackRate * 1000 * 0.92);
-      // +180ms visual anticipation so the whiteboard writes each phrase simultaneously as Aïsha speaks it
-      const leadStreamMs = streamElapsedMs + 180;
+        ? Math.max(lastWb.offsetMs + lastWb.durationMs + 120, totalAudioMs * 0.96)
+        : Math.max(400, totalAudioMs);
+
+      // Exact 1:1 audio progress without artificial lead forward offset
       const audioTimeRatio = Math.min(
         1,
-        Math.max(0, leadStreamMs / Math.max(250, speechSpanMs))
+        Math.max(0, streamElapsedMs / Math.max(250, speechSpanMs))
       );
 
       // 1. Measure real acoustic energy from 5ms PCM envelope or Web Audio AnalyserNode
@@ -1434,7 +1435,6 @@ class SpeechService {
       if (wordBoundaries && wordBoundaries.length > 0) {
         let currentWb: TtsWordBoundary | undefined;
         let prevWb: TtsWordBoundary | undefined;
-        let leadWb: TtsWordBoundary | undefined;
 
         for (let i = 0; i < wordBoundaries.length; i++) {
           const wb = wordBoundaries[i];
@@ -1447,9 +1447,6 @@ class SpeechService {
             streamElapsedMs <= wb.offsetMs + wb.durationMs + 12
           ) {
             currentWb = wb;
-          }
-          if (leadStreamMs >= wb.offsetMs) {
-            leadWb = wb;
           }
         }
 
@@ -1465,24 +1462,24 @@ class SpeechService {
           viseme = 'closed';
         }
 
-        const resolvedLead = leadWb || wordBoundaries[0];
-        if (resolvedLead) {
+        const activeWb = currentWb || prevWb || wordBoundaries[0];
+        if (activeWb) {
           const wProg = Math.max(
             0,
-            Math.min(1, (leadStreamMs - resolvedLead.offsetMs) / Math.max(40, resolvedLead.durationMs))
+            Math.min(1, (streamElapsedMs - activeWb.offsetMs) / Math.max(40, activeWb.durationMs))
           );
           const wbCharIdx = Math.min(
             sentence.length - 1,
-            Math.floor(resolvedLead.charIndex + wProg * resolvedLead.text.length)
+            Math.floor(activeWb.charIndex + wProg * activeWb.text.length)
           );
           const totalTrackedChars = lastWb
             ? Math.max(1, Math.min(sentence.length, lastWb.charIndex + lastWb.text.length))
             : Math.max(1, sentence.length);
           const charRatio = Math.min(1, Math.max(0, wbCharIdx / totalTrackedChars));
-          // Synchronize whiteboard progress with the active spoken word and speech span so video is never slower than voice
+          // Exactly balanced 1:1 timeline synchronization between voice and visual writing
           leadRatio = Math.min(
             1,
-            Math.max(audioTimeRatio, audioTimeRatio * 0.5 + charRatio * 0.5)
+            Math.max(0, audioTimeRatio * 0.5 + charRatio * 0.5)
           );
           leadCharIdx = Math.min(
             sentence.length - 1,
@@ -1584,7 +1581,7 @@ class SpeechService {
     timeoutMs: number = 15000
   ): Promise<DecodedNeuralEntry | null> {
     if (!this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `prof_vivienne_smile_v23::${voice}::${sentence}`;
+    const cacheKey = `prof_vivienne_smile_v24::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1863,7 +1860,7 @@ class SpeechService {
 
     // 1. Primary: Reference Expressive Neural Voice (fr-FR-VivienneMultilingualNeural)
     if (this.neuralTtsAvailable) {
-      const cacheKey = `prof_vivienne_smile_v23::${voiceName}::${sentence}`;
+      const cacheKey = `prof_vivienne_smile_v24::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -1891,9 +1888,9 @@ class SpeechService {
 
       if (neuralEntry) {
         const ctx = this.getAudioContext();
-        // Poised, calm & clear pedagogical playback rate so Aïsha's voice never rushes ahead of the video
+        // Natural, eloquent & clear pedagogical playback rate perfectly synchronized with video
         const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
-        const playbackRate = userSpeed <= 0.88 ? 0.90 : userSpeed >= 1.06 ? 1.04 : 0.96;
+        const playbackRate = userSpeed <= 0.88 ? 0.92 : userSpeed >= 1.08 ? 1.08 : 1.0;
         let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
 
         if (ctx && ctx.state === 'suspended') {
@@ -2119,17 +2116,17 @@ class SpeechService {
                 return;
               }
               const streamElapsedMs = Math.max(0, (audioEl.currentTime || 0) * 1000);
+              const totalAudioMs = (audioEl.duration || estimatedDuration) * 1000;
               const lastWb =
                 wordBoundaries && wordBoundaries.length > 0
                   ? wordBoundaries[wordBoundaries.length - 1]
                   : undefined;
               const speechSpanMs = lastWb
-                ? Math.max(400, lastWb.offsetMs + lastWb.durationMs)
-                : Math.max(400, (audioEl.duration || estimatedDuration) * 1000 * 0.92);
-              const leadStreamMs = streamElapsedMs + 180;
+                ? Math.max(lastWb.offsetMs + lastWb.durationMs + 120, totalAudioMs * 0.96)
+                : Math.max(400, totalAudioMs);
               const audioTimeRatio = Math.min(
                 1,
-                Math.max(0, leadStreamMs / Math.max(250, speechSpanMs))
+                Math.max(0, streamElapsedMs / Math.max(250, speechSpanMs))
               );
 
               let activeWord = '';
@@ -2143,7 +2140,6 @@ class SpeechService {
               if (wordBoundaries.length > 0) {
                 let currentWb: TtsWordBoundary | undefined;
                 let prevWb: TtsWordBoundary | undefined;
-                let leadWb: TtsWordBoundary | undefined;
                 for (let i = 0; i < wordBoundaries.length; i++) {
                   const wb = wordBoundaries[i];
                   if (streamElapsedMs >= wb.offsetMs) prevWb = wb;
@@ -2154,7 +2150,6 @@ class SpeechService {
                   ) {
                     currentWb = wb;
                   }
-                  if (leadStreamMs >= wb.offsetMs) leadWb = wb;
                 }
                 if (currentWb) {
                   activeWord = currentWb.text;
@@ -2163,15 +2158,15 @@ class SpeechService {
                   activeWord = prevWb ? prevWb.text : wordBoundaries[0].text;
                 }
 
-                const resolvedLead = leadWb || wordBoundaries[0];
-                if (resolvedLead) {
+                const activeWb = currentWb || prevWb || wordBoundaries[0];
+                if (activeWb) {
                   const wProg = Math.max(
                     0,
-                    Math.min(1, (leadStreamMs - resolvedLead.offsetMs) / Math.max(40, resolvedLead.durationMs))
+                    Math.min(1, (streamElapsedMs - activeWb.offsetMs) / Math.max(40, activeWb.durationMs))
                   );
                   const wbCharIdx = Math.min(
                     sentence.length - 1,
-                    Math.floor(resolvedLead.charIndex + wProg * resolvedLead.text.length)
+                    Math.floor(activeWb.charIndex + wProg * activeWb.text.length)
                   );
                   const totalTrackedChars = lastWb
                     ? Math.max(1, Math.min(sentence.length, lastWb.charIndex + lastWb.text.length))
@@ -2182,7 +2177,7 @@ class SpeechService {
                   );
                   leadRatio = Math.min(
                     1,
-                    Math.max(audioTimeRatio, audioTimeRatio * 0.5 + charRatio * 0.5)
+                    Math.max(0, audioTimeRatio * 0.5 + charRatio * 0.5)
                   );
                   leadCharIdx = Math.min(
                     sentence.length - 1,

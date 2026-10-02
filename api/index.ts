@@ -787,10 +787,9 @@ function buildNaturalFrenchSsmlBody(rawText: string): string {
 }
 
 function detectVoiceProsodyContour(text: string, voiceName: string): { pitch: string; rate: string } {
-  const isMale = voiceName.toLowerCase().includes('remy') || voiceName.toLowerCase().includes('henri');
   return {
     pitch: '+0Hz',
-    rate: isMale ? '-4%' : '-4%'
+    rate: '+0%'
   };
 }
 
@@ -955,7 +954,7 @@ function runSingleEdgeSynthesis(
       }
     });
 
-    ws.on('error', (err) => {
+    ws.on('error', (err: any) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
@@ -1093,7 +1092,7 @@ app.post('/api/ai/tts', async (req, res) => {
     }
 
     const cleanSentence = rawText.slice(0, 750);
-    const cacheKey = `v23:${voiceChoice}:${cleanSentence}`;
+    const cacheKey = `v24:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1158,7 +1157,7 @@ app.post('/api/ai/tts/prewarm', async (req, res) => {
     for (const s of sentences) {
       const cleanSentence = (s || '').toString().trim().slice(0, 750);
       if (!cleanSentence) continue;
-      const cacheKey = `v23:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v24:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
       try {
         const { audioBuffer, wordBoundaries } = await synthesizeWithEdgeNeuralTTS(cleanSentence, persona.edgeVoice);

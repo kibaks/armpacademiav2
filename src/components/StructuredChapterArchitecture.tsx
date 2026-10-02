@@ -591,11 +591,11 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
     ambientMusicService.start();
     if (!isMuted) {
       speechService.unlockAudio();
-        speechService.play(
+      speechService.play(
         sequences.map((s) => s.spoken).join(' '),
         summaryId,
         {
-          speed: 0.94,
+          speed: 1.0,
           voice: speechService.getVoicePersona(),
           startSentenceIndex: clamped,
           customSentences: sequences.map((s) => s.spoken)

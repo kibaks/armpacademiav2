@@ -5,7 +5,8 @@
 //   2. Per-vertex Temporal State-Space Smoothing (SMOOTH_DX/DY + VEL_DX/DY) ensures C²-continuous vertex trajectories.
 // - Exact Reference Mouth Articulation Display Model (Open Vowel Panel A + Rounded Pucker Panel B) locked to the voice.
 
-import imgTutrice from '../assets/images/aisha_portrait_sans_main_1790912759956.jpg';
+import imgTutrice from '../assets/images/aisha_cutout_foreground.png';
+import imgStudioBg from '../assets/images/studio_static_background.jpg';
 import type { AvatarComputedFrame } from '../workers/avatarExpressionWorker';
 
 const IMG_W = 896;
@@ -194,17 +195,15 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
       let ly = REST_SY[idx];
 
       // =======================================================================
-      // 0. STATIC STUDIO BACKGROUND & OUTER FRAME LOCK:
-      // - Top frame (r === 0), lower frame (r >= 16), and outer frame edges (c === 0, c === 18) are 100% static.
-      // - In the head zone (r <= 12), outer background columns (c <= 1 or c >= 17) are 100% static.
-      // - In the shoulder & blazer bust zone (r = 13..15), columns c = 1..17 animate shoulder shrugs & breathing!
+      // 0. STATIC STUDIO BACKGROUND & CONTINUOUS SOFT BOUNDARY LOCK:
+      // Outer frame edges (r === 0, r === NUM_ROWS - 1, c === 0, c === NUM_COLS - 1) anchor smoothly
+      // without creating any hard rectangular seam or shear line on Aïsha's torso/body!
       // =======================================================================
       const isStaticAnchor =
         r === 0 ||
-        r >= 16 ||
+        r === NUM_ROWS - 1 ||
         c === 0 ||
-        c === 18 ||
-        (r <= 12 && (c <= 1 || c >= 17));
+        c === NUM_COLS - 1;
       if (isStaticAnchor) {
         TARGET_DX[idx] = lx;
         TARGET_DY[idx] = ly;
@@ -507,22 +506,23 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
         TARGET_DX[idx] =
           lx * (1 - neckWeight) + headX * neckWeight + torsoSwayX * 0.55 + shrugInwardDx;
         TARGET_DY[idx] = ly * (1 - neckWeight) + headY * neckWeight + shrugDy;
-      } else if (r === 14 || r === 15) {
-        // Tailored cream blazer shoulders, lapels & upper bust (r=14 at y=700, r=15 at y=795):
-        // Animates expressive shoulder shrugs ("haussements d'épaules"), empathetic breath & torso poise!
-        const rowWeight = r === 14 ? 1.0 : 0.42;
+      } else if (r >= 14 && r <= 17) {
+        // Tailored cream blazer shoulders, lapels & upper bust (r=14..17):
+        // Smooth continuous cosine falloff down to the bottom frame without any hard rectangular seam or shear!
+        const rowWeight = Math.pow(Math.cos(((r - 14) / 4) * (Math.PI / 2)), 1.6);
+        const colFactor = Math.sin((c / (NUM_COLS - 1)) * Math.PI);
         const isLeftShoulder = c <= 7;
         const isRightShoulder = c >= 11;
         const shoulderProfileW =
-          c === 1 || c === 17
-            ? 0.72
+          (c === 1 || c === 17
+            ? 0.50
             : c === 2 || c === 16
-            ? 1.05
+            ? 0.85
             : c === 3 || c === 15
             ? 1.00
             : c === 4 || c === 14
             ? 0.86
-            : 0.68;
+            : 0.68) * colFactor;
 
         const verticalShrug = isLeftShoulder
           ? leftShoulderLift * shoulderProfileW
@@ -530,14 +530,13 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
           ? rightShoulderLift * shoulderProfileW
           : collarLift * 0.78;
 
-        // Subtle anatomic inward clavicle draw when shoulders rise in a shrug
         const clavicleDrawDx = isLeftShoulder
-          ? -Math.min(0, leftShoulderLift) * 0.26 * shoulderProfileW
+          ? -Math.min(0, leftShoulderLift) * 0.22 * shoulderProfileW
           : isRightShoulder
-          ? Math.min(0, rightShoulderLift) * 0.26 * shoulderProfileW
+          ? Math.min(0, rightShoulderLift) * 0.22 * shoulderProfileW
           : 0;
 
-        TARGET_DX[idx] = lx + (torsoSwayX * 0.68 + clavicleDrawDx) * rowWeight;
+        TARGET_DX[idx] = lx + (torsoSwayX * 0.50 + clavicleDrawDx) * rowWeight;
         TARGET_DY[idx] = ly + verticalShrug * rowWeight;
       }
 
@@ -610,6 +609,7 @@ class SharedWav2LipWebGLCore {
   private vbo: WebGLBuffer | null = null;
   private texture: WebGLTexture | null = null;
   private img: HTMLImageElement | null = null;
+  private bgImg: HTMLImageElement | null = null;
   private isReady = false;
   private posLoc = -1;
   private uvLoc = -1;
@@ -626,8 +626,9 @@ class SharedWav2LipWebGLCore {
       canvas.width = IMG_W;
       canvas.height = IMG_H;
       const gl = (canvas.getContext('webgl', {
-        alpha: false,
+        alpha: true,
         antialias: true,
+        premultipliedAlpha: false,
         preserveDrawingBuffer: true,
       }) ||
         canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
@@ -638,6 +639,13 @@ class SharedWav2LipWebGLCore {
         this.setupShaders(gl);
       }
 
+      // Static Studio Background with flower pots, shelves and warm ambient lighting (100% static)
+      const bgImg = new Image();
+      bgImg.crossOrigin = 'anonymous';
+      bgImg.src = imgStudioBg;
+      this.bgImg = bgImg;
+
+      // Aïsha's high-definition foreground with transparent studio cutout
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
@@ -714,119 +722,6 @@ class SharedWav2LipWebGLCore {
    *   in a single continuous mesh, ZERO ghost traces ("traces fantômes") or background motion can ever appear!
    */
   private prepareZeroGhostSingleLayerTexture(gl: WebGLRenderingContext, img: HTMLImageElement) {
-    const offscreen = document.createElement('canvas');
-    offscreen.width = IMG_W;
-    offscreen.height = IMG_H;
-    const ctx = offscreen.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(img, 0, 0, IMG_W, IMG_H);
-    const imgData = ctx.getImageData(0, 0, IMG_W, IMG_H);
-    const data = imgData.data;
-
-    // 1. Connected BFS flood-fill from outer studio background down to y <= 760 (head, hair & shoulders)
-    const isBg = new Uint8Array(IMG_W * IMG_H);
-    const matchesStudioBg = (x: number, y: number): boolean => {
-      const nx = (x - 452) / 94;
-      const ny = (y - 385) / 182;
-      if (nx * nx + ny * ny < 1.0) return false;
-      // Protect inner blouse/blazer bust core below y=550
-      if (y >= 550 && x >= 310 && x <= 590) return false;
-      const p = (y * IMG_W + x) * 4;
-      const r = data[p];
-      const g = data[p + 1];
-      const b = data[p + 2];
-      // Pure studio background has strong blue-over-red excess and medium-high blue luminance
-      return b - r >= 18 && g - r >= 8 && b >= 68;
-    };
-
-    const queue = new Int32Array(IMG_W * 780);
-    let qHead = 0;
-    let qTail = 0;
-
-    for (let y = 0; y <= 760; y++) {
-      for (let x = 0; x < IMG_W; x++) {
-        if (y <= 145 || x <= 105 || x >= 800 || (y <= 620 && (x <= 265 || x >= 625))) {
-          if (matchesStudioBg(x, y)) {
-            const idx = y * IMG_W + x;
-            isBg[idx] = 1;
-            queue[qTail++] = idx;
-          }
-        }
-      }
-    }
-
-    while (qHead < qTail) {
-      const idx = queue[qHead++];
-      const x = idx % IMG_W;
-      const y = (idx / IMG_W) | 0;
-
-      if (x > 0) {
-        const nIdx = idx - 1;
-        if (!isBg[nIdx] && matchesStudioBg(x - 1, y)) {
-          isBg[nIdx] = 1;
-          queue[qTail++] = nIdx;
-        }
-      }
-      if (x + 1 < IMG_W) {
-        const nIdx = idx + 1;
-        if (!isBg[nIdx] && matchesStudioBg(x + 1, y)) {
-          isBg[nIdx] = 1;
-          queue[qTail++] = nIdx;
-        }
-      }
-      if (y > 0) {
-        const nIdx = idx - IMG_W;
-        if (!isBg[nIdx] && matchesStudioBg(x, y - 1)) {
-          isBg[nIdx] = 1;
-          queue[qTail++] = nIdx;
-        }
-      }
-      if (y + 1 <= 760) {
-        const nIdx = idx + IMG_W;
-        if (!isBg[nIdx] && matchesStudioBg(x, y + 1)) {
-          isBg[nIdx] = 1;
-          queue[qTail++] = nIdx;
-        }
-      }
-    }
-
-    // 2. Set all studio background pixels to a uniform studio slate-blue RGB(90, 118, 138)
-    const BG_R = 90;
-    const BG_G = 118;
-    const BG_B = 138;
-
-    for (let y = 0; y <= 760; y++) {
-      for (let x = 0; x < IMG_W; x++) {
-        const idx = y * IMG_W + x;
-        const p = idx * 4;
-        if (isBg[idx] === 1) {
-          data[p] = BG_R;
-          data[p + 1] = BG_G;
-          data[p + 2] = BG_B;
-        } else if (x > 100 && x < 805 && y > 140 && y < 755) {
-          // If this foreground pixel is immediately adjacent to isBg===1 and has a blue background halo,
-          // blend its blue halo into the exact uniform BG_R/G/B so there is zero contrast seam!
-          const adjBg =
-            isBg[idx - 1] === 1 ||
-            isBg[idx + 1] === 1 ||
-            isBg[idx - IMG_W] === 1 ||
-            isBg[idx + IMG_W] === 1;
-          if (adjBg) {
-            const r = data[p];
-            const g = data[p + 1];
-            const b = data[p + 2];
-            if (b - r >= 12 && b >= 45) {
-              const haloFactor = Math.min(0.75, (b - r - 10) / 32.0);
-              data[p] = Math.round(r * (1 - haloFactor) + BG_R * haloFactor);
-              data[p + 1] = Math.round(g * (1 - haloFactor) + BG_G * haloFactor);
-              data[p + 2] = Math.round(b * (1 - haloFactor) + BG_B * haloFactor);
-            }
-          }
-        }
-      }
-    }
-
     const tex = gl.createTexture();
     if (!tex) return;
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -834,7 +729,7 @@ class SharedWav2LipWebGLCore {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imgData);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     this.texture = tex;
   }
 
@@ -869,8 +764,11 @@ class SharedWav2LipWebGLCore {
     }
 
     gl.viewport(0, 0, IMG_W, IMG_H);
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
-    gl.disable(gl.BLEND);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, GL_VERTS, gl.DYNAMIC_DRAW);
@@ -898,7 +796,7 @@ class SharedWav2LipWebGLCore {
     const ch = targetCanvas.height;
     if (cw === 0 || ch === 0) return;
 
-    // 1. Draw the single-layer continuous WebGL mesh-warped frame
+    // 1. Draw the static background + animated foreground
     const scale = Math.max(cw / viewport.w, ch / viewport.h);
     const drawW = cw / scale;
     const drawH = ch / scale;
@@ -910,6 +808,20 @@ class SharedWav2LipWebGLCore {
 
     ctx.scale(scale, scale);
     ctx.translate(-sx, -sy);
+
+    // 1. 100% STATIC STUDIO BACKGROUND WITH FLOWER POTS & PEDAGOGICAL DECOR
+    // Rendered directly in static target coordinate space - completely immune to mesh deformation!
+    if (this.bgImg && this.bgImg.complete && this.bgImg.naturalWidth > 0) {
+      ctx.drawImage(this.bgImg, 0, 0, IMG_W, IMG_H);
+    } else {
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, IMG_H);
+      bgGrad.addColorStop(0, '#1E293B');
+      bgGrad.addColorStop(1, '#0F172A');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, IMG_W, IMG_H);
+    }
+
+    // 2. AÏSHA'S 60 FPS ANIMATED FOREGROUND (Warped head, smile, eyes & breathing shoulders)
     ctx.drawImage(sourceSurface, 0, 0);
 
     // =========================================================================

@@ -11,7 +11,6 @@ import {
 } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { Communicate } from 'edge-tts-universal';
-// @ts-expect-error ws does not ship bundled types
 import WebSocket from 'ws';
 import {
   type TtsEmotionalTag,
@@ -1220,8 +1219,8 @@ async function synthesizeWithStudioNeuralHD(
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
     const { voice, tag } = candidateVoices[attempt];
     try {
-      // Calm, poised pedagogical diction (-4%) so the voice never rushes ahead of the video
-      const result = await runSingleEdgeSynthesis(text, voice, tag, '-4%', '+0Hz');
+      // Natural, eloquent human cadence (+0%) matching standard French speech rate perfectly
+      const result = await runSingleEdgeSynthesis(text, voice, tag, '+0%', '+0Hz');
       if (result) return result;
     } catch {
       // Wait briefly before retrying
@@ -1404,7 +1403,7 @@ async function getOrSynthesizeTtsPayload(
 
   const voiceKey = 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `prof_vivienne_smile_v23::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `prof_vivienne_smile_v24::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey);
   if (cached) return cached;
 

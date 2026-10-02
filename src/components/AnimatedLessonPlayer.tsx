@@ -30,7 +30,7 @@ import {
 import { ambientMusicService } from '../utils/ambientMusicService';
 import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
 import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
-import imgTutrice from '../assets/images/aisha_portrait_sans_main_1790912759956.jpg';
+import imgTutrice from '../assets/images/aisha_avatar_thumb.jpg';
 import {
   ContextualSceneType,
   ProfessorContextualStage,
@@ -571,7 +571,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     return calibratedLesson.acts[idx] || calibratedLesson.acts[0];
   }, [isVoiceDriving, playbackState?.currentSentence, calibratedLesson.acts, filmProgress]);
 
-  // Exact 0..1 progress inside the active screen (locked to live audio wordProgressPct and smooth filmProgress)
+  // Exact 0..1 progress inside the active screen (locked directly to live voice wordProgressPct)
   const actVoiceProgress = useMemo(() => {
     if (isPreloading) {
       return 0;
@@ -580,7 +580,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     const filmActRatio = clamp01((filmProgress - activeAct.startPct) / actSpan);
     if (isSpeaking && playbackState) {
       const liveVoiceRatio = clamp01((playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0) / 100);
-      return Math.max(liveVoiceRatio, filmActRatio);
+      return liveVoiceRatio;
     }
     return filmActRatio;
   }, [isSpeaking, isPreloading, playbackState, filmProgress, activeAct]);
@@ -785,7 +785,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   useEffect(() => {
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: headerWav2LipCanvasRef.current,
-      wav2lipViewport: { x: 174, y: 134, w: 548, h: 552 },
+      wav2lipViewport: { x: 180, y: 142, w: 536, h: 512 },
       emotionBadgeEl: headerEmotionBadgeRef.current,
       postureBadgeEl: headerPostureBadgeRef.current,
       visemeBadgeEl: headerVisemeBadgeRef.current,
@@ -956,121 +956,21 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       {/* =========================================================================== */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b-2 border-amber-500/30 p-3 sm:p-4">
         <div className="flex flex-col md:flex-row items-stretch gap-3.5 sm:gap-4">
-          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (POSTURE DROITE, VISAGE FACE CAMÉRA & MAINS EXPRESSIVES) */}
+          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (POSTURE DROITE, VISAGE FACE CAMÉRA & DÉCOR STATIQUE AVEC PLANTES) */}
           <div
-            className={`relative shrink-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 bg-slate-950 shadow-xl ${
-              isActivelySpeaking ? 'border-cyan-400 shadow-cyan-500/20' : 'border-amber-400/70'
-            } ${
+            className={`relative shrink-0 rounded-2xl overflow-hidden transition-all duration-300 bg-slate-950 shadow-2xl border-2 border-amber-500/40 ${
               pipExpanded
-                ? 'w-full md:w-[360px] xl:w-[400px] h-[300px] sm:h-[330px]'
-                : 'w-full md:w-[300px] lg:w-[330px] xl:w-[350px] h-[265px] sm:h-[290px]'
+                ? 'w-full md:w-[420px] xl:w-[470px] h-[340px] sm:h-[375px]'
+                : 'w-full md:w-[350px] lg:w-[385px] xl:w-[420px] h-[300px] sm:h-[330px]'
             } mx-auto md:mx-0`}
           >
-            {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer (540-Triangle Dense Mesh + Oral Composite) */}
+            {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer (Décor Statique + Pots de Fleurs) */}
             <canvas
               ref={headerWav2LipCanvasRef}
-              width={640}
-              height={560}
+              width={720}
+              height={620}
               className="w-full h-full block object-cover opacity-100"
             />
-
-            {/* Broadcast HUD Overlay (Compact Top Bar leaving Aïsha's face, torso & speaking hands 100% unobstructed) */}
-            <svg
-              viewBox="0 0 360 260"
-              className="absolute inset-0 w-full h-full pointer-events-none z-20"
-              preserveAspectRatio="xMidYMid slice"
-            >
-              {/* Top Overlay Badge: Active Facial & Vocal Emotion + Equalizer */}
-              <g transform="translate(6, 6)">
-                <rect
-                  x="0"
-                  y="0"
-                  width="244"
-                  height="18"
-                  rx="9"
-                  fill="#0F172A"
-                  fillOpacity="0.78"
-                  stroke="#22D3EE"
-                  strokeWidth="1"
-                />
-                <circle cx="10" cy="9" r="3.5" fill={isActivelySpeaking ? '#10B981' : '#F59E0B'} />
-                <text
-                  ref={headerEmotionBadgeRef}
-                  x="18"
-                  y="12.2"
-                  fill="#ECFEFF"
-                  fontSize="7.4"
-                  fontWeight="900"
-                >
-                  🎓 Éloquence &amp; Sérénité académique
-                </text>
-                <g transform="translate(204, 3)">
-                  {[0, 1, 2, 3, 4].map((bIdx) => (
-                    <rect
-                      key={bIdx}
-                      ref={(el) => {
-                        headerEqBarRefs.current[bIdx] = el;
-                      }}
-                      x={bIdx * 6.5}
-                      y={4.25}
-                      width="3.5"
-                      height={3.5}
-                      rx="1.75"
-                      fill={isActivelySpeaking ? '#22D3EE' : '#64748B'}
-                    />
-                  ))}
-                </g>
-              </g>
-
-              {/* Top-Right 6-Viseme Phonetic Articulation Badge */}
-              <g transform="translate(256, 6)">
-                <rect
-                  x="0"
-                  y="0"
-                  width="98"
-                  height="18"
-                  rx="9"
-                  fill="#020617"
-                  fillOpacity="0.78"
-                  stroke={isActivelySpeaking ? '#10B981' : '#38BDF8'}
-                  strokeWidth="1"
-                />
-                <circle cx="10" cy="9" r="3" fill={isActivelySpeaking ? '#10B981' : '#38BDF8'} />
-                <text
-                  ref={headerVisemeBadgeRef}
-                  x="17"
-                  y="12.0"
-                  fill="#E0F2FE"
-                  fontSize="7.0"
-                  fontWeight="900"
-                >
-                  VISÈME 1/6
-                </text>
-              </g>
-
-              {/* Hidden/Compact Top-Left Sub-Pill for Posture Ref so hands at bottom remain 100% uncovered */}
-              <g transform="translate(6, 26)" opacity="0.82">
-                <rect
-                  x="0"
-                  y="0"
-                  width="126"
-                  height="14"
-                  rx="7"
-                  fill="#0F172A"
-                  fillOpacity="0.68"
-                />
-                <text
-                  ref={headerPostureBadgeRef}
-                  x="7"
-                  y="9.8"
-                  fill="#FDE68A"
-                  fontSize="5.8"
-                  fontWeight="800"
-                >
-                  🌸 Port de tête féminin • Sourire
-                </text>
-              </g>
-            </svg>
           </div>
 
           {/* B. PROTOCOLE DE PRÉSÉANCE, RÔLE DE L'APPRENANT & NAVIGATION D'ÉCRAN */}

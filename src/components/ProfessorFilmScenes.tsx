@@ -2460,8 +2460,8 @@ function extractVisualSketchDiagrams(card: SingleScreenCardData): VisualSketchDi
   const fLen1 = Math.max(6, fieldClauses[1].length);
   const totalFieldLen = fLen0 + fLen1;
 
-  const sealStartRatio = 0.90;
-  const fieldDrawSpan = Math.max(0.1, sealStartRatio - fieldStart);
+  const sealStartRatio = 0.94;
+  const fieldDrawSpan = Math.max(0.08, sealStartRatio - fieldStart);
   const check1Start = fieldStart;
   const check1End = check1Start + (fLen0 / totalFieldLen) * fieldDrawSpan;
   const check2Start = check1End;
@@ -3591,11 +3591,11 @@ export const ProfessorContextualStage: React.FC<{
           />
         </clipPath>
 
-        {/* Per-Row Fundamental Text Clip Masks (starts immediately with clause voice and finishes at 85% of clause so video never lags behind voice) */}
+        {/* Per-Row Fundamental Text Clip Masks (writes progressively across the clause in sync with Aïsha's voice) */}
         {[0, 1, 2].map((nIdx) => {
           const node = sketchData.nodes[nIdx];
           const r = nodeRatios[nIdx];
-          const writeR = clamp01((r - 0.03) / 0.82);
+          const writeR = clamp01(r / 0.98);
           const len1 = Math.max(1, (node.line1 || '').length);
           const len2 = Math.max(0, (node.line2 || '').length);
           const l1Share = len2 > 0 ? len1 / Math.max(1, len1 + len2) : 1;

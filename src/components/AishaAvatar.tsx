@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import imgTutrice from '../assets/images/aisha_portrait_sans_main_1790912759956.jpg';
+import imgTutrice from '../assets/images/aisha_cutout_foreground.png';
+import imgStudioBg from '../assets/images/studio_static_background.jpg';
 import { speechService, type VoicePersona } from '../utils/speechService';
 import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
 import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
@@ -112,12 +113,12 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   }, []);
 
   useEffect(() => {
-    // Frame the close-up portrait head, mouth & upper blazer shoulders (y=132..695) for TTS micro-gestures (shoulder shrugs & affirmative nods)
+    // Frame the close-up portrait head, mouth & upper blazer shoulders with enlarged framing & static flower-pot studio backdrop
     const viewport = isVisio
-      ? { x: 162, y: 132, w: 572, h: 565, tutorPersona }
+      ? { x: 170, y: 140, w: 556, h: 520, tutorPersona }
       : isStudio || dim.w >= 120
-      ? { x: 174, y: 134, w: 548, h: 552, tutorPersona }
-      : { x: 205, y: 140, w: 490, h: 500, tutorPersona };
+      ? { x: 180, y: 142, w: 536, h: 512, tutorPersona }
+      : { x: 200, y: 140, w: 495, h: 500, tutorPersona };
 
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: wav2lipCanvasRef.current,
@@ -155,7 +156,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
       {isVisio && (
         <>
           <img
-            src={imgTutrice}
+            src={imgStudioBg}
             alt=""
             aria-hidden="true"
             className="absolute inset-0 w-full h-full object-cover object-center blur-2xl scale-110 opacity-45 pointer-events-none"
@@ -174,103 +175,6 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
             : 'w-full h-full block object-cover object-top'
         }
       />
-
-      {/* Full Wav2Lip Telemetry HUD for Studio & Call Avatars */}
-      {(isStudio || size === 'call' || size === 'xl' || size === 'hero') && !isVisio && (
-        <svg
-          viewBox="0 0 360 260"
-          className="absolute inset-0 w-full h-full pointer-events-none z-20"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <g transform="translate(6, 6)">
-            <rect
-              x="0"
-              y="0"
-              width="244"
-              height="18"
-              rx="9"
-              fill="#0F172A"
-              fillOpacity="0.80"
-              stroke="#22D3EE"
-              strokeWidth="1"
-            />
-            <circle cx="10" cy="9" r="3.5" fill={activeSpeaking ? '#10B981' : '#F59E0B'} />
-            <text
-              ref={emotionBadgeRef}
-              x="18"
-              y="12.2"
-              fill="#ECFEFF"
-              fontSize="7.3"
-              fontWeight="900"
-            >
-              😊 Sourire Chaleureux &amp; Bienveillance
-            </text>
-            <g transform="translate(204, 3)">
-              {[0, 1, 2, 3, 4].map((bIdx) => (
-                <rect
-                  key={bIdx}
-                  ref={(el) => {
-                    eqBarRefs.current[bIdx] = el;
-                  }}
-                  x={bIdx * 6.5}
-                  y={4.25}
-                  width="3.5"
-                  height={3.5}
-                  rx="1.75"
-                  fill={activeSpeaking ? '#22D3EE' : '#64748B'}
-                />
-              ))}
-            </g>
-          </g>
-
-          <g transform="translate(256, 6)">
-            <rect
-              x="0"
-              y="0"
-              width="98"
-              height="18"
-              rx="9"
-              fill="#020617"
-              fillOpacity="0.80"
-              stroke={activeSpeaking ? '#10B981' : '#38BDF8'}
-              strokeWidth="1"
-            />
-            <circle cx="10" cy="9" r="3" fill={activeSpeaking ? '#10B981' : '#38BDF8'} />
-            <text
-              ref={visemeBadgeRef}
-              x="17"
-              y="12.0"
-              fill="#E0F2FE"
-              fontSize="7.0"
-              fontWeight="900"
-            >
-              VISÈME 1/6
-            </text>
-          </g>
-
-          <g transform="translate(6, 26)" opacity="0.86">
-            <rect
-              x="0"
-              y="0"
-              width="165"
-              height="14"
-              rx="7"
-              fill="#0F172A"
-              fillOpacity="0.72"
-            />
-            <text
-              ref={postureBadgeRef as React.RefObject<SVGTextElement>}
-              x="7"
-              y="9.8"
-              fill="#FDE68A"
-              fontSize="5.8"
-              fontWeight="800"
-            >
-              🌸 Port de tête féminin • Sourire &amp; Wav2Lip
-            </text>
-          </g>
-        </svg>
-      )}
 
       {isVisio && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-slate-950/85 border border-cyan-400/50 backdrop-blur-sm pointer-events-none max-w-[92%] truncate shadow-lg">
