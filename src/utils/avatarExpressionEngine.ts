@@ -124,10 +124,9 @@ class AvatarExpressionEngine {
         | undefined;
 
       this.mountedTargets.forEach((t) => {
-        // Only allow isSpeakingOverride (e.g. muted lesson film mode) when speechService is NOT in the middle of loading/playing TTS audio
+        // Allow isSpeakingOverride (e.g. lesson film mode or WebSpeech startup) whenever speechService is not actively loading audio
         if (
           !anyTargetSpeaking &&
-          !speechState.isPlaying &&
           !speechState.isLoading &&
           t.isSpeakingOverride &&
           t.isSpeakingOverride()

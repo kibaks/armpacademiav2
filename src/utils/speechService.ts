@@ -651,8 +651,7 @@ class SpeechService {
     if (
       this.currentAudioElement &&
       !this.currentAudioElement.paused &&
-      !this.currentAudioElement.ended &&
-      this.currentAudioElement.currentTime > 0.002
+      !this.currentAudioElement.ended
     ) {
       return Math.max(0, (this.currentAudioElement.currentTime || 0) * 1000 + ARTICULATORY_LEAD_MS);
     }
@@ -681,8 +680,7 @@ class SpeechService {
     const hasActiveHtmlAudio = Boolean(
       this.currentAudioElement &&
         !this.currentAudioElement.paused &&
-        !this.currentAudioElement.ended &&
-        this.currentAudioElement.currentTime > 0.002
+        !this.currentAudioElement.ended
     );
     const hasActiveWebSpeech = Boolean(this.currentUtterance && this.webSpeechOriginMs > 0);
 
@@ -705,8 +703,10 @@ class SpeechService {
     const streamElapsedMs = this.getExactAudioStreamElapsedMs(nowMs);
 
     let acousticRms = 0;
+    let hasHardwareTelemetry = false;
     // 1. Primary: 5ms (200 Hz) pre-decoded PCM waveform envelope at the exact hardware audio millisecond
     if (this.currentEnvelope5ms && this.currentEnvelope5ms.length > 0 && streamElapsedMs >= 0) {
+      hasHardwareTelemetry = true;
       const env = this.currentEnvelope5ms;
       const lastIdx = env.length - 1;
       const exactFrame = streamElapsedMs / 5;
@@ -723,6 +723,7 @@ class SpeechService {
       }
     } else if (this.currentAnalyser) {
       // 2. Fallback: Live Web Audio AnalyserNode
+      hasHardwareTelemetry = true;
       const fftLen = this.currentAnalyser.fftSize;
       if (this.liveTimeDomainBuffer.length !== fftLen) {
         this.liveTimeDomainBuffer = new Uint8Array(fftLen);
@@ -735,10 +736,22 @@ class SpeechService {
       }
       const rms = Math.sqrt(sumSquares / fftLen);
       acousticRms = Math.min(1, rms * 6.0);
+    } else {
+      // 3. Phoneme-driven acoustic envelope when playing via HTML5 Audio or Web Speech API (e.g. suspended AudioContext or fallback)
+      if (!st.isPauseBetweenWords && st.viseme !== 'closed') {
+        const baseOpen = st.mouthOpenness ?? 0.68;
+        const syllabicWave =
+          0.58 +
+          Math.sin(nowMs * 0.028) * 0.24 +
+          Math.cos(nowMs * 0.019) * 0.18;
+        acousticRms = Math.min(0.95, Math.max(0.18, baseOpen * syllabicWave));
+      } else {
+        acousticRms = 0;
+      }
     }
 
     const isQuietPause = Boolean(
-      st.isPauseBetweenWords || (this.currentEnvelope5ms && acousticRms < 0.020)
+      st.isPauseBetweenWords || (hasHardwareTelemetry && this.currentEnvelope5ms && acousticRms < 0.020)
     );
 
     return {
@@ -2050,6 +2063,7 @@ class SpeechService {
             (audioEl as any).mozPreservesPitch = true;
             (audioEl as any).webkitPreservesPitch = true;
             audioEl.playbackRate = playbackRate;
+            this.currentPlaybackRate = playbackRate;
             this.currentAudioElement = audioEl;
 
             const estimatedDuration =

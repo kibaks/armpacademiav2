@@ -1408,7 +1408,7 @@ export function stepAvatarExpressionFrame(
       if (
         coart.isPause ||
         isPauseHint ||
-        (streamElapsedMs > 0 && rawRms < 0.020 && pose.smoothRms < 0.024)
+        (streamElapsedMs > 0 && rawRms > 0.001 && rawRms < 0.020 && pose.smoothRms < 0.024)
       ) {
         targetOpen = 0.0;
         targetRoundness = 0.05;
