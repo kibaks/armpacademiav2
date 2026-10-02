@@ -53,17 +53,23 @@ import {
   UserRole, 
   UserProfile, 
   CourseModule, 
-  TrainingRequest 
+  TrainingRequest,
+  CgpmpAccountCreationRequest
 } from './types';
 import { DEMO_PROFILES, INITIAL_TRAINING_REQUESTS } from './data/initialData';
 import { COURSES_DATA } from './data/coursesData';
-import { computeUserLearningStats } from './utils/learningStats';
+import { computeUserLearningStats, recordCourseReadingInProfile } from './utils/learningStats';
 import { 
   auth, 
   getOrInitUserProfile, 
   syncUserProfileToFirestore, 
   saveTrainingRequestToFirestore, 
   fetchTrainingRequestsFromFirestore, 
+  getLocalCgpmpAccountRequests,
+  saveCgpmpAccountRequestToFirestore,
+  fetchCgpmpAccountRequestsFromFirestore,
+  validateCgpmpAccountRequestByArmp,
+  rejectCgpmpAccountRequestByArmp,
   fetchCustomCoursesFromFirestore,
   saveCustomCourseToFirestore,
   fetchAllUserProfilesFromFirestore,
@@ -88,7 +94,10 @@ import {
   LogIn,
   User,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Phone,
+  Waves,
+  Video
 } from 'lucide-react';
 
 import imgMentor from './assets/images/mentor_juriste_africain_1789983212035.jpg';
@@ -161,6 +170,9 @@ export default function App() {
     return officialNormalized;
   });
   const [requests, setRequests] = useState<TrainingRequest[]>(INITIAL_TRAINING_REQUESTS);
+  const [cgpmpAccountRequests, setCgpmpAccountRequests] = useState<CgpmpAccountCreationRequest[]>(() => {
+    return getLocalCgpmpAccountRequests();
+  });
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('armp_theme');
     // Par défaut : MODE JOUR (light) — même si la machine est en nuit, on reste en clair
@@ -177,6 +189,8 @@ export default function App() {
   // Modals State
   const [isTutorOpen, setIsTutorOpen] = useState(false);
   const [tutorInitialQuestion, setTutorInitialQuestion] = useState<string | null>(null);
+  const [tutorInitialAction, setTutorInitialAction] = useState<'chat' | 'call' | 'video' | 'voice' | null>(null);
+  const [tutorInitialPersona, setTutorInitialPersona] = useState<'denise' | 'charline' | 'vivienne' | 'eloise' | null>(null);
   const [pendingTutorAfterAuth, setPendingTutorAfterAuth] = useState(false);
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
   const [selectedCourseForPlayer, setSelectedCourseForPlayer] = useState<CourseModule | null>(null);
@@ -264,11 +278,15 @@ export default function App() {
         // Fetch persistent training requests, custom courses & all user profiles from Firestore when authenticated
         try {
           setPreloaderStatus("Synchronisation des dossiers CGPMP & visas DFAT...");
-          const [firestoreReqs, remoteCourses, remoteProfiles] = await Promise.all([
+          const [firestoreReqs, remoteCourses, remoteProfiles, remoteCgpmpAccounts] = await Promise.all([
             fetchTrainingRequestsFromFirestore().catch(() => []),
             fetchCustomCoursesFromFirestore().catch(() => []),
-            fetchAllUserProfilesFromFirestore().catch(() => [])
+            fetchAllUserProfilesFromFirestore().catch(() => []),
+            fetchCgpmpAccountRequestsFromFirestore().catch(() => [])
           ]);
+          if (remoteCgpmpAccounts && remoteCgpmpAccounts.length > 0) {
+            setCgpmpAccountRequests(remoteCgpmpAccounts);
+          }
           if (firestoreReqs && firestoreReqs.length > 0) {
             setRequests(prev => {
               const map = new Map<string, TrainingRequest>();
@@ -342,7 +360,7 @@ export default function App() {
     currentProfile
   ]);
 
-  // Tuteur IA — accès conditionné au compte (Arena)
+  // Tuteur IA & Appels aux Tutrices Virtuelles — Conditionné par une connexion ou une création de compte
   const handleOpenTutor = (initialQuestion?: string) => {
     if (typeof initialQuestion === 'string' && initialQuestion.trim()) {
       setTutorInitialQuestion(initialQuestion.trim());
@@ -351,7 +369,23 @@ export default function App() {
       setPendingTutorAfterAuth(true);
       setAuthModalMode('login');
       setIsAuthModalOpen(true);
-      showToast("🔒 Connecte-toi ou crée un compte pour accéder au Tuteur IA (Arena)");
+      showToast('Veuillez vous connecter ou créer un compte pour accéder à la conversation IA.');
+      return;
+    }
+    setIsTutorOpen(true);
+  };
+
+  const handleCallTutor = (
+    action: 'chat' | 'call' | 'video' | 'voice' = 'call',
+    tutorId?: 'denise' | 'charline' | 'vivienne' | 'eloise'
+  ) => {
+    setTutorInitialAction(action);
+    if (tutorId) setTutorInitialPersona(tutorId);
+    if (!isAuthenticated) {
+      setPendingTutorAfterAuth(true);
+      setAuthModalMode('login');
+      setIsAuthModalOpen(true);
+      showToast('Veuillez vous connecter ou créer un compte pour accéder à la conversation IA.');
       return;
     }
     setIsTutorOpen(true);
@@ -408,6 +442,11 @@ export default function App() {
       setSubDetailBreadcrumb(`${pendingCourseForAuth.code} • ${pendingCourseForAuth.title}`);
       setPendingCourseForAuth(null);
     }
+    if (pendingTutorAfterAuth) {
+      setPendingTutorAfterAuth(false);
+      setTimeout(() => setIsTutorOpen(true), 300);
+      showToast('✅ Accès Tuteur IA déverrouillé');
+    }
   };
 
   // Profile Update (saves to Firestore & local state)
@@ -462,7 +501,7 @@ export default function App() {
     showToast("Vous avez été déconnecté avec succès.");
   };
 
-  // Open course player with authentication guard
+  // Open course player with authentication guard + record as Last Reading & Recent Reading
   const handleOpenCourse = (course: CourseModule) => {
     if (!isAuthenticated) {
       setPendingCourseForAuth(course);
@@ -472,6 +511,13 @@ export default function App() {
     } else {
       setSelectedCourseForPlayer(course);
       setSubDetailBreadcrumb(`${course.code} • ${course.title}`);
+      const updated = recordCourseReadingInProfile(currentProfile, course, 0);
+      setProfiles((prev) => ({
+        ...prev,
+        [currentRole]: updated
+      }));
+      localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+      syncUserProfileToFirestore(updated).catch(() => {});
     }
   };
 
@@ -536,8 +582,17 @@ export default function App() {
     const todayStr = new Date().toISOString().slice(0, 10);
     const isNewActiveDay = currentProfile.lastActiveDate !== todayStr;
 
+    const baseWithReading = courseObj
+      ? recordCourseReadingInProfile(
+          currentProfile,
+          courseObj,
+          Math.max(0, (courseObj.lessons?.length || 1) - 1),
+          100
+        )
+      : currentProfile;
+
     const updated: UserProfile = {
-      ...currentProfile,
+      ...baseWithReading,
       completedModulesCount: Math.max(
         isNewCompletion ? currentProfile.completedModulesCount + 1 : currentProfile.completedModulesCount,
         nextCompletedIds.length
@@ -567,27 +622,41 @@ export default function App() {
     }
   };
 
-  // Persist granular course progress (lessons completed, percentage, quiz score)
+  // Persist granular course progress (lessons completed, percentage, quiz score, and last reading history)
   const handleUpdateCourseProgress = async (
     courseId: string,
     progressPct: number,
     completedLessonIndices: number[],
-    quizScore?: number
+    quizScore?: number,
+    activeLessonIdx?: number
   ) => {
+    const courseObj = courses.find((c) => c.id === courseId);
+    const resolvedPct = Math.max(currentProfile.courseProgress?.[courseId] || 0, progressPct);
+    const lessonIdx =
+      typeof activeLessonIdx === 'number'
+        ? activeLessonIdx
+        : completedLessonIndices.length > 0
+        ? completedLessonIndices[completedLessonIndices.length - 1]
+        : 0;
+
+    const baseWithReading = courseObj
+      ? recordCourseReadingInProfile(currentProfile, courseObj, lessonIdx, resolvedPct)
+      : currentProfile;
+
     const nextCourseProgress = {
-      ...(currentProfile.courseProgress || {}),
-      [courseId]: Math.max(currentProfile.courseProgress?.[courseId] || 0, progressPct)
+      ...(baseWithReading.courseProgress || {}),
+      [courseId]: resolvedPct
     };
     const nextLessonsMap = {
-      ...(currentProfile.completedLessonsByCourse || {}),
+      ...(baseWithReading.completedLessonsByCourse || {}),
       [courseId]: completedLessonIndices
     };
     const nextQuizScores = quizScore !== undefined
-      ? { ...(currentProfile.quizScoresByCourse || {}), [courseId]: quizScore }
-      : (currentProfile.quizScoresByCourse || {});
+      ? { ...(baseWithReading.quizScoresByCourse || {}), [courseId]: quizScore }
+      : (baseWithReading.quizScoresByCourse || {});
 
     const updated: UserProfile = {
-      ...currentProfile,
+      ...baseWithReading,
       courseProgress: nextCourseProgress,
       completedLessonsByCourse: nextLessonsMap,
       quizScoresByCourse: nextQuizScores,
@@ -751,6 +820,19 @@ export default function App() {
     }
   };
 
+  // CGPMP Account Creation Request Handlers (Secrétaire Permanent + ARMP Validation + Email Dispatch)
+  const handleApproveCgpmpAccountRequest = async (req: CgpmpAccountCreationRequest, note?: string) => {
+    const updated = await validateCgpmpAccountRequestByArmp(req, currentProfile.name, note);
+    setCgpmpAccountRequests(getLocalCgpmpAccountRequests());
+    showToast(`Compte CGPMP validé ! Coordonnées d'authentification envoyées par mail au Secrétaire Permanent et aux ${updated.members.length} membres.`);
+  };
+
+  const handleRejectCgpmpAccountRequest = async (req: CgpmpAccountCreationRequest, reason: string) => {
+    await rejectCgpmpAccountRequestByArmp(req, currentProfile.name, reason);
+    setCgpmpAccountRequests(getLocalCgpmpAccountRequests());
+    showToast(`Dossier de création de compte CGPMP (${req.id}) rejeté par l'Administration ARMP.`);
+  };
+
   // Open course player directly by ID
   const handleSelectModuleById = (moduleId: string) => {
     const found = courses.find((c) => c.id === moduleId);
@@ -802,6 +884,9 @@ export default function App() {
         setIsOfflineMode={setIsOffline}
         onOpenTuteur={handleOpenTutor}
         onOpenPlacementQuiz={() => setIsPlacementOpen(true)}
+        totalCourses={courses.length}
+        courses={courses}
+        onOpenCourse={handleOpenCourse}
         onNavigateProfileTab={(tab) => {
           setActiveTab('profil');
           setProfileSubTab(tab);
@@ -831,7 +916,22 @@ export default function App() {
             <TutorialSection onExploreCourses={() => setActiveTab('catalogue')} onOpenTuteur={handleOpenTutor} />
 
             {/* Contenu Local — 51% • ARSP • Préférence nationale */}
-            <ContenuLocalSection onExploreCourses={() => setActiveTab('catalogue')} onOpenTuteur={handleOpenTutor} />
+            <ContenuLocalSection
+              onExploreCourses={() => setActiveTab('catalogue')}
+              onOpenTuteur={handleOpenTutor}
+              onSelectPmeDemoAccount={(demoProfile, openModuleId) => {
+                handleLoginSuccess(demoProfile);
+                if (openModuleId) {
+                  const targetMod = courses.find((c) => c.id === openModuleId);
+                  if (targetMod) {
+                    setSelectedCourseForPlayer(targetMod);
+                    setSubDetailBreadcrumb(`${targetMod.code} • ${targetMod.title}`);
+                    return;
+                  }
+                }
+                setActiveTab('catalogue');
+              }}
+            />
 
             {/* Quick Access Badges Bar */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -877,7 +977,7 @@ export default function App() {
                 </div>
 
                 <div 
-                  onClick={handleOpenTutor}
+                  onClick={() => handleOpenTutor()}
                   className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-500 transition cursor-pointer flex items-center space-x-3 group"
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold group-hover:scale-110 transition">
@@ -1026,6 +1126,7 @@ export default function App() {
                 onOpenCourse={handleOpenCourse}
                 onOpenPlacementQuiz={() => setIsPlacementOpen(true)}
                 onOpenTuteur={handleOpenTutor}
+                onCallTutor={handleCallTutor}
                 onLogout={handleLogout}
                 onNavigateToCourses={() => setActiveTab('catalogue')}
                 onToggleTwoFactor={handleToggleTwoFactor}
@@ -1038,9 +1139,9 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: WORKFLOW CGPMP & DFAT VALIDATION (DEMANDER) */}
+        {/* TAB 3: WORKFLOW CGPMP & DFAT VALIDATION (DEMANDER) — FULL WIDTH 2 COLONNES SANS ENTÊTE */}
         {(activeTab === 'demander' || activeTab === 'workflow' || activeTab === 'cgpmp-workflow') && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="w-full px-4 sm:px-6 lg:px-10 py-6">
             <CgpmpWorkflowBoard
               requests={requests}
               courses={courses}
@@ -1051,6 +1152,14 @@ export default function App() {
               preselectedCourse={preselectedCourseForCgpmp}
               onClearPreselectedCourse={() => setPreselectedCourseForCgpmp(null)}
               onSelectSubCategoryForBreadcrumb={setSubCategoryBreadcrumb}
+              cgpmpAccountRequests={cgpmpAccountRequests}
+              onApproveCgpmpAccountRequest={handleApproveCgpmpAccountRequest}
+              onRejectCgpmpAccountRequest={handleRejectCgpmpAccountRequest}
+              onOpenCgpmpRegistrationPage={() => {
+                setCurrentRole('cgpmp_member');
+                setAuthModalMode('register');
+                setIsAuthModalOpen(true);
+              }}
             />
           </div>
         )}
@@ -1117,43 +1226,104 @@ export default function App() {
 
       </main>
 
-      {/* Persistent Floating Legal AI Tutor Button */}
-      <button
-        onClick={() => handleOpenTutor()}
-        className="fixed bottom-5 right-5 z-[110] p-3.5 sm:px-4 sm:py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-amber-500 text-white font-bold text-xs shadow-2xl shadow-blue-600/40 hover:scale-105 active:scale-95 transition flex items-center space-x-2 group"
-        aria-label="Ouvrir le Tuteur Juridique IA"
-      >
-        <div className="relative">
-          <Bot className="w-5 h-5 text-amber-200" />
-          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
-          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full" />
-        </div>
-        <span className="hidden sm:inline font-bold tracking-tight">Tuteur IA • Questions / Réponses</span>
-      </button>
+      {/* Persistent Floating Legal AI Tutor & Direct Call / Voice Dock — Masqué uniquement sur la page Connexion / Création de Compte */}
+      {!isAuthModalOpen && (
+        <div className="fixed bottom-5 right-5 z-[110] flex items-center gap-2">
+          <button
+            onClick={() => handleCallTutor('voice', 'denise')}
+            className="p-3 sm:px-3.5 sm:py-3 rounded-full bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-xl shadow-purple-600/30 hover:scale-105 active:scale-95 transition flex items-center gap-1.5 border border-purple-400/40 cursor-pointer"
+            title={
+              isAuthenticated
+                ? 'Envoyer un Voice aux Tutrices Virtuelles'
+                : 'Connexion requise — Envoyer un Voice aux Tutrices Virtuelles'
+            }
+          >
+            <Waves className="w-4 h-4" />
+            <span className="hidden md:inline font-bold">Voice</span>
+          </button>
 
-      {/* Authentication & Registration Modal with Firebase Auth */}
+          <button
+            onClick={() => handleCallTutor('call', 'denise')}
+            className="p-3 sm:px-3.5 sm:py-3 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xl shadow-emerald-600/30 hover:scale-105 active:scale-95 transition flex items-center gap-1.5 border border-emerald-400/40 cursor-pointer"
+            title={
+              isAuthenticated
+                ? 'Appeler une Tutrice Virtuelle en direct (Audio)'
+                : 'Connexion requise — Appeler une Tutrice Virtuelle en direct'
+            }
+          >
+            <Phone className="w-4 h-4" />
+            <span className="hidden md:inline font-bold">Appeler</span>
+          </button>
+
+          <button
+            onClick={() => handleCallTutor('video', 'denise')}
+            className="p-3 sm:px-3.5 sm:py-3 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xl shadow-blue-600/30 hover:scale-105 active:scale-95 transition flex items-center gap-1.5 border border-blue-400/40 cursor-pointer"
+            title={
+              isAuthenticated
+                ? 'Lancer un appel Visio HD avec une Tutrice Virtuelle'
+                : 'Connexion requise — Lancer un appel Visio HD'
+            }
+          >
+            <Video className="w-4 h-4" />
+            <span className="hidden md:inline font-bold">Visio</span>
+          </button>
+
+          <button
+            onClick={() => handleOpenTutor()}
+            className="p-3.5 sm:px-4 sm:py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-amber-500 text-white font-bold text-xs shadow-2xl shadow-blue-600/40 hover:scale-105 active:scale-95 transition flex items-center space-x-2 group cursor-pointer"
+            aria-label="Ouvrir le Tuteur Juridique IA"
+            title={
+              isAuthenticated
+                ? 'Ouvrir le Tuteur Juridique IA'
+                : 'Connexion ou création de compte requise pour ouvrir le Tuteur IA'
+            }
+          >
+            <div className="relative">
+              <Bot className="w-5 h-5 text-amber-200" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full" />
+            </div>
+            <span className="hidden sm:inline font-bold tracking-tight">Tuteur IA • Q/R</span>
+          </button>
+        </div>
+      )}
+
+      {/* Authentication & Registration Full-Window Two-Column Portal with Firebase Auth */}
       <AuthModal
         isOpen={isAuthModalOpen}
+        canClose={true}
         onClose={() => {
           setIsAuthModalOpen(false);
           setPendingCourseForAuth(null);
+          setPendingTutorAfterAuth(false);
         }}
         initialRole={currentRole}
         initialMode={authModalMode}
         allProfiles={profiles}
-        pendingCourseTitle={pendingCourseForAuth?.title}
+        pendingCourseTitle={
+          pendingCourseForAuth?.title ||
+          (pendingTutorAfterAuth ? 'Conversation & Assistance Juridique IA (ARMP)' : undefined)
+        }
         onLoginSuccess={handleLoginSuccess}
         onDemoLogin={handleDemoLogin}
         onShowToast={showToast}
+        cgpmpAccountRequests={cgpmpAccountRequests}
+        onUpdateCgpmpAccountRequests={(list) => setCgpmpAccountRequests(list)}
       />
 
       <AITutorModal
-        isOpen={isTutorOpen}
+        isOpen={isAuthenticated && isTutorOpen}
         onClose={() => setIsTutorOpen(false)}
         currentProfile={currentProfile}
         learningContext={tutorLearningContext}
         initialQuestion={tutorInitialQuestion}
         onClearInitialQuestion={() => setTutorInitialQuestion(null)}
+        initialAction={tutorInitialAction}
+        initialTutor={tutorInitialPersona}
+        onClearInitialAction={() => {
+          setTutorInitialAction(null);
+          setTutorInitialPersona(null);
+        }}
       />
 
       <PlacementQuizModal
@@ -1228,6 +1398,9 @@ export default function App() {
           onSaveCourseNote={handleSaveCourseNote}
           onAskTutor={(question) => {
             handleOpenTutor(question);
+          }}
+          onCallTutor={(action, tutorId) => {
+            handleCallTutor(action, tutorId);
           }}
         />
       )}

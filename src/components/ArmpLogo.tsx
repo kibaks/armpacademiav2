@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface ArmpLogoProps {
   className?: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   isDarkMode?: boolean;
 }
 
@@ -22,7 +22,8 @@ export const ArmpLogo: React.FC<ArmpLogoProps> = ({
     sm: 'h-9 sm:h-10',
     md: 'h-11 sm:h-12 md:h-13',
     lg: 'h-14 sm:h-16',
-    xl: 'h-18 sm:h-20'
+    xl: 'h-20 sm:h-24',
+    '2xl': 'h-28 sm:h-32 md:h-36'
   };
 
   const currentHeight = heightClasses[size] || 'h-11 sm:h-12';

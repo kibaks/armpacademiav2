@@ -7,6 +7,7 @@ import {
   type AvatarEmotion,
   type WorkerViseme,
   type WorkerWordBoundary,
+  type TtsEmotionalTag,
   stepAvatarExpressionFrame,
   loadAvatarSentencePhonemes,
   clearAvatarSentencePhonemes,
@@ -33,6 +34,8 @@ export interface AvatarSvgDomRefs {
   rightLashPath?: SVGPathElement | null;
   eqBars?: (SVGRectElement | null)[];
   emotionBadgeEl?: HTMLElement | SVGTextElement | null;
+  postureBadgeEl?: HTMLElement | SVGTextElement | null;
+  visemeBadgeEl?: HTMLElement | SVGTextElement | null;
   isSpeakingOverride?: () => boolean;
   emotionOverride?: () => AvatarEmotion | undefined;
 }
@@ -55,17 +58,23 @@ class AvatarExpressionEngine {
   private currentEmotion: AvatarEmotion = 'pedagogical';
 
   constructor() {
-    speechService.onSentenceBoundariesLoaded((sentence, wordBoundaries, emotion) => {
-      this.loadSentenceInWorker(sentence, wordBoundaries, emotion as AvatarEmotion | undefined);
+    speechService.onSentenceBoundariesLoaded((sentence, wordBoundaries, emotion, emotionalTags) => {
+      this.loadSentenceInWorker(
+        sentence,
+        wordBoundaries,
+        emotion as AvatarEmotion | undefined,
+        emotionalTags
+      );
     });
   }
 
   public loadSentenceInWorker(
     sentence: string,
     wordBoundaries: WorkerWordBoundary[],
-    emotion?: AvatarEmotion
+    emotion?: AvatarEmotion,
+    emotionalTags?: TtsEmotionalTag[]
   ) {
-    loadAvatarSentencePhonemes(sentence, wordBoundaries, emotion);
+    loadAvatarSentencePhonemes(sentence, wordBoundaries, emotion, emotionalTags);
     if (emotion) {
       this.currentEmotion = emotion;
     }
@@ -107,6 +116,7 @@ class AvatarExpressionEngine {
       }
 
       const audioTelemetry = speechService.sampleInstantAudioTelemetry(nowMs);
+      const speechState = speechService.getState();
 
       let anyTargetSpeaking = audioTelemetry.isSpeaking;
       let targetEmotion: AvatarEmotion | undefined = audioTelemetry.emotion as
@@ -114,7 +124,14 @@ class AvatarExpressionEngine {
         | undefined;
 
       this.mountedTargets.forEach((t) => {
-        if (!anyTargetSpeaking && t.isSpeakingOverride && t.isSpeakingOverride()) {
+        // Only allow isSpeakingOverride (e.g. muted lesson film mode) when speechService is NOT in the middle of loading/playing TTS audio
+        if (
+          !anyTargetSpeaking &&
+          !speechState.isPlaying &&
+          !speechState.isLoading &&
+          t.isSpeakingOverride &&
+          t.isSpeakingOverride()
+        ) {
           anyTargetSpeaking = true;
         }
         if (t.emotionOverride) {
@@ -231,6 +248,25 @@ class AvatarExpressionEngine {
 
     if (target.emotionBadgeEl && target.emotionBadgeEl.textContent !== frame.emotionLabel) {
       target.emotionBadgeEl.textContent = frame.emotionLabel;
+    }
+
+    if (target.postureBadgeEl && frame.bodyLanguageLabel) {
+      const shortViseme = frame.activeVisemeLabel
+        ? frame.activeVisemeLabel.replace(/^Visème (\d) • /, 'V$1: ')
+        : '';
+      const combinedPostureText = shortViseme
+        ? `${frame.bodyLanguageLabel} • ${shortViseme}`
+        : frame.bodyLanguageLabel;
+      if (target.postureBadgeEl.textContent !== combinedPostureText) {
+        target.postureBadgeEl.textContent = combinedPostureText;
+      }
+    }
+
+    if (target.visemeBadgeEl && frame.activeVisemeLabel) {
+      const compactViseme = `VISÈME ${frame.activeVisemeNumber}/6`;
+      if (target.visemeBadgeEl.textContent !== compactViseme) {
+        target.visemeBadgeEl.textContent = compactViseme;
+      }
     }
 
     if (target.eqBars && target.eqBars.length > 0) {

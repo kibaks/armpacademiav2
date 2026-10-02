@@ -34,6 +34,8 @@ import {
 import { ChatMessage, UserProfile } from '../types';
 import { saveTutorHistoryToFirestore, fetchTutorHistoryFromFirestore } from '../firebase';
 import { speechService, VoicePersona } from '../utils/speechService';
+import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
+import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
 import { AishaAvatar } from './AishaAvatar';
 
 // Rendu Markdown enrichi : gras, listes, citations juridiques, tableaux et blocs Question
@@ -214,6 +216,9 @@ interface AITutorModalProps {
   } | null;
   initialQuestion?: string | null;
   onClearInitialQuestion?: () => void;
+  initialAction?: 'chat' | 'call' | 'video' | 'voice' | null;
+  initialTutor?: VoicePersona | null;
+  onClearInitialAction?: () => void;
 }
 
 type QACategoryId =
@@ -309,18 +314,138 @@ const QA_CATEGORIES: Array<{
   }
 ];
 
-const VOICE_OPTIONS: Array<{ id: VoicePersona; label: string; desc: string }> = [
-  { id: 'denise', label: 'Denise HD • Éloquente', desc: 'Chaleureuse & charismatique' },
-  { id: 'charline', label: 'Charline HD • Mélodieuse', desc: 'Veloutée & posée' },
-  { id: 'vivienne', label: 'Vivienne HD • Douce', desc: 'Institutionnelle & sereine' },
-  { id: 'eloise', label: 'Ariane HD • Cristalline', desc: 'Claire & articulée' }
+export interface VirtualTutorProfile {
+  id: VoicePersona;
+  name: string;
+  title: string;
+  specialty: string;
+  badge: string;
+  voiceLabel: string;
+  desc: string;
+  accentColor: string;
+  greeting: (firstName: string) => string;
+}
+
+export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
+  {
+    id: 'vivienne',
+    name: 'Prof. Aïsha',
+    title: 'Directrice Pédagogique • Loi 10/010 & Passation',
+    specialty: 'Procédures globales, PPM, DAO & Seuils',
+    badge: '👩‍🏫 Tutrice Principale',
+    voiceLabel: 'Vivienne HD • Souriante & Chaleureuse',
+    desc: 'Chaleureuse & charismatique',
+    accentColor: 'from-blue-600 to-indigo-700',
+    greeting: (_firstName: string) =>
+      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+  },
+  {
+    id: 'charline',
+    name: 'Me. Charline',
+    title: 'Avocate Conseil • Contentieux, CRD & Recours ARMP',
+    specialty: 'Recours gracieux, litiges CRD & sanctions',
+    badge: '⚖️ Tutrice Contentieux',
+    voiceLabel: 'Vivienne HD • Mélodieuse & Souriante',
+    desc: 'Veloutée & posée',
+    accentColor: 'from-purple-600 to-fuchsia-700',
+    greeting: (_firstName: string) =>
+      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+  },
+  {
+    id: 'denise',
+    name: 'Dr. Vivienne',
+    title: 'Experte Contrôle a priori • DGCMP, ANO & Gré à gré',
+    specialty: 'Seuils DGCMP, Avis de Non-Objection & Avenants',
+    badge: '🏛️ Tutrice Contrôle DGCMP',
+    voiceLabel: 'Vivienne Studio • Douce & Souriante',
+    desc: 'Institutionnelle & sereine',
+    accentColor: 'from-emerald-600 to-teal-700',
+    greeting: (_firstName: string) =>
+      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+  },
+  {
+    id: 'eloise',
+    name: 'Insp. Ariane',
+    title: 'Inspectrice Audit • Exécution, Garanties & Contenu Local',
+    specialty: 'Cautions, pénalités, réception & sous-traitance 51%',
+    badge: '🔍 Tutrice Audit & Exécution',
+    voiceLabel: 'Vivienne HD • Claire & Souriante',
+    desc: 'Claire & articulée',
+    accentColor: 'from-amber-500 to-orange-600',
+    greeting: (_firstName: string) =>
+      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+  }
 ];
+
+const VOICE_OPTIONS: Array<{ id: VoicePersona; label: string; desc: string }> = VIRTUAL_TUTORS.map((t) => ({
+  id: t.id,
+  label: `${t.name} (${t.voiceLabel.split('•')[0].trim()})`,
+  desc: t.specialty
+}));
+
+// Convertit un Blob en data URL base64 pour l'envoi multimodal au serveur
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+// Génère un vrai fichier audio WAV (PCM 16-bit) avec carillon vocal doux pour les appareils sans micro matériel
+const createSynthesizedVoiceNoteBlob = (text: string): { blob: Blob; durationLabel: string } => {
+  const sampleRate = 22050;
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const durationSec = Math.max(2, Math.min(12, Math.ceil(words * 0.42)));
+  const numSamples = sampleRate * durationSec;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    // Enveloppe syllabique douce pour donner un rendu sonore agréable à la lecture du lecteur audio
+    const syllableEnv = 0.35 + 0.65 * Math.abs(Math.sin(2 * Math.PI * 3.2 * t));
+    const fade = Math.min(1, t / 0.08) * Math.min(1, (durationSec - t) / 0.15);
+    const f0 = 195 + 25 * Math.sin(2 * Math.PI * 1.4 * t);
+    const wave =
+      0.55 * Math.sin(2 * Math.PI * f0 * t) +
+      0.28 * Math.sin(2 * Math.PI * (f0 * 2) * t) +
+      0.12 * Math.sin(2 * Math.PI * (f0 * 3) * t);
+    const sample = Math.max(-1, Math.min(1, wave * syllableEnv * fade * 0.18));
+    view.setInt16(44 + i * 2, sample * 32767, true);
+  }
+  const mm = Math.floor(durationSec / 60);
+  const ss = String(durationSec % 60).padStart(2, '0');
+  return {
+    blob: new Blob([buffer], { type: 'audio/wav' }),
+    durationLabel: `${mm}:${ss}`
+  };
+};
 
 type MediaAttachment = {
   type: 'image' | 'video' | 'audio';
   url: string;
   name?: string;
   duration?: string;
+  audioBase64?: string;
+  mimeType?: string;
+  transcriptText?: string;
 };
 
 type EnhancedMessage = ChatMessage & {
@@ -337,7 +462,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   currentProfile,
   learningContext,
   initialQuestion,
-  onClearInitialQuestion
+  onClearInitialQuestion,
+  initialAction,
+  initialTutor,
+  onClearInitialAction
 }) => {
   const buildWelcomeMessage = (): EnhancedMessage => {
     const firstName = currentProfile.name ? currentProfile.name.split(' ')[0] : 'cher collègue';
@@ -382,8 +510,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [spokenSubtitle, setSpokenSubtitle] = useState<string>('');
   const [activeSpeakingMsgId, setActiveSpeakingMsgId] = useState<string | null>(null);
   const [activeEmotionLabel, setActiveEmotionLabel] = useState<string>(
-    '🎓 Éloquence & Sérénité académique'
+    '😊 Sourire Chaleureux & Bienveillance'
   );
+  const [manualTutorEmotion, setManualTutorEmotion] = useState<AvatarEmotion | 'auto'>('smiling');
+  const [detectedSpeechEmotion, setDetectedSpeechEmotion] = useState<AvatarEmotion>('smiling');
   const [isListening, setIsListening] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCallActive, setIsCallActive] = useState(false);
@@ -391,11 +521,19 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [callSeconds, setCallSeconds] = useState(0);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [hasCameraStream, setHasCameraStream] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<MediaAttachment | null>(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [liveVoiceTranscript, setLiveVoiceTranscript] = useState('');
+  const [showAssistedVoiceBox, setShowAssistedVoiceBox] = useState(false);
+  const [assistedVoiceText, setAssistedVoiceText] = useState('');
+  const [inCallQuestionText, setInCallQuestionText] = useState('');
+  const [isCallConnecting, setIsCallConnecting] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
-  const [tutorSpeed, setTutorSpeed] = useState<number>(0.9);
+  const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
+  const [tutorSpeed, setTutorSpeed] = useState<number>(1.0);
   const [showStudioStage, setShowStudioStage] = useState<boolean>(true);
   const [toastNotice, setToastNotice] = useState<string | null>(null);
 
@@ -403,9 +541,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const fileImageRef = useRef<HTMLInputElement>(null);
   const fileVideoRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+  const voiceRecordRecognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordActionRef = useRef<'send' | 'preview' | 'cancel'>('send');
+  const liveTranscriptRef = useRef<string>('');
+  const recordingTimerRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const callGreetingTimerRef = useRef<any>(null);
   const handledInitialQuestionRef = useRef<string | null>(null);
 
   const showNotice = (msg: string) => {
@@ -479,12 +622,15 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   useEffect(() => {
     const unsub = speechService.subscribe((st) => {
       if (st.currentId && st.currentId.startsWith('tutor-')) {
-        setIsSpeaking(st.isPlaying);
+        setIsSpeaking(Boolean(st.isPlaying && !st.isLoading));
         if (st.currentSentenceText) {
           setSpokenSubtitle(st.currentSentenceText);
         }
         if (st.emotionLabel) {
           setActiveEmotionLabel(st.emotionLabel);
+        }
+        if (st.emotion) {
+          setDetectedSpeechEmotion(st.emotion as AvatarEmotion);
         }
         if (!st.isPlaying) {
           setActiveSpeakingMsgId(null);
@@ -517,6 +663,23 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       }, 180);
     }
   }, [isOpen, initialQuestion]);
+
+  // Si un appel direct (audio, visio ou voice) est demandé depuis le bouton flottant ou le lecteur de cours
+  useEffect(() => {
+    if (!isOpen || !initialAction) return;
+    const targetTutor = initialTutor || selectedVoice;
+    if (initialTutor && initialTutor !== selectedVoice) {
+      setSelectedVoice(initialTutor);
+      speechService.setVoicePersona(initialTutor);
+    }
+    const act = initialAction;
+    onClearInitialAction?.();
+    setTimeout(() => {
+      if (act === 'call') startCall(targetTutor);
+      else if (act === 'video') startVideoCall(targetTutor);
+      else if (act === 'voice') startVoiceRecord();
+    }, 150);
+  }, [isOpen, initialAction, initialTutor]);
 
   useEffect(() => {
     let t: any;
@@ -555,7 +718,6 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
 
-    setIsSpeaking(true);
     if (msgId) setActiveSpeakingMsgId(msgId);
     setSpokenSubtitle(clean.split(/(?<=[.!?…])\s+/)[0] || clean.slice(0, 140));
 
@@ -581,7 +743,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const handleCycleSpeed = () => {
-    const order = [0.9, 1.0, 0.85];
+    const order = [1.0, 0.9, 0.85];
     const idx = order.indexOf(tutorSpeed);
     const next = order[(idx + 1) % order.length];
     setTutorSpeed(next);
@@ -591,36 +753,64 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     }
   };
 
-  const startListening = () => {
+  const startListening = (autoSendOnFinal = false) => {
+    speechService.unlockAudio();
     const SR: any =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      showNotice('Reconnaissance vocale disponible sur Chrome ou Edge.');
+      // Si SpeechRecognition n'est pas supporté, basculer automatiquement sur l'enregistreur de Note Vocale (transcrit par Gemini côté serveur)
+      startVoiceRecord();
       return;
     }
     stopSpeaking();
-    const rec = new SR();
-    rec.lang = 'fr-FR';
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-    recognitionRef.current = rec;
-    setIsListening(true);
-    rec.start();
-    rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results)
-        .map((r: any) => r[0]?.transcript || '')
-        .join(' ');
-      setInputText(transcript);
-      if (e.results[0]?.isFinal) {
+    try {
+      const rec = new SR();
+      rec.lang = 'fr-FR';
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      recognitionRef.current = rec;
+      setIsListening(true);
+      let latestTranscript = '';
+      rec.start();
+      rec.onresult = (e: any) => {
+        const transcript = Array.from(e.results)
+          .map((r: any) => r[0]?.transcript || '')
+          .join(' ')
+          .trim();
+        latestTranscript = transcript;
+        if (isCallActive || isVideoCallActive) {
+          setInCallQuestionText(transcript);
+        } else {
+          setInputText(transcript);
+        }
+        const lastResult = e.results[e.results.length - 1];
+        if (lastResult?.isFinal) {
+          setIsListening(false);
+          if ((autoSendOnFinal || isCallActive || isVideoCallActive) && transcript) {
+            setInCallQuestionText('');
+            handleSendMessage(transcript);
+          }
+        }
+      };
+      rec.onerror = () => {
         setIsListening(false);
-      }
-    };
-    rec.onerror = () => setIsListening(false);
-    rec.onend = () => setIsListening(false);
+        if (!latestTranscript) {
+          startVoiceRecord();
+        }
+      };
+      rec.onend = () => {
+        setIsListening(false);
+      };
+    } catch {
+      setIsListening(false);
+      startVoiceRecord();
+    }
   };
 
   const stopListening = () => {
-    recognitionRef.current?.stop();
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
     setIsListening(false);
   };
 
@@ -639,70 +829,321 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     e.target.value = '';
   };
 
-  const startVoiceRecord = async () => {
-    try {
-      stopSpeaking();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      const chunks: BlobPart[] = [];
-      mr.ondataavailable = (e) => chunks.push(e.data);
-      mr.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        setPreviewMedia({
-          type: 'audio',
-          url,
-          name: `Question vocale (${new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          })})`,
-          duration: '0:10'
-        });
-        stream.getTracks().forEach((t) => t.stop());
-        setIsRecordingVoice(false);
-      };
-      mediaRecorderRef.current = mr;
-      mr.start();
-      setIsRecordingVoice(true);
-      setTimeout(() => {
-        if (mr.state === 'recording') mr.stop();
-      }, 20000);
-    } catch {
-      showNotice('Microphone non accessible sur cet appareil.');
+  const getSupportedAudioMimeType = () => {
+    if (typeof MediaRecorder === 'undefined') return '';
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/wav'
+    ];
+    for (const c of candidates) {
+      try {
+        if (typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(c)) {
+          return c;
+        }
+      } catch {}
     }
-  };
-  const stopVoiceRecord = () => {
-    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
-    else setIsRecordingVoice(false);
+    return '';
   };
 
-  const startCall = () => setIsCallActive(true);
-  const startVideoCall = async () => {
-    setIsVideoCallActive(true);
+  const startVoiceRecord = async () => {
+    speechService.unlockAudio();
+    stopSpeaking();
+    setLiveVoiceTranscript('');
+    liveTranscriptRef.current = '';
+    setRecordingSeconds(0);
+    recordActionRef.current = 'send';
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setShowAssistedVoiceBox(true);
+      showNotice('Mode Voice Assisté activé : saisissez ou dictez votre message vocal.');
+      return;
+    }
+
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localStreamRef.current = s;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = s;
-        await localVideoRef.current.play().catch(() => {});
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = getSupportedAudioMimeType();
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      const startedAt = Date.now();
+
+      // Lance en parallèle la reconnaissance vocale locale si disponible pour afficher la transcription en direct
+      const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SR) {
+        try {
+          const rec = new SR();
+          rec.lang = 'fr-FR';
+          rec.continuous = true;
+          rec.interimResults = true;
+          rec.onresult = (ev: any) => {
+            const t = Array.from(ev.results)
+              .map((r: any) => r[0]?.transcript || '')
+              .join(' ')
+              .trim();
+            if (t) {
+              liveTranscriptRef.current = t;
+              setLiveVoiceTranscript(t);
+            }
+          };
+          rec.start();
+          voiceRecordRecognitionRef.current = rec;
+        } catch {}
       }
+
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds(Math.floor((Date.now() - startedAt) / 1000));
+      }, 500);
+
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      mr.onstop = async () => {
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        try {
+          voiceRecordRecognitionRef.current?.stop();
+        } catch {}
+        voiceRecordRecognitionRef.current = null;
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecordingVoice(false);
+
+        const action = recordActionRef.current;
+        if (action === 'cancel') {
+          setLiveVoiceTranscript('');
+          liveTranscriptRef.current = '';
+          return;
+        }
+
+        const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        const mm = Math.floor(elapsed / 60);
+        const ss = String(elapsed % 60).padStart(2, '0');
+        const finalMime = mr.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: finalMime });
+        const url = URL.createObjectURL(blob);
+        let audioBase64 = '';
+        try {
+          audioBase64 = await blobToDataUrl(blob);
+        } catch {}
+
+        const capturedTranscript = liveTranscriptRef.current.trim();
+        const mediaAttachment: MediaAttachment = {
+          type: 'audio',
+          url,
+          name: `Voice (${mm}:${ss})`,
+          duration: `${mm}:${ss}`,
+          audioBase64,
+          mimeType: finalMime,
+          transcriptText: capturedTranscript || undefined
+        };
+
+        setLiveVoiceTranscript('');
+        liveTranscriptRef.current = '';
+
+        if (action === 'send') {
+          await handleSendMessage(capturedTranscript || '', mediaAttachment);
+        } else {
+          setPreviewMedia(mediaAttachment);
+        }
+      };
+
+      mediaRecorderRef.current = mr;
+      mr.start(250);
+      setIsRecordingVoice(true);
+      speechService.playTone('chime');
+
+      setTimeout(() => {
+        if (mr.state === 'recording') {
+          recordActionRef.current = 'send';
+          mr.stop();
+        }
+      }, 45000);
     } catch {
-      // visio sans caméra : on garde l'avatar studio d'Aïsha
+      // Fallback automatique vers le créateur de Voice assisté si le micro est bloqué par le navigateur/iframe
+      setShowAssistedVoiceBox(true);
+      showNotice('Micro non détecté : utilisez le générateur de Voice ci-dessous.');
     }
   };
-  const endCall = () => {
-    setIsCallActive(false);
-    setIsVideoCallActive(false);
+
+  const stopVoiceRecord = (action: 'send' | 'preview' | 'cancel' = 'send') => {
+    recordActionRef.current = action;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    } else {
+      setIsRecordingVoice(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleSendAssistedVoice = async (textForVoice?: string) => {
+    const rawText = (textForVoice ?? assistedVoiceText ?? inputText).trim();
+    if (!rawText) {
+      showNotice('Écrivez votre question pour générer et envoyer le Voice.');
+      return;
+    }
+    speechService.unlockAudio();
+    const { blob, durationLabel } = createSynthesizedVoiceNoteBlob(rawText);
+    const url = URL.createObjectURL(blob);
+    const mediaAttachment: MediaAttachment = {
+      type: 'audio',
+      url,
+      name: `Voice (${durationLabel})`,
+      duration: durationLabel,
+      mimeType: 'audio/wav',
+      transcriptText: rawText
+    };
+    setAssistedVoiceText('');
+    setShowAssistedVoiceBox(false);
+    await handleSendMessage(rawText, mediaAttachment);
+  };
+
+  const startCall = (tutorId?: VoicePersona) => {
+    speechService.unlockAudio();
+    stopSpeaking();
+    if (callGreetingTimerRef.current) {
+      clearTimeout(callGreetingTimerRef.current);
+      callGreetingTimerRef.current = null;
+    }
+    const targetVoice = tutorId || selectedVoice;
+    if (tutorId && tutorId !== selectedVoice) {
+      setSelectedVoice(tutorId);
+      speechService.setVoicePersona(tutorId);
+    }
+    const tutorObj = VIRTUAL_TUTORS.find((t) => t.id === targetVoice) || activeTutor;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
+    setHasCameraStream(false);
+    setIsVideoCallActive(false);
+    setIsCallActive(true);
+    setIsCallConnecting(true);
+    speechService.playTone('ring');
+
+    const firstName = currentProfile.name ? currentProfile.name.split(' ')[0] : 'cher collègue';
+    callGreetingTimerRef.current = setTimeout(() => {
+      setIsCallConnecting(false);
+      const greetingText = tutorObj.greeting(firstName);
+      setSpokenSubtitle(greetingText);
+      speak(greetingText, `call-greet-${Date.now()}`, targetVoice, tutorSpeed);
+    }, 650);
+  };
+
+  const startVideoCall = async (tutorId?: VoicePersona) => {
+    speechService.unlockAudio();
+    stopSpeaking();
+    if (callGreetingTimerRef.current) {
+      clearTimeout(callGreetingTimerRef.current);
+      callGreetingTimerRef.current = null;
+    }
+    const targetVoice = tutorId || selectedVoice;
+    if (tutorId && tutorId !== selectedVoice) {
+      setSelectedVoice(tutorId);
+      speechService.setVoicePersona(tutorId);
+    }
+    const tutorObj = VIRTUAL_TUTORS.find((t) => t.id === targetVoice) || activeTutor;
+    setIsCallActive(false);
+    setIsVideoCallActive(true);
+    setIsCallConnecting(true);
+    speechService.playTone('ring');
+
+    // Réutiliser le flux vidéo s'il est déjà actif (ex. changement de tutrice en pleine visio)
+    const existingActiveVideo =
+      localStreamRef.current &&
+      localStreamRef.current.getVideoTracks().some((t) => t.readyState === 'live');
+
+    if (!existingActiveVideo && navigator.mediaDevices?.getUserMedia) {
+      try {
+        // Demander uniquement la vidéo pour le retour caméra (muet) afin de ne jamais bloquer le micro SpeechRecognition / MediaRecorder
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+        localStreamRef.current = s;
+        setHasCameraStream(true);
+        setIsCameraOff(false);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = s;
+          await localVideoRef.current.play().catch(() => {});
+        }
+      } catch {
+        setHasCameraStream(false);
+      }
+    } else if (existingActiveVideo) {
+      setHasCameraStream(true);
+      if (localVideoRef.current && localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
+      }
+    }
+
+    const firstName = currentProfile.name ? currentProfile.name.split(' ')[0] : 'cher collègue';
+    callGreetingTimerRef.current = setTimeout(() => {
+      setIsCallConnecting(false);
+      const greetingText = tutorObj.greeting(firstName);
+      setSpokenSubtitle(greetingText);
+      speak(greetingText, `visio-greet-${Date.now()}`, targetVoice, tutorSpeed);
+    }, 650);
+  };
+
+  const toggleCamera = async () => {
+    if (hasCameraStream && localStreamRef.current) {
+      const nextOff = !isCameraOff;
+      localStreamRef.current.getVideoTracks().forEach((t) => {
+        t.enabled = !nextOff;
+      });
+      setIsCameraOff(nextOff);
+      return;
+    }
+    if (isCameraOff && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+        localStreamRef.current = s;
+        setHasCameraStream(true);
+        setIsCameraOff(false);
+      } catch {
+        setIsCameraOff(false);
+      }
+    } else {
+      setIsCameraOff((v) => !v);
+    }
+  };
+
+  const endCall = () => {
+    if (callGreetingTimerRef.current) {
+      clearTimeout(callGreetingTimerRef.current);
+      callGreetingTimerRef.current = null;
+    }
+    stopSpeaking();
+    stopListening();
+    if (isRecordingVoice) stopVoiceRecord('cancel');
+    speechService.playTone('hangup');
+    setIsCallActive(false);
+    setIsVideoCallActive(false);
+    setIsCallConnecting(false);
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    setHasCameraStream(false);
     setCallSeconds(0);
   };
+
   useEffect(() => {
-    if (isVideoCallActive && localVideoRef.current && localStreamRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
+    if (isVideoCallActive && !isCameraOff && localVideoRef.current && localStreamRef.current) {
+      if (localVideoRef.current.srcObject !== localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
       localVideoRef.current.play().catch(() => {});
     }
-  }, [isVideoCallActive]);
+  }, [isVideoCallActive, isCameraOff, hasCameraStream]);
 
   // Réponse interactive à une carte Quiz Q/R dans le chat
   const handleSelectQuizAnswer = (msgId: string, optionIdx: number) => {
@@ -728,33 +1169,37 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     });
   };
 
-  const handleSendMessage = async (textToSend?: string) => {
-    const text = (textToSend || inputText).trim();
-    if ((!text && !previewMedia) || isLoading) return;
+  const handleSendMessage = async (textToSend?: string, customMedia?: MediaAttachment | null) => {
+    const mediaToSend = customMedia !== undefined ? customMedia : previewMedia;
+    const text = (textToSend !== undefined ? textToSend : inputText).trim();
+    if ((!text && !mediaToSend) || isLoading) return;
 
     speechService.unlockAudio();
     stopSpeaking();
 
+    const userMsgId = `user-${Date.now()}`;
+    const displayUserText =
+      text ||
+      mediaToSend?.transcriptText ||
+      (mediaToSend?.type === 'image'
+        ? '📷 Image jointe — analyse juridique du document'
+        : mediaToSend?.type === 'video'
+        ? '🎥 Vidéo jointe'
+        : `🎙️ Note vocale envoyée à ${activeTutor.name} (${mediaToSend?.duration || '0:05'})`);
+
     const userMsg: EnhancedMessage = {
-      id: `user-${Date.now()}`,
+      id: userMsgId,
       sender: 'user',
-      text:
-        text ||
-        (previewMedia?.type === 'image'
-          ? '📷 Image jointe — analyse juridique du document'
-          : previewMedia?.type === 'video'
-          ? '🎥 Vidéo jointe'
-          : '🎙️ Question vocale'),
+      text: displayUserText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      media: previewMedia || undefined,
-      isVoice: previewMedia?.type === 'audio'
+      media: mediaToSend || undefined,
+      isVoice: mediaToSend?.type === 'audio'
     };
     const nextAfterUser = [...messages, userMsg];
     setMessages(nextAfterUser);
     persistMessages(nextAfterUser);
-    if (!textToSend) setInputText('');
-    const mediaToSend = previewMedia;
-    setPreviewMedia(null);
+    if (textToSend === undefined) setInputText('');
+    if (customMedia === undefined) setPreviewMedia(null);
     setIsLoading(true);
 
     try {
@@ -764,21 +1209,33 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const lessonsForRag = learningContext?.lastCourseLessons
         ? ` | Leçons du cours: ${learningContext.lastCourseLessons}`
         : '';
+      const effectiveMessage =
+        text ||
+        mediaToSend?.transcriptText ||
+        (mediaToSend?.type === 'audio'
+          ? ''
+          : mediaToSend
+          ? `[${mediaToSend.type} joint: ${mediaToSend.name}]`
+          : '');
+
       const body: any = {
-        message: text || (mediaToSend ? `[${mediaToSend.type} joint: ${mediaToSend.name}] ${text}` : ''),
+        message: effectiveMessage,
         history: nextAfterUser.slice(-8),
-        context: `Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${currentProfile.level} | Dernier cours: ${
+        context: `Tutrice sélectionnée: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${currentProfile.level} | Dernier cours: ${
           learningContext
             ? `${learningContext.lastCourseTitle} (${learningContext.lastCourseCode}) ${learningContext.lastCourseProgress}%`
             : 'aucun'
         }${excerptForRag}${lessonsForRag}`,
         userName: currentProfile.name,
+        tutorPersona: selectedVoice,
         learningContext: learningContext
           ? `${learningContext.lastCourseTitle} (${learningContext.lastCourseCode}, ${learningContext.lastCourseProgress}% — ${learningContext.lastCourseCategory}) | Récents: ${learningContext.recentTitles} | Global ${learningContext.overallProgress}%${excerptForRag}`
           : null,
         lastCourse: learningContext,
         mediaType: mediaToSend?.type || null,
-        hasMedia: !!mediaToSend
+        hasMedia: !!mediaToSend,
+        audioBase64: mediaToSend?.type === 'audio' ? mediaToSend.audioBase64 : undefined,
+        audioMimeType: mediaToSend?.type === 'audio' ? mediaToSend.mimeType : undefined
       };
       const response = await fetch('/api/ai/tutor', {
         method: 'POST',
@@ -786,6 +1243,17 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         body: JSON.stringify(body)
       });
       const data = await response.json().catch(() => ({}));
+
+      // Si le serveur a transcrit la note vocale audio, enrichir le message utilisateur avec la transcription
+      const transcribedText = typeof data.transcribedText === 'string' ? data.transcribedText.trim() : '';
+      const updatedUserMessages = transcribedText && !text
+        ? nextAfterUser.map((m) =>
+            m.id === userMsgId
+              ? { ...m, text: `🎙️ « ${transcribedText} »` }
+              : m
+          )
+        : nextAfterUser;
+
       const reply: string =
         data.reply ||
         (response.ok
@@ -798,7 +1266,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         text: reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         sources: data.sources || [
-          'Aïsha • Pédagogie humaine',
+          `${activeTutor.name} • Pédagogie humaine`,
           'Loi n° 10/010 du 27 avril 2010',
           'Manuel ARMP RDC'
         ],
@@ -811,7 +1279,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             ],
         interactiveQuiz: data.interactiveQuiz || undefined
       };
-      const updatedConversation = [...nextAfterUser, botMsg];
+      const updatedConversation = [...updatedUserMessages, botMsg];
       setMessages(updatedConversation);
       persistMessages(updatedConversation);
 
@@ -852,6 +1320,35 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const activeCategoryObj =
     QA_CATEGORIES.find((c) => c.id === activeCategory) || QA_CATEGORIES[0];
 
+  const effectiveTutorEmotion: AvatarEmotion =
+    manualTutorEmotion !== 'auto'
+      ? manualTutorEmotion
+      : isListening || isRecordingVoice
+      ? 'empathetic'
+      : isLoading
+      ? 'curious'
+      : isSpeaking
+      ? detectedSpeechEmotion
+      : 'smiling';
+
+  const TUTOR_EMOTION_PRESETS: Array<{ id: AvatarEmotion | 'auto'; icon: string; label: string }> = [
+    { id: 'smiling', icon: '😊', label: 'Sourire' },
+    { id: 'pedagogical', icon: '🎓', label: 'Éloquence' },
+    { id: 'empathetic', icon: '💛', label: 'Empathie' },
+    { id: 'curious', icon: '🤔', label: 'Réflexion' },
+    { id: 'enthusiastic', icon: '🌟', label: 'Joie' },
+    { id: 'astonished', icon: '😲', label: 'Alerte' },
+    { id: 'solemn', icon: '⚖️', label: 'Rigueur' },
+    { id: 'auto', icon: '✨', label: 'Auto Voix' },
+  ];
+
+  const handleSelectTutorEmotion = (emo: AvatarEmotion | 'auto') => {
+    setManualTutorEmotion(emo);
+    if (emo !== 'auto') {
+      avatarExpressionEngine.setEmotion(emo);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 lg:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 w-full max-w-6xl h-[100dvh] sm:h-[92vh] sm:max-h-[840px] rounded-none sm:rounded-3xl shadow-2xl flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 overflow-hidden relative">
@@ -872,16 +1369,18 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 isSpeaking={isSpeaking}
                 isListening={isListening}
                 isLoading={isLoading}
+                emotion={effectiveTutorEmotion}
+                tutorPersona={selectedVoice}
                 size={48}
               />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-black text-sm sm:text-base tracking-tight truncate">
-                  Prof. Aïsha • Tuteur Virtuel Questions / Réponses
+                  {activeTutor.name} • {activeTutor.title}
                 </h3>
                 <span className="hidden md:inline-flex items-center gap-1 text-[10px] uppercase font-black tracking-wider px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                  <Sparkles className="w-3 h-3" /> Studio Q/R Interactif • Loi 10/010
+                  <Sparkles className="w-3 h-3" /> {activeTutor.badge}
                 </span>
               </div>
               <p className="text-[11px] text-blue-200/90 flex items-center gap-1.5 truncate">
@@ -889,7 +1388,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   className={`w-2 h-2 rounded-full shrink-0 ${
                     isSpeaking
                       ? 'bg-cyan-400 animate-ping'
-                      : isListening
+                      : isListening || isRecordingVoice
                       ? 'bg-rose-400 animate-ping'
                       : isLoading
                       ? 'bg-amber-400 animate-bounce'
@@ -897,14 +1396,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   }`}
                 />
                 {isSpeaking
-                  ? 'Aïsha vous répond de vive voix (synchronisation labiale 60 FPS)…'
+                  ? `${activeTutor.name} vous répond de vive voix (synchronisation labiale 60 FPS)…`
+                  : isRecordingVoice
+                  ? `Enregistrement de votre Voice en cours (${recordingSeconds}s)…`
                   : isListening
-                  ? 'Micro ouvert : posez votre question, Aïsha vous écoute…'
+                  ? `Micro ouvert : posez votre question, ${activeTutor.name} vous écoute…`
                   : isLoading
-                  ? 'Aïsha prépare votre réponse juridique sur mesure…'
+                  ? `${activeTutor.name} prépare votre réponse juridique sur mesure…`
                   : learningContext
                   ? `Connectée à votre cours : ${learningContext.lastCourseCode} • ${learningContext.lastCourseTitle}`
-                  : 'Assistance juridique vocale & écrite • Questions / Réponses & Quiz'}
+                  : 'Appels vocaux, Visio & Notes vocales (Voices) • 4 Tutrices Virtuelles'}
               </p>
             </div>
           </div>
@@ -917,10 +1418,36 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   ? 'bg-blue-600/30 border-blue-400/50 text-cyan-200'
                   : 'bg-white/10 border-white/15 text-white/80 hover:bg-white/15'
               }`}
-              title="Afficher ou masquer le portrait Studio d'Aïsha"
+              title="Afficher ou masquer le portrait Studio"
             >
               <Sliders className="w-3.5 h-3.5" />
               <span>{showStudioStage ? 'Studio Visible' : 'Afficher Studio'}</span>
+            </button>
+
+            <button
+              onClick={() => startCall()}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-black text-xs border transition shadow-sm ${
+                isCallActive
+                  ? 'bg-emerald-500 border-emerald-300 text-white animate-pulse'
+                  : 'bg-emerald-500/90 hover:bg-emerald-500 border-emerald-400/50 text-white'
+              }`}
+              title={`Appeler ${activeTutor.name} en direct`}
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Appeler</span>
+            </button>
+
+            <button
+              onClick={() => startVideoCall()}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-black text-xs border transition shadow-sm ${
+                isVideoCallActive
+                  ? 'bg-blue-600 border-blue-300 text-white animate-pulse'
+                  : 'bg-blue-600/90 hover:bg-blue-500 border-blue-400/50 text-white'
+              }`}
+              title={`Lancer un appel Visio avec ${activeTutor.name}`}
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Visio</span>
             </button>
 
             <button
@@ -941,26 +1468,6 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             </button>
 
             <button
-              onClick={startCall}
-              className={`hidden sm:flex p-2 rounded-xl ${
-                isCallActive ? 'bg-emerald-500 text-white' : 'bg-white/10 hover:bg-white/15 text-white'
-              } border border-white/15 transition`}
-              title="Entretien vocal direct"
-            >
-              <Phone className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={startVideoCall}
-              className={`hidden sm:flex p-2 rounded-xl ${
-                isVideoCallActive ? 'bg-blue-600 text-white' : 'bg-white/10 hover:bg-white/15 text-white'
-              } border border-white/15 transition`}
-              title="Entretien visio plein écran"
-            >
-              <Video className="w-4 h-4" />
-            </button>
-
-            <button
               onClick={() => {
                 stopSpeaking();
                 onClose();
@@ -977,62 +1484,66 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         {/* MAIN BODY — SPLIT STUDIO (LEFT: AÏSHA LIVE STAGE | RIGHT: Q&A CHAT) */}
         {/* =================================================================== */}
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-          {/* LEFT PANEL: PROF. AÏSHA INTERACTIVE STUDIO STAGE */}
+          {/* LEFT PANEL: PROF. AÏSHA INTERACTIVE WAV2LIP VIDEO STUDIO STAGE */}
           {showStudioStage && (
-            <aside className="lg:w-[310px] xl:w-[340px] bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950/95 text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-3 sm:p-4 flex flex-row lg:flex-col items-center gap-3.5 shrink-0">
-              {/* Portrait Animé Haute Définition 60 FPS */}
-              <div className="relative flex flex-col items-center shrink-0">
-                <div className="hidden lg:block">
+            <aside className="lg:w-[330px] xl:w-[360px] bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950/95 text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 shrink-0 overflow-y-auto no-scrollbar">
+              {/* Scène Vidéo Wav2Lip 60 FPS (Image complète : Tête, Sourire, Émotions, Buste & Mains) */}
+              <div className="w-full flex flex-row lg:flex-col items-center gap-3">
+                <div className="hidden lg:block w-full h-[235px] xl:h-[250px] relative">
                   <AishaAvatar
                     isSpeaking={isSpeaking}
-                    isListening={isListening}
+                    isListening={isListening || isRecordingVoice}
                     isLoading={isLoading}
-                    size="xl"
-                    className="rounded-3xl shadow-2xl border-2"
+                    emotion={effectiveTutorEmotion}
+                    tutorPersona={selectedVoice}
+                    variant="studio"
+                    className="shadow-2xl"
                   />
                 </div>
-                <div className="lg:hidden">
+                <div className="lg:hidden shrink-0">
                   <AishaAvatar
                     isSpeaking={isSpeaking}
-                    isListening={isListening}
+                    isListening={isListening || isRecordingVoice}
                     isLoading={isLoading}
-                    size={76}
+                    emotion={effectiveTutorEmotion}
+                    tutorPersona={selectedVoice}
+                    size={86}
                     className="rounded-2xl shadow-xl"
                   />
                 </div>
 
-                {/* Badge État Vocal */}
-                <div
-                  className={`mt-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border ${
-                    isSpeaking
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40'
-                      : isListening
-                      ? 'bg-rose-500/20 text-rose-300 border-rose-400/40 animate-pulse'
-                      : isLoading
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
-                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isSpeaking
-                        ? 'bg-cyan-400 animate-ping'
-                        : isListening
-                        ? 'bg-rose-400'
-                        : isLoading
-                        ? 'bg-amber-400'
-                        : 'bg-emerald-400'
-                    }`}
-                  />
-                  <span>
-                    {isSpeaking
-                      ? activeEmotionLabel
-                      : isListening
-                      ? '💛 Vous écoute avec empathie…'
-                      : isLoading
-                      ? '🤔 Réflexion juridique…'
-                      : '😊 Bienveillance & Écoute'}
-                  </span>
+                {/* Sélecteur d'Émotions, Sourire & Expressions Faciales en Direct (Wav2Lip) */}
+                <div className="flex-1 lg:w-full space-y-1.5 min-w-0">
+                  <div className="flex items-center justify-between gap-1.5 px-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1 truncate">
+                      <span>🌸</span>
+                      <span>Port de tête féminin, Sourire &amp; Émotions</span>
+                    </span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
+                      60 FPS
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {TUTOR_EMOTION_PRESETS.map((preset) => {
+                      const active = manualTutorEmotion === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectTutorEmotion(preset.id)}
+                          className={`px-1.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1 truncate cursor-pointer ${
+                            active
+                              ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm font-black'
+                              : 'bg-white/5 hover:bg-white/15 text-slate-200 border-white/10'
+                          }`}
+                          title={`Activer l'expression : ${preset.label}`}
+                        >
+                          <span>{preset.icon}</span>
+                          <span className="truncate">{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1070,10 +1581,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   </p>
                 </div>
 
-                {/* Sélecteur de Voix Éloquente (Desktop) */}
+                {/* Sélecteur des 4 Tutrices Virtuelles & Appel Direct (Desktop) */}
                 <div className="hidden lg:block space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">
-                    <span>Voix & Éloquence</span>
+                    <span>Nos 4 Tutrices Virtuelles</span>
                     <button
                       onClick={handleCycleSpeed}
                       className="text-amber-300 hover:underline font-mono"
@@ -1086,47 +1597,85 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         : '1.0x • Naturel'}
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 gap-1">
-                    {VOICE_OPTIONS.map((v) => {
-                      const active = selectedVoice === v.id;
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {VIRTUAL_TUTORS.map((tutor) => {
+                      const active = selectedVoice === tutor.id;
                       return (
-                        <button
-                          key={v.id}
-                          onClick={() => handleChangeVoice(v.id)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-xl border text-[11px] transition flex items-center justify-between ${
+                        <div
+                          key={tutor.id}
+                          className={`w-full rounded-xl border p-2 transition flex items-center justify-between gap-2 ${
                             active
-                              ? 'bg-blue-600/30 border-cyan-400/60 text-white font-bold'
+                              ? 'bg-blue-600/30 border-cyan-400/60 text-white'
                               : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
                           }`}
                         >
-                          <span className="truncate">{v.label}</span>
-                          {active && <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => handleChangeVoice(tutor.id)}
+                            className="flex-1 text-left min-w-0"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-black truncate">{tutor.name}</span>
+                              {active && (
+                                <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-300/80 truncate">
+                              {tutor.specialty}
+                            </p>
+                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => startCall(tutor.id)}
+                              className="p-1.5 rounded-lg bg-emerald-500/25 hover:bg-emerald-500 text-emerald-200 hover:text-white border border-emerald-400/30 transition"
+                              title={`Appeler ${tutor.name} en audio`}
+                            >
+                              <Phone className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startVideoCall(tutor.id)}
+                              className="p-1.5 rounded-lg bg-blue-500/25 hover:bg-blue-500 text-blue-200 hover:text-white border border-blue-400/30 transition"
+                              title={`Appeler ${tutor.name} en visio`}
+                            >
+                              <Video className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
 
                 {/* Boutons d'Action Rapide Q/R (Desktop) */}
-                <div className="hidden lg:grid grid-cols-2 gap-1.5 pt-1">
+                <div className="hidden lg:grid grid-cols-3 gap-1.5 pt-1">
                   <button
-                    onClick={isListening ? stopListening : startListening}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                      isListening
+                    onClick={() => (isRecordingVoice ? stopVoiceRecord('send') : startVoiceRecord())}
+                    className={`p-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 transition ${
+                      isRecordingVoice
                         ? 'bg-rose-600 border-rose-400 text-white animate-pulse'
                         : 'bg-emerald-600/25 hover:bg-emerald-600/35 border-emerald-400/40 text-emerald-200'
                     }`}
                   >
-                    {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                    <span>{isListening ? 'Stop Micro' : 'Parler'}</span>
+                    <Waves className="w-3.5 h-3.5" />
+                    <span>{isRecordingVoice ? 'Envoyer' : 'Voice'}</span>
                   </button>
 
                   <button
-                    onClick={() => handleSendMessage('Donne-moi un cas pratique à résoudre')}
-                    className="p-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                    onClick={() => startCall()}
+                    className="p-2 rounded-xl bg-blue-600/25 hover:bg-blue-600/40 border border-blue-400/40 text-blue-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
                   >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>Cas Pratique</span>
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>Appeler</span>
+                  </button>
+
+                  <button
+                    onClick={() => startVideoCall()}
+                    className="p-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Visio</span>
                   </button>
                 </div>
               </div>
@@ -1135,8 +1684,48 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
           {/* RIGHT PANEL: CATEGORIZED Q&A MATRIX + CONVERSATION STREAM + INPUT */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            {/* 1. Onglets Thématiques Questions / Réponses */}
+            {/* 1. Barre de sélection rapide des Tutrices Virtuelles (Mobile & Tablette) + Onglets Thématiques */}
             <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2 shrink-0 space-y-2">
+              {/* Sélecteur des 4 Tutrices Virtuelles & Appel direct */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 mr-1">
+                  Tutrices :
+                </span>
+                {VIRTUAL_TUTORS.map((tutor) => {
+                  const active = selectedVoice === tutor.id;
+                  return (
+                    <div
+                      key={tutor.id}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-xl border text-[11px] shrink-0 transition ${
+                        active
+                          ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-2xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleChangeVoice(tutor.id)}
+                        className="flex items-center gap-1"
+                      >
+                        <span>{tutor.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startCall(tutor.id)}
+                        className={`p-1 rounded-lg transition ${
+                          active
+                            ? 'bg-white/20 hover:bg-white/30 text-white'
+                            : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100'
+                        }`}
+                        title={`Appeler ${tutor.name}`}
+                      >
+                        <Phone className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                 <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 shrink-0 mr-1">
                   <HelpCircle className="w-3.5 h-3.5 text-blue-500" /> Thèmes Q/R :
@@ -1198,7 +1787,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         <AishaAvatar
                           isSpeaking={isThisMsgSpeaking || (isSpeaking && isLastBotMsg)}
                           isLoading={false}
-                          size={36}
+                          emotion={effectiveTutorEmotion}
+                          tutorPersona={selectedVoice}
+                          size={38}
                         />
                       )}
 
@@ -1429,6 +2020,85 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Barre d'enregistrement de Note Vocale (Voice) en direct */}
+            {isRecordingVoice && (
+              <div className="mx-3 sm:mx-4 mb-2 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-500/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-lg animate-in fade-in">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-3 h-3 rounded-full bg-rose-600 animate-ping shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-black text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                      <span>🎙️ Enregistrement Voice pour {activeTutor.name}</span>
+                      <span className="font-mono px-2 py-0.5 rounded-md bg-rose-600 text-white text-[11px]">
+                        {formatCallTime(recordingSeconds)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-rose-700 dark:text-rose-300 truncate mt-0.5">
+                      {liveVoiceTranscript
+                        ? `Transcription : « ${liveVoiceTranscript} »`
+                        : 'Parlez clairement dans votre micro, puis cliquez sur « Envoyer le Voice »…'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => stopVoiceRecord('cancel')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:text-rose-600"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stopVoiceRecord('preview')}
+                    className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-900 dark:text-amber-200 text-xs font-bold"
+                  >
+                    Aperçu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stopVoiceRecord('send')}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Envoyer le Voice
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Générateur de Voice Assisté (si micro bloqué ou sans micro matériel) */}
+            {showAssistedVoiceBox && !isRecordingVoice && (
+              <div className="mx-3 sm:mx-4 mb-2 p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-300 dark:border-indigo-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                    <Waves className="w-4 h-4 text-indigo-600" /> Créer & Envoyer un Voice à {activeTutor.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssistedVoiceBox(false)}
+                    className="text-xs text-slate-500 hover:text-rose-600 font-bold"
+                  >
+                    Fermer
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={assistedVoiceText}
+                    onChange={(e) => setAssistedVoiceText(e.target.value)}
+                    placeholder="Saisissez le contenu de votre note vocale (converti en fichier audio .wav)…"
+                    className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 text-xs text-slate-800 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSendAssistedVoice()}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-1.5 shrink-0"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" /> Envoyer Voice
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Preview média avant envoi */}
             {previewMedia && (
               <div className="mx-3 sm:mx-4 mb-2 p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 flex items-center gap-3">
@@ -1447,12 +2117,22 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     />
                   )}
                   {previewMedia.type === 'audio' && (
-                    <div className="flex items-center gap-2 text-xs font-bold text-blue-700 dark:text-blue-300">
-                      <Volume2 className="w-4 h-4 text-blue-600" /> {previewMedia.name}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs font-bold text-blue-700 dark:text-blue-300">
+                        <Volume2 className="w-4 h-4 text-blue-600" /> {previewMedia.name}
+                      </div>
+                      <audio controls src={previewMedia.url} className="h-8 w-full max-w-xs" />
                     </div>
                   )}
                   <div className="text-[11px] font-bold truncate mt-1">{previewMedia.name}</div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage()}
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center gap-1"
+                >
+                  <Send className="w-3.5 h-3.5" /> Envoyer
+                </button>
                 <button
                   onClick={() => setPreviewMedia(null)}
                   className="p-1.5 rounded-full bg-white dark:bg-slate-800 border text-slate-600 hover:text-rose-600"
@@ -1469,7 +2149,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   e.preventDefault();
                   handleSendMessage();
                 }}
-                className="flex items-end gap-2"
+                className="flex items-end gap-1.5 sm:gap-2"
               >
                 <div className="flex items-center gap-1">
                   <input
@@ -1503,10 +2183,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder={
                       isListening
-                        ? 'Parlez maintenant, Aïsha transcrit votre question…'
-                        : 'Posez votre question juridique ou demandez un cas pratique à Aïsha…'
+                        ? `Parlez maintenant, ${activeTutor.name} transcrit votre question…`
+                        : `Posez votre question ou envoyez un Voice à ${activeTutor.name}…`
                     }
-                    className={`w-full bg-white dark:bg-slate-800 border rounded-xl px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    className={`w-full bg-white dark:bg-slate-800 border rounded-xl px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       isListening
                         ? 'border-rose-400 ring-2 ring-rose-400/30'
                         : 'border-slate-300 dark:border-slate-700'
@@ -1516,7 +2196,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={isListening ? stopListening : startListening}
+                  onClick={() => (isListening ? stopListening() : startListening(false))}
                   className={`p-2.5 rounded-xl border font-bold transition ${
                     isListening
                       ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
@@ -1530,27 +2210,36 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 {!isRecordingVoice ? (
                   <button
                     type="button"
-                    onClick={startVoiceRecord}
-                    className="hidden sm:flex p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 text-slate-600 dark:text-slate-300"
-                    title="Enregistrer une note vocale"
+                    onClick={() => {
+                      if (inputText.trim()) {
+                        handleSendAssistedVoice(inputText.trim());
+                        setInputText('');
+                      } else {
+                        startVoiceRecord();
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
+                    title="Enregistrer et envoyer une note vocale (Voice)"
                   >
                     <Waves className="w-4 h-4" />
+                    <span className="hidden md:inline">Voice</span>
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={stopVoiceRecord}
-                    className="p-2.5 rounded-xl bg-rose-600 text-white animate-pulse"
-                    title="Terminer l’enregistrement vocal"
+                    onClick={() => stopVoiceRecord('send')}
+                    className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-rose-600 text-white font-black text-xs animate-pulse"
+                    title="Envoyer le Voice maintenant"
                   >
-                    <Pause className="w-4 h-4" />
+                    <Send className="w-4 h-4" />
+                    <span>Envoyer</span>
                   </button>
                 )}
 
                 <button
                   type="submit"
                   disabled={(!inputText.trim() && !previewMedia) || isLoading}
-                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md transition"
+                  className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md transition"
                 >
                   <Send className="w-4 h-4" />
                   <span className="hidden sm:inline">Demander</span>
@@ -1561,6 +2250,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2 mt-2.5 text-[11px]">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
+                    type="button"
                     onClick={() => {
                       if (autoSpeak) stopSpeaking();
                       setAutoSpeak((v) => !v);
@@ -1576,28 +2266,36 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     ) : (
                       <VolumeX className="w-3.5 h-3.5" />
                     )}
-                    <span>{autoSpeak ? 'Réponse vocale auto : ON' : 'Réponse vocale : OFF'}</span>
+                    <span>{autoSpeak ? 'Voix auto : ON' : 'Voix : OFF'}</span>
                   </button>
 
                   <button
-                    onClick={() =>
-                      handleSendMessage('Lance-moi un Quiz interactif Q/R sur mon cours')
-                    }
-                    className="px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 font-bold flex items-center gap-1 hover:bg-amber-100 transition"
+                    type="button"
+                    onClick={() => startCall()}
+                    className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1 hover:bg-emerald-100 transition"
                   >
-                    <Award className="w-3.5 h-3.5" /> Quiz Q/R
+                    <Phone className="w-3.5 h-3.5" /> Appeler {activeTutor.name}
                   </button>
 
                   <button
-                    onClick={startVideoCall}
+                    type="button"
+                    onClick={() => startVideoCall()}
                     className="px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1 hover:bg-blue-100 transition"
                   >
-                    <Video className="w-3.5 h-3.5" /> Mode Visio
+                    <Video className="w-3.5 h-3.5" /> Visio
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAssistedVoiceBox((v) => !v)}
+                    className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold flex items-center gap-1 hover:bg-indigo-100 transition"
+                  >
+                    <Waves className="w-3.5 h-3.5" /> Voice Assisté
                   </button>
                 </div>
 
                 <span className="text-[10px] text-slate-400 hidden sm:inline">
-                  Voix : {VOICE_OPTIONS.find((v) => v.id === selectedVoice)?.label} ({tutorSpeed}x)
+                  Tutrice : {activeTutor.name} ({tutorSpeed}x)
                 </span>
               </div>
             </div>
@@ -1605,138 +2303,430 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         </div>
 
         {/* =================================================================== */}
-        {/* OVERLAY APPEL VOCAL DIRECT                                          */}
+        {/* OVERLAY APPEL VOCAL DIRECT AUX TUTRICES VIRTUELLES                  */}
         {/* =================================================================== */}
         {isCallActive && !isVideoCallActive && (
-          <div className="absolute inset-0 z-40 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-white">
-            <div className="relative mb-4">
-              <AishaAvatar isSpeaking={isSpeaking} isListening={isListening} size="call" />
-              <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-emerald-500 text-white text-[11px] font-black shadow-md">
-                Entretien Vocal Q/R Actif
-              </span>
-            </div>
-            <h4 className="font-black text-lg mt-2">Prof. Aïsha — Entretien Questions / Réponses</h4>
-            <p className="text-sm text-white/70">
-              {formatCallTime(callSeconds)} • {isMicMuted ? 'Micro coupé' : 'En ligne'}
-            </p>
-            {spokenSubtitle && (
-              <p className="max-w-lg text-center text-xs text-cyan-200 italic mt-3 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                « {spokenSubtitle} »
-              </p>
-            )}
-            <div className="flex items-center gap-3 mt-6">
+          <div className="absolute inset-0 z-40 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-between p-4 sm:p-6 text-white overflow-y-auto">
+            {/* Sélecteur de tutrice en haut de l'appel */}
+            <div className="w-full max-w-2xl flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {VIRTUAL_TUTORS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => startCall(t.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition shrink-0 ${
+                      selectedVoice === t.id
+                        ? 'bg-emerald-500 text-white border-emerald-300 shadow-md'
+                        : 'bg-white/10 text-white/80 border-white/15 hover:bg-white/20'
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
               <button
-                onClick={isListening ? stopListening : startListening}
-                className={`px-4 py-3 rounded-full border font-bold text-xs flex items-center gap-2 ${
-                  isListening
-                    ? 'bg-emerald-600 border-emerald-400 text-white animate-pulse'
-                    : 'bg-white/10 border-white/20 text-white hover:bg-white/15'
-                }`}
-              >
-                <Mic className="w-4 h-4" />
-                <span>{isListening ? 'Je vous écoute…' : 'Poser une question vocale'}</span>
-              </button>
-              <button
+                type="button"
                 onClick={endCall}
-                className="p-4 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg"
-                title="Raccrocher"
+                className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center gap-1"
               >
-                <PhoneOff className="w-5 h-5" />
+                <PhoneOff className="w-3.5 h-3.5" /> Raccrocher
               </button>
-              <button
-                onClick={() => {
-                  endCall();
-                  startVideoCall();
+            </div>
+
+            {/* Centre : Avatar de la Tutrice & Sous-titres temps réel */}
+            <div className="flex flex-col items-center my-auto py-4 max-w-xl w-full text-center">
+              <div className="relative mb-3">
+                <AishaAvatar
+                  isSpeaking={isSpeaking}
+                  isListening={isListening || isRecordingVoice}
+                  isLoading={isLoading}
+                  emotion={effectiveTutorEmotion}
+                  tutorPersona={selectedVoice}
+                  size="call"
+                />
+                <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-emerald-500 text-white text-[11px] font-black shadow-md whitespace-nowrap">
+                  {isCallConnecting
+                    ? 'Connexion en cours…'
+                    : isSpeaking
+                    ? `${activeTutor.name} vous parle…`
+                    : isRecordingVoice || isListening
+                    ? 'À votre écoute…'
+                    : 'Appel Vocal Actif'}
+                </span>
+              </div>
+
+              <h4 className="font-black text-lg sm:text-xl mt-2">{activeTutor.name}</h4>
+              <p className="text-xs text-cyan-300 font-semibold">{activeTutor.title}</p>
+              <p className="text-xs text-white/70 font-mono mt-1">
+                {formatCallTime(callSeconds)} • {isMicMuted ? 'Micro muet' : 'Canal HD sécurisé'}
+              </p>
+
+              {/* Réponse vocale en direct ou dernière réponse */}
+              <div className="w-full mt-4 p-3.5 rounded-2xl bg-white/10 border border-white/15 text-xs sm:text-sm text-cyan-100 leading-relaxed max-h-36 overflow-y-auto">
+                {isLoading ? (
+                  <span className="inline-flex items-center gap-2 text-amber-300 font-bold">
+                    <Loader2 className="w-4 h-4 animate-spin" /> {activeTutor.name} analyse votre question…
+                  </span>
+                ) : spokenSubtitle ? (
+                  `« ${spokenSubtitle} »`
+                ) : (
+                  `« Bonjour ! Cliquez sur "Parler à ${activeTutor.name}", choisissez une question rapide ou écrivez votre question ci-dessous. »`
+                )}
+              </div>
+
+              {/* Questions rapides cliquables pendant l'appel */}
+              <div className="w-full mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                {activeCategoryObj.questions.slice(0, 3).map((q, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSendMessage(q)}
+                    disabled={isLoading}
+                    className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-emerald-500/30 border border-white/20 text-[11px] text-white font-semibold transition"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bas de l'appel : Saisie vocale OU écrite directe + contrôles d'appel */}
+            <div className="w-full max-w-xl space-y-3">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!inCallQuestionText.trim()) return;
+                  const q = inCallQuestionText.trim();
+                  setInCallQuestionText('');
+                  handleSendMessage(q);
                 }}
-                className="p-3.5 rounded-full bg-white/10 border border-white/20 hover:bg-white/15"
-                title="Passer en Visio"
+                className="flex items-center gap-2"
               >
-                <Video className="w-5 h-5" />
-              </button>
+                <input
+                  type="text"
+                  value={inCallQuestionText}
+                  onChange={(e) => setInCallQuestionText(e.target.value)}
+                  placeholder={`Parlez au micro ou tapez votre question en direct à ${activeTutor.name}…`}
+                  className="flex-1 px-4 py-2.5 rounded-full bg-white/10 border border-white/20 text-white placeholder-white/50 text-xs sm:text-sm focus:outline-none focus:border-emerald-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!inCallQuestionText.trim() || isLoading}
+                  className="px-4 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white font-black text-xs flex items-center gap-1.5 shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" /> Envoyer
+                </button>
+              </form>
+
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isRecordingVoice) {
+                      stopVoiceRecord('send');
+                    } else if (isListening) {
+                      stopListening();
+                    } else {
+                      startListening(true);
+                    }
+                  }}
+                  className={`px-5 py-3 rounded-full border font-black text-xs flex items-center gap-2 shadow-lg transition ${
+                    isListening || isRecordingVoice
+                      ? 'bg-emerald-500 border-emerald-300 text-white animate-pulse'
+                      : 'bg-white text-slate-950 border-white hover:bg-emerald-50'
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                  <span>
+                    {isRecordingVoice
+                      ? `Envoyer mon Voice (${recordingSeconds}s)`
+                      : isListening
+                      ? 'Je vous écoute… (cliquez pour arrêter)'
+                      : `Parler à ${activeTutor.name}`}
+                  </span>
+                </button>
+
+                {isSpeaking && (
+                  <button
+                    type="button"
+                    onClick={stopSpeaking}
+                    className="px-4 py-3 rounded-full bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold flex items-center gap-1.5"
+                  >
+                    <Pause className="w-4 h-4" /> Interrompre
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCallActive(false);
+                    startVideoCall(selectedVoice);
+                  }}
+                  className="px-4 py-3 rounded-full bg-blue-600/80 hover:bg-blue-600 border border-blue-400/40 text-white text-xs font-bold flex items-center gap-1.5"
+                  title="Passer en appel Visio"
+                >
+                  <Video className="w-4 h-4" /> Mode Visio
+                </button>
+
+                <button
+                  type="button"
+                  onClick={endCall}
+                  className="px-5 py-3 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center gap-1.5 shadow-lg"
+                  title="Raccrocher"
+                >
+                  <PhoneOff className="w-4 h-4" /> Raccrocher
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {/* =================================================================== */}
-        {/* OVERLAY VISIO PLEIN ÉCRAN                                           */}
+        {/* OVERLAY VISIO PLEIN ÉCRAN AVEC LES TUTRICES VIRTUELLES              */}
         {/* =================================================================== */}
         {isVideoCallActive && (
-          <div className="absolute inset-0 z-40 bg-black flex flex-col">
-            <div className="flex-1 relative bg-slate-950 overflow-hidden flex items-center justify-center">
+          <div className="absolute inset-0 z-40 bg-slate-950 flex flex-col min-h-0 overflow-hidden">
+            {/* Scène principale Visio HD */}
+            <div className="flex-1 min-h-0 relative bg-slate-950 overflow-hidden flex items-center justify-center">
               <AishaAvatar
                 isSpeaking={isSpeaking}
-                isListening={isListening}
+                isListening={isListening || isRecordingVoice}
+                isLoading={isLoading}
+                emotion={effectiveTutorEmotion}
+                tutorPersona={selectedVoice}
                 variant="visio"
-                className="w-full h-full max-w-2xl mx-auto"
+                className="w-full h-full"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
-              <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-                <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-xs text-white text-xs font-bold flex items-center gap-2 border border-white/15">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Prof. Aïsha •
-                  Visio Q/R • {formatCallTime(callSeconds)}
-                </div>
-                <button
-                  onClick={endCall}
-                  className="p-2 rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/15"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              {spokenSubtitle && (
-                <div className="absolute bottom-6 left-4 right-36 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-xl px-4 py-2.5 rounded-2xl bg-slate-950/85 border border-white/15 text-white text-xs text-center shadow-xl">
-                  « {spokenSubtitle} »
-                </div>
-              )}
-              <div className="absolute bottom-4 right-4 w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden border-2 border-white/80 shadow-xl bg-slate-800">
-                {isCameraOff ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-white/70 bg-slate-800 p-2">
-                    <VideoOff className="w-5 h-5 mb-1" />
-                    <span className="text-[10px] font-bold">Caméra off</span>
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-slate-950/60 pointer-events-none z-10" />
+
+              {/* Barre supérieure Visio : Statut + Sélecteur des 4 Tutrices + Quitter */}
+              <div className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full">
+                  <div className="px-3 py-1.5 rounded-full bg-slate-950/80 backdrop-blur-md text-white text-xs font-bold flex items-center gap-2 border border-white/15 shrink-0 shadow-lg">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        isCallConnecting
+                          ? 'bg-amber-400 animate-ping'
+                          : isSpeaking
+                          ? 'bg-cyan-400 animate-pulse'
+                          : isListening || isRecordingVoice
+                          ? 'bg-rose-400 animate-ping'
+                          : 'bg-emerald-400 animate-pulse'
+                      }`}
+                    />
+                    <span>
+                      {activeTutor.name} • Visio HD • {formatCallTime(callSeconds)}
+                    </span>
+                    <span className="hidden md:inline text-[10px] text-cyan-300 font-semibold">
+                      ({activeTutor.specialty})
+                    </span>
                   </div>
-                ) : (
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                )}
-                {!isCameraOff && localStreamRef.current === null && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
-                    <Camera className="w-5 h-5 text-white/60" />
+
+                  {VIRTUAL_TUTORS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => startVideoCall(t.id)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition shrink-0 ${
+                        selectedVoice === t.id
+                          ? 'bg-blue-600 text-white border-blue-400 shadow-md'
+                          : 'bg-slate-950/70 text-white/80 border-white/15 hover:bg-white/20'
+                      }`}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => startCall(selectedVoice)}
+                    className="px-2.5 py-1.5 rounded-full bg-slate-950/75 hover:bg-slate-900 text-white text-[11px] font-bold border border-white/15 flex items-center gap-1"
+                    title="Passer en appel audio uniquement"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden sm:inline">Mode Audio</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={endCall}
+                    className="p-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white border border-white/15 shadow-lg"
+                    title="Fermer la Visio"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Zone centrale basse : Sous-titres en direct, statut d'écoute/analyse & questions rapides */}
+              <div className="absolute bottom-3 left-3 right-32 sm:bottom-4 sm:left-6 sm:right-44 z-20 flex flex-col items-start sm:items-center sm:mx-auto sm:max-w-2xl gap-2">
+                <div className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-white/15 text-white text-xs sm:text-sm leading-relaxed shadow-2xl max-h-28 overflow-y-auto">
+                  {isCallConnecting ? (
+                    <span className="inline-flex items-center gap-2 text-amber-300 font-bold">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Connexion Visio HD avec {activeTutor.name}…
+                    </span>
+                  ) : isLoading ? (
+                    <span className="inline-flex items-center gap-2 text-amber-300 font-bold">
+                      <Loader2 className="w-4 h-4 animate-spin" /> {activeTutor.name} analyse votre question et prépare sa réponse…
+                    </span>
+                  ) : (isListening || isRecordingVoice) && liveVoiceTranscript ? (
+                    <span className="text-emerald-300 font-semibold">
+                      🎙️ Vous dites : « {liveVoiceTranscript} »
+                    </span>
+                  ) : spokenSubtitle ? (
+                    <span>« {spokenSubtitle} »</span>
+                  ) : (
+                    <span className="text-slate-300">
+                      « Bonjour ! Cliquez sur "Parler", choisissez une question rapide ou écrivez votre question ci-dessous. »
+                    </span>
+                  )}
+                </div>
+
+                {/* Questions rapides cliquables directement en Visio */}
+                <div className="hidden sm:flex flex-wrap items-center justify-center gap-1.5 w-full">
+                  {activeCategoryObj.questions.slice(0, 3).map((q, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSendMessage(q)}
+                      disabled={isLoading}
+                      className="px-2.5 py-1 rounded-full bg-slate-950/80 hover:bg-blue-600/80 border border-white/20 text-[11px] text-white font-semibold transition truncate max-w-[240px]"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fenêtre Retour Caméra Apprenant (PIP en bas à droite) */}
+              <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 w-24 h-28 sm:w-36 sm:h-28 rounded-2xl overflow-hidden border-2 border-white/40 shadow-2xl bg-slate-900">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className={
+                    isCameraOff || !hasCameraStream
+                      ? 'hidden'
+                      : 'w-full h-full object-cover -scale-x-100'
+                  }
+                />
+                {(isCameraOff || !hasCameraStream) && (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950 text-white p-2 text-center">
+                    {currentProfile.avatarUrl ? (
+                      <img
+                        src={currentProfile.avatarUrl}
+                        alt={currentProfile.name}
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border border-white/30 mb-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <User className="w-6 h-6 text-slate-400 mb-1" />
+                    )}
+                    <span className="text-[10px] font-bold truncate max-w-full">
+                      {currentProfile.name ? currentProfile.name.split(' ')[0] : 'Vous'}
+                    </span>
+                    <span className="text-[9px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {isCameraOff ? 'Caméra coupée' : 'Micro HD actif'}
+                    </span>
                   </div>
                 )}
               </div>
             </div>
-            <div className="p-4 bg-slate-900 border-t border-white/10 flex items-center justify-center gap-3">
-              <button
-                onClick={isListening ? stopListening : startListening}
-                className={`px-4 py-2.5 rounded-full border font-bold text-xs flex items-center gap-2 ${
-                  isListening
-                    ? 'bg-emerald-600 border-emerald-400 text-white animate-pulse'
-                    : 'bg-white/10 border-white/15 text-white'
-                }`}
+
+            {/* Barre de contrôle inférieure Visio */}
+            <div className="shrink-0 p-2.5 sm:p-3.5 bg-slate-900 border-t border-white/10 flex flex-col sm:flex-row items-center justify-center gap-2 z-20">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!inCallQuestionText.trim()) return;
+                  const q = inCallQuestionText.trim();
+                  setInCallQuestionText('');
+                  handleSendMessage(q);
+                }}
+                className="flex items-center gap-2 w-full sm:max-w-md"
               >
-                <Mic className="w-4 h-4" />
-                <span>{isListening ? 'Écoute en cours…' : 'Poser une question'}</span>
-              </button>
-              <button
-                onClick={() => setIsCameraOff((v) => !v)}
-                className={`p-3 rounded-full border ${
-                  isCameraOff
-                    ? 'bg-rose-600 border-rose-600 text-white'
-                    : 'bg-white/10 border-white/15 text-white'
-                }`}
-              >
-                {isCameraOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={endCall}
-                className="px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center gap-2 shadow-lg"
-              >
-                <PhoneOff className="w-4 h-4" /> Quitter la Visio
-              </button>
+                <input
+                  type="text"
+                  value={inCallQuestionText}
+                  onChange={(e) => setInCallQuestionText(e.target.value)}
+                  placeholder={`Poser une question en direct à ${activeTutor.name}…`}
+                  className="flex-1 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-white placeholder-white/50 text-xs focus:outline-none focus:border-blue-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!inCallQuestionText.trim() || isLoading}
+                  className="px-3.5 py-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-1 shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Envoyer</span>
+                </button>
+              </form>
+
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isRecordingVoice) {
+                      stopVoiceRecord('send');
+                    } else if (isListening) {
+                      stopListening();
+                    } else {
+                      startListening(true);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-full border font-bold text-xs flex items-center gap-1.5 transition ${
+                    isListening || isRecordingVoice
+                      ? 'bg-emerald-600 border-emerald-400 text-white animate-pulse'
+                      : 'bg-white text-slate-950 border-white hover:bg-blue-50'
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                  <span>
+                    {isRecordingVoice
+                      ? `Envoyer (${recordingSeconds}s)`
+                      : isListening
+                      ? 'Écoute en cours…'
+                      : `Parler à ${activeTutor.name.split(' ').pop()}`}
+                  </span>
+                </button>
+
+                {isSpeaking && (
+                  <button
+                    type="button"
+                    onClick={stopSpeaking}
+                    className="px-3 py-2 rounded-full bg-amber-500/25 border border-amber-400/50 text-amber-200 text-xs font-bold flex items-center gap-1"
+                    title="Interrompre la voix de la tutrice"
+                  >
+                    <Pause className="w-3.5 h-3.5" />
+                    <span>Stop voix</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={toggleCamera}
+                  className={`p-2 rounded-full border transition ${
+                    isCameraOff
+                      ? 'bg-rose-600/80 border-rose-500 text-white'
+                      : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
+                  }`}
+                  title={isCameraOff ? 'Activer ma caméra' : 'Désactiver ma caméra'}
+                >
+                  {isCameraOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={endCall}
+                  className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center gap-1.5 shadow-lg"
+                >
+                  <PhoneOff className="w-4 h-4" /> Quitter
+                </button>
+              </div>
             </div>
           </div>
         )}

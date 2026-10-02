@@ -35,7 +35,7 @@ service cloud.firestore {
         data.id is string && data.id.size() <= 128 &&
         data.name is string && data.name.size() <= 120 &&
         data.email is string && data.email.size() <= 120 &&
-        data.role in ['cgpmp_member', 'armp_agent', 'dgcmp_agent', 'particulier', 'dfat_admin', 'formateur'];
+        data.role in ['cgpmp_member', 'armp_agent', 'dgcmp_agent', 'pme', 'particulier', 'dfat_admin', 'formateur'];
     }
 
     function isValidTrainingRequest(data) {
@@ -44,6 +44,15 @@ service cloud.firestore {
         data.applicantEmail is string && data.applicantEmail.size() <= 120 &&
         data.moduleId is string && data.moduleId.size() <= 50 &&
         data.participantsCount is number && data.participantsCount > 0;
+    }
+
+    function isValidCgpmpAccountRequest(data) {
+      return data.keys().hasAll(['id', 'institution', 'permanentSecretaryName', 'permanentSecretaryEmail', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.institution is string && data.institution.size() <= 150 &&
+        data.permanentSecretaryName is string && data.permanentSecretaryName.size() <= 120 &&
+        data.permanentSecretaryEmail is string && data.permanentSecretaryEmail.size() <= 120 &&
+        data.status is string && data.status.size() <= 80;
     }
 
     function isValidCourse(data) {
@@ -107,6 +116,13 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidId(requestId) && isValidTrainingRequest(incoming());
       allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // CGPMP Account Creation Requests collection
+    match /cgpmpAccountRequests/{requestId} {
+      allow read: if true;
+      allow create, update: if isValidId(requestId) && isValidCgpmpAccountRequest(incoming());
       allow delete: if isAdmin();
     }
 

@@ -2,13 +2,36 @@ export type UserRole =
   | 'cgpmp_member' 
   | 'armp_agent' 
   | 'dgcmp_agent' 
+  | 'pme'
   | 'particulier' 
   | 'dfat_admin' 
   | 'formateur';
 
+export interface RecentReadingItem {
+  courseId: string;
+  courseCode: string;
+  courseTitle: string;
+  category: string;
+  lessonIndex: number;
+  lessonTitle: string;
+  progressPct: number;
+  readAt: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
+  nom?: string;
+  postnom?: string;
+  prenom?: string;
+  sexe?: 'M' | 'F';
+  civilite?: string;
+  dateNaissance?: string;
+  lieuNaissance?: string;
+  nationalite?: string;
+  etatCivil?: string;
+  pieceIdentite?: string;
+  adressePhysique?: string;
   email: string;
   role: UserRole;
   roleTitle: string;
@@ -28,9 +51,15 @@ export interface UserProfile {
   forumNotifications?: boolean;
   pushNotifications?: boolean;
   matricule?: string;
+  secondaryIdNumber?: string;
+  subCategory?: string;
+  specialty?: string;
+  legalForm?: string;
+  localContentShare?: string;
   bio?: string;
   coverBio?: string;
   location?: string;
+  province?: string;
   website?: string;
   joinDate?: string;
   twoFactorEnabled?: boolean;
@@ -43,7 +72,11 @@ export interface UserProfile {
   tutorReminders?: boolean;
   language?: string;
   timezone?: string;
-  // Données d'apprentissage, statistiques et médias persistés
+  // Données d'apprentissage, statistiques, dernière lecture et récentes lectures persistées
+  lastReadCourseId?: string;
+  lastReadLessonIndex?: number;
+  lastReadAt?: string;
+  recentReadings?: RecentReadingItem[];
   completedCourseIds?: string[];
   courseProgress?: Record<string, number>;
   completedLessonsByCourse?: Record<string, number[]>;
@@ -201,6 +234,78 @@ export interface TrainingRequest {
   dfatNote?: string;
   createdAt: string;
   decidedAt?: string;
+}
+
+export interface CgpmpCellMember {
+  id: string;
+  fullName: string;
+  nom?: string;
+  postnom?: string;
+  prenom?: string;
+  sexe?: 'M' | 'F';
+  email: string;
+  functionInCell: string;
+  phone?: string;
+  matricule?: string;
+  generatedPassword?: string;
+  credentialsSentAt?: string;
+  accountActivated?: boolean;
+}
+
+export interface CgpmpCreationDocumentInfo {
+  documentRef: string;
+  documentType: 'Arrêté Ministériel' | 'Arrêté Provincial' | 'Décret' | 'Décision Administrative' | 'Note de Service';
+  signedDate: string;
+  signatoryAuthority: string;
+  fileName: string;
+  fileSizeLabel: string;
+  fileMimeType: string;
+  uploadedAt: string;
+  verificationHash: string;
+  fileDataUrl?: string;
+}
+
+export interface DispatchedCredentialEmail {
+  id: string;
+  recipientName: string;
+  recipientEmail: string;
+  recipientRoleInCell: string;
+  loginEmail: string;
+  tempPassword: string;
+  matricule: string;
+  subject: string;
+  bodyPreview: string;
+  sentAt: string;
+  validatedByAdmin: string;
+}
+
+export interface CgpmpAccountCreationRequest {
+  id: string;
+  institution: string;
+  subCategory: string;
+  province: string;
+  permanentSecretaryName: string;
+  permanentSecretaryNom?: string;
+  permanentSecretaryPostnom?: string;
+  permanentSecretaryPrenom?: string;
+  permanentSecretarySexe?: 'M' | 'F';
+  permanentSecretaryCivilite?: string;
+  permanentSecretaryDateNaissance?: string;
+  permanentSecretaryLieuNaissance?: string;
+  permanentSecretaryNationalite?: string;
+  permanentSecretaryEtatCivil?: string;
+  permanentSecretaryPieceIdentite?: string;
+  permanentSecretaryEmail: string;
+  permanentSecretaryPhone: string;
+  permanentSecretaryMatricule: string;
+  creationDocument: CgpmpCreationDocumentInfo;
+  members: CgpmpCellMember[];
+  status: 'En attente de validation ARMP' | 'Validé par ARMP — Coordonnées envoyées' | 'Rejeté par ARMP';
+  armpAdminNote?: string;
+  validatedBy?: string;
+  createdAt: string;
+  decidedAt?: string;
+  dispatchedEmails?: DispatchedCredentialEmail[];
 }
 
 export interface LegalArticle {

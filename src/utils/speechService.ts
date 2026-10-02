@@ -7,9 +7,14 @@ import {
   detectSentenceEmotion,
   EMOTION_LABELS,
 } from '../workers/avatarExpressionWorker';
+import {
+  type TtsEmotionalTag,
+  extractTtsEmotionalTags,
+  reanchorEmotionalTagsToBoundaries,
+} from './microGestureLibrary';
 
-export type LipViseme = 'closed' | 'narrow' | 'medium' | 'wide' | 'round';
-export type { AvatarEmotion };
+export type LipViseme = 'closed' | 'narrow' | 'medium' | 'open' | 'wide' | 'round';
+export type { AvatarEmotion, TtsEmotionalTag };
 
 export type NeuralVoicePersona = 'vivienne' | 'denise' | 'eloise' | 'charline';
 export type VoicePersona = NeuralVoicePersona;
@@ -51,6 +56,7 @@ export interface SpeechPlaybackState {
   viseme?: LipViseme;
   emotion?: AvatarEmotion;
   emotionLabel?: string;
+  emotionalTags?: TtsEmotionalTag[];
   // Facial & Gestural Expression Signals Synchronized with Voice
   eyebrowLift?: number; // 0..1 expressive eyebrow arch on stressed syllables
   headTiltDeg?: number; // -3.5..+3.5 deg natural head tilt
@@ -67,6 +73,8 @@ interface DecodedNeuralEntry {
   envelope5ms?: Float32Array | null;
   audioDataUrl: string;
   wordBoundaries: TtsWordBoundary[];
+  emotionalTags: TtsEmotionalTag[];
+  emotion?: AvatarEmotion;
   provider: NonNullable<SpeechPlaybackState['voiceProvider']>;
 }
 
@@ -493,7 +501,7 @@ class SpeechService {
     forceQueue?: boolean;
     customSentences?: string[];
   };
-  private preferredPersona: NeuralVoicePersona = 'denise';
+  private preferredPersona: NeuralVoicePersona = 'vivienne';
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private cadenceTimer: number | null = null;
   private lastBoundaryCharIndex = 0;
@@ -507,7 +515,14 @@ class SpeechService {
   private currentEnvelope5ms: Float32Array | null = null;
   private webSpeechOriginMs = 0;
   private webSpeechBoundaries: TtsWordBoundary[] = [];
-  private sentenceWorkerListener: ((sentence: string, wordBoundaries: TtsWordBoundary[], emotion?: AvatarEmotion) => void) | null = null;
+  private sentenceWorkerListener:
+    | ((
+        sentence: string,
+        wordBoundaries: TtsWordBoundary[],
+        emotion?: AvatarEmotion,
+        emotionalTags?: TtsEmotionalTag[]
+      ) => void)
+    | null = null;
   private lastNotifyTimeMs = 0;
   private lastNotifiedSentence = -1;
   private lastNotifiedPlaying = false;
@@ -612,22 +627,32 @@ class SpeechService {
   }
 
   public onSentenceBoundariesLoaded(
-    cb: (sentence: string, wordBoundaries: TtsWordBoundary[], emotion?: AvatarEmotion) => void
+    cb: (
+      sentence: string,
+      wordBoundaries: TtsWordBoundary[],
+      emotion?: AvatarEmotion,
+      emotionalTags?: TtsEmotionalTag[]
+    ) => void
   ) {
     this.sentenceWorkerListener = cb;
   }
 
-  // Zero-lag articulatory clock with +75ms biomechanical pre-phonatory lead
-  // (compensates for browser frame scanout and ensures lips/jaw reach target posture right as the phoneme sounds)
+  // Zero-lag articulatory clock with +20ms single-frame scanout lead
+  // (locks mouth/head articulation to the exact millisecond the vocal audio hits the speakers)
   private getExactAudioStreamElapsedMs(
     nowMs: number = typeof performance !== 'undefined' ? performance.now() : Date.now()
   ): number {
-    const ARTICULATORY_LEAD_MS = 75;
-    if (this.audioCtx && this.currentSourceNode) {
+    const ARTICULATORY_LEAD_MS = 20;
+    if (this.audioCtx && this.currentSourceNode && this.audioCtx.state === 'running') {
       const elapsedSec = Math.max(0, this.audioCtx.currentTime - this.currentStartTimeCtx);
       return elapsedSec * this.currentPlaybackRate * 1000 + ARTICULATORY_LEAD_MS;
     }
-    if (this.currentAudioElement) {
+    if (
+      this.currentAudioElement &&
+      !this.currentAudioElement.paused &&
+      !this.currentAudioElement.ended &&
+      this.currentAudioElement.currentTime > 0.002
+    ) {
       return Math.max(0, (this.currentAudioElement.currentTime || 0) * 1000 + ARTICULATORY_LEAD_MS);
     }
     if (this.currentUtterance && this.webSpeechOriginMs > 0) {
@@ -649,7 +674,20 @@ class SpeechService {
     emotion: AvatarEmotion;
   } {
     const st = this.state;
-    const isSpeaking = Boolean(st.isPlaying && !st.isLoading);
+    const hasActiveWebAudio = Boolean(
+      this.currentSourceNode && this.audioCtx && this.audioCtx.state === 'running'
+    );
+    const hasActiveHtmlAudio = Boolean(
+      this.currentAudioElement &&
+        !this.currentAudioElement.paused &&
+        !this.currentAudioElement.ended &&
+        this.currentAudioElement.currentTime > 0.002
+    );
+    const hasActiveWebSpeech = Boolean(this.currentUtterance && this.webSpeechOriginMs > 0);
+
+    const isSpeaking = Boolean(
+      st.isPlaying && !st.isLoading && (hasActiveWebAudio || hasActiveHtmlAudio || hasActiveWebSpeech)
+    );
     const activeEmotion: AvatarEmotion = st.emotion || 'pedagogical';
     if (!isSpeaking) {
       return {
@@ -666,9 +704,7 @@ class SpeechService {
     const streamElapsedMs = this.getExactAudioStreamElapsedMs(nowMs);
 
     let acousticRms = 0;
-    // 1. Primary: 5ms (200 Hz) pre-decoded PCM waveform envelope at the articulatory lead millisecond
-    // Blends instantaneous energy at streamElapsedMs with a 20ms pre-phonatory onset window so the jaw
-    // never waits for the vowel peak before opening, while closing immediately when the syllable ends.
+    // 1. Primary: 5ms (200 Hz) pre-decoded PCM waveform envelope at the exact hardware audio millisecond
     if (this.currentEnvelope5ms && this.currentEnvelope5ms.length > 0 && streamElapsedMs >= 0) {
       const env = this.currentEnvelope5ms;
       const lastIdx = env.length - 1;
@@ -677,14 +713,12 @@ class SpeechService {
       const idx1 = Math.min(lastIdx, idx0 + 1);
       const frac = exactFrame - idx0;
       const currVal = env[idx0] * (1 - frac) + env[idx1] * frac;
-      const lookahead1 = env[Math.min(lastIdx, idx0 + 2)]; // +10ms
-      const lookahead2 = env[Math.min(lastIdx, idx0 + 4)]; // +20ms
-      // If current & lookahead are both quiet, drop immediately to 0 for crisp consonant/pause closure;
-      // otherwise anticipate the rising vowel onset so the mouth is already open when the sound hits!
-      if (currVal < 0.022 && lookahead1 < 0.028) {
+      const lookahead1 = env[Math.min(lastIdx, idx0 + 1)]; // +5ms
+      const lookahead2 = env[Math.min(lastIdx, idx0 + 2)]; // +10ms
+      if (currVal < 0.022 && lookahead1 < 0.026) {
         acousticRms = 0;
       } else {
-        acousticRms = Math.max(currVal, lookahead1 * 0.92, lookahead2 * 0.80);
+        acousticRms = currVal * 0.65 + Math.max(currVal, lookahead1 * 0.92, lookahead2 * 0.82) * 0.35;
       }
     } else if (this.currentAnalyser) {
       // 2. Fallback: Live Web Audio AnalyserNode
@@ -692,7 +726,7 @@ class SpeechService {
       if (this.liveTimeDomainBuffer.length !== fftLen) {
         this.liveTimeDomainBuffer = new Uint8Array(fftLen);
       }
-      this.currentAnalyser.getByteTimeDomainData(this.liveTimeDomainBuffer);
+      this.currentAnalyser.getByteTimeDomainData(this.liveTimeDomainBuffer as Uint8Array<ArrayBuffer>);
       let sumSquares = 0;
       for (let i = 0; i < fftLen; i++) {
         const norm = (this.liveTimeDomainBuffer[i] - 128) / 128;
@@ -702,13 +736,17 @@ class SpeechService {
       acousticRms = Math.min(1, rms * 6.0);
     }
 
+    const isQuietPause = Boolean(
+      st.isPauseBetweenWords || (this.currentEnvelope5ms && acousticRms < 0.020)
+    );
+
     return {
       isSpeaking: true,
       streamElapsedMs,
       acousticRms,
-      mouthOpenness: st.mouthOpenness ?? 0.78,
-      viseme: st.viseme || 'open',
-      isPauseBetweenWords: Boolean(st.isPauseBetweenWords),
+      mouthOpenness: isQuietPause ? 0 : st.mouthOpenness ?? 0.72,
+      viseme: isQuietPause ? 'closed' : st.viseme || 'open',
+      isPauseBetweenWords: isQuietPause,
       emotion: activeEmotion,
     };
   }
@@ -741,7 +779,7 @@ class SpeechService {
       if (this.liveTimeDomainBuffer.length !== fftLen) {
         this.liveTimeDomainBuffer = new Uint8Array(fftLen);
       }
-      this.currentAnalyser.getByteTimeDomainData(this.liveTimeDomainBuffer);
+      this.currentAnalyser.getByteTimeDomainData(this.liveTimeDomainBuffer as Uint8Array<ArrayBuffer>);
       let sumSquares = 0;
       for (let i = 0; i < fftLen; i++) {
         const norm = (this.liveTimeDomainBuffer[i] - 128) / 128;
@@ -921,9 +959,31 @@ class SpeechService {
   }
 
   // Authentic Congolese phonetic adaptation for the 26 DRC Provinces, Capitals, Cities & Proper Nouns
-  // Prevents metropolitan French TTS accent traps (French /y/ for 'u', voiced /z/ for single 's', nasal 'in'/'un', silent final '-e', soft 'g')
+  // Prevents metropolitan French TTS accent traps (French /y/ for 'u', voiced /z/ for single 's', nasal 'in'/'un', silent final '-e', soft 'g', or English 'w')
   public normalizeCongoleseProperNounsForSpeech(text: string): string {
     return text
+      // 0. Ensure any opening "Bonjour [Titre/Nom]..." has a warm French anchor so the multilingual model never uses an English accent at the start
+      .replace(
+        /^Bonjour\s+(Monsieur|Madame|Ingénieur|Professeur|Docteur|Maître|Son Excellence)\s+([^,.!?]+?)\s*(?:\.\.\.|…)\s*/i,
+        'Bonjour et bienvenue, $1 $2, '
+      )
+      .replace(
+        /^Bonjour\s+([A-ZÀÂÉÈÊËÎÏÔÙÛÇ][^,.!?]{2,35}?)\s*(?:\.\.\.|…)\s*/i,
+        'Bonjour et bienvenue, $1, '
+      )
+      // Prevent any English-accented reading of first names (e.g. "Landry") or English loanwords at the start of sentences
+      .replace(/\bLandry\b/gi, 'Landri')
+      .replace(/\bstandstill\b/gi, 'délai de suspension')
+      .replace(/\be-procurement\b/gi, 'passation numérique')
+      .replace(/\bopen\s+data\b/gi, 'données ouvertes')
+      .replace(/\bopen\s+contracting\b/gi, 'commande publique ouverte')
+      .replace(/\bworkflow\b/gi, 'circuit de validation')
+      .replace(/\bcheck-lists?\b/gi, 'liste de vérification')
+      .replace(/\bchecklists?\b/gi, 'liste de vérification')
+      .replace(/\bplanning\b/gi, 'calendrier')
+      .replace(/\breporting\b/gi, 'rapport de suivi')
+      .replace(/\bmanagement\b/gi, 'pilotage')
+      .replace(/\bquiz\b/gi, 'questionnaire')
       // 1. Compound & Multi-word DRC Provinces (26 Provinces)
       .replace(/\bKongo[\s-]+Central\b/gi, 'Kongo-Central')
       .replace(/\bMa[iï][\s-]+Ndombe\b/gi, 'Maï-Ndombé')
@@ -937,11 +997,14 @@ class SpeechService {
       .replace(/\bSud[\s-]+Kivu\b/gi, 'Sud-Kivou')
       .replace(/\bNord[\s-]+Ubangi\b/gi, 'Nord-Oubangui')
       .replace(/\bSud[\s-]+Ubangi\b/gi, 'Sud-Oubangui')
-      // 2. Single-word DRC Provinces & Historic Regions (smooth, hyphen-free for natural human prosody)
-      .replace(/\bKinshasa\b/gi, 'Kinchassa')
+      // 2. Single-word DRC Provinces & Historic Regions (authentic Congolese oral vowels & consonants)
+      .replace(/\bKinshasa\b/gi, 'Ki-nchassa')
+      .replace(/\bKinchassa\b/gi, 'Ki-nchassa')
+      .replace(/\bKasa[iï][\s-]+Vubu\b/gi, 'Kassa-Voubou')
       .replace(/\bKasa[iï]\b/gi, 'Kassaï')
-      .replace(/\bKwilu\b/gi, 'Kwilou')
-      .replace(/\bKwango\b/gi, 'Kwango')
+      .replace(/\bKwilu\b/gi, 'Kouilou')
+      .replace(/\bKwilou\b/gi, 'Kouilou')
+      .replace(/\bKwango\b/gi, 'Kouango')
       .replace(/\bSankuru\b/gi, 'Sankourou')
       .replace(/\bManiema\b/gi, 'Maniéma')
       .replace(/\bIturi\b/gi, 'Itouri')
@@ -955,7 +1018,8 @@ class SpeechService {
       .replace(/\bUbangi\b/gi, 'Oubangui')
       .replace(/\bKivu\b/gi, 'Kivou')
       .replace(/\bBandundu\b/gi, 'Bandoundou')
-      // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities & Districts (hyphen-free single words)
+      .replace(/\bKatanga\b/gi, 'Katanga')
+      // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities, Communes & Districts
       .replace(/\bLubumbashi\b/gi, 'Louboumbachi')
       .replace(/\bKisangani\b/gi, 'Kissangani')
       .replace(/\bBukavu\b/gi, 'Boukavou')
@@ -963,14 +1027,18 @@ class SpeechService {
       .replace(/\bKananga\b/gi, 'Kananga')
       .replace(/\bMbandaka\b/gi, 'Mbandaka')
       .replace(/\bMatadi\b/gi, 'Matadi')
-      .replace(/\bKolwezi\b/gi, 'Kolwézi')
+      .replace(/\bBoma\b/gi, 'Boma')
+      .replace(/\bGoma\b/gi, 'Goma')
+      .replace(/\bKolwezi\b/gi, 'Kolouézi')
+      .replace(/\bKolwézi\b/gi, 'Kolouézi')
       .replace(/\bLikasi\b/gi, 'Likassi')
       .replace(/\bKipushi\b/gi, 'Kipouchi')
       .replace(/\bKasumbalesa\b/gi, 'Kassoumbaléssa')
       .replace(/\bTshikapa\b/gi, 'Tchikapa')
-      .replace(/\bKikwit\b/gi, 'Kikwit')
+      .replace(/\bKikwit\b/gi, 'Kikouite')
       .replace(/\bKenge\b/gi, 'Kéngué')
-      .replace(/\bInongo\b/gi, 'Inongo')
+      .replace(/\bInongo\b/gi, 'I-nongo')
+      .replace(/\bInga\b/gi, 'I-nga')
       .replace(/\bBoende\b/gi, 'Boéndé')
       .replace(/\bGemena\b/gi, 'Guéména')
       .replace(/\bGbadolite\b/gi, 'Gbadolité')
@@ -978,17 +1046,21 @@ class SpeechService {
       .replace(/\bBumba\b/gi, 'Boumba')
       .replace(/\bIsiro\b/gi, 'Issiro')
       .replace(/\bBunia\b/gi, 'Bounia')
-      .replace(/\bKindu\b/gi, 'Kindou')
+      .replace(/\bKindu\b/gi, 'Kine dou')
+      .replace(/\bKindou\b/gi, 'Kine dou')
       .replace(/\bKalemie\b/gi, 'Kalémi')
       .replace(/\bKamina\b/gi, 'Kamina')
       .replace(/\bKabinda\b/gi, 'Kabinda')
       .replace(/\bLusambo\b/gi, 'Loussambo')
-      .replace(/\bMwene[\s-]+Ditu\b/gi, 'Mwéné-Ditou')
+      .replace(/\bMwene[\s-]+Ditu\b/gi, 'Mouéné-Ditou')
+      .replace(/\bMwéné[\s-]+Ditou\b/gi, 'Mouéné-Ditou')
       .replace(/\bUvira\b/gi, 'Ouvira')
       .replace(/\bButembo\b/gi, 'Boutémbo')
       .replace(/\bBeni\b/gi, 'Béni')
       .replace(/\bMuanda\b/gi, 'Mouanda')
       .replace(/\bMoanda\b/gi, 'Mouanda')
+      .replace(/\bZongo\b/gi, 'Zongo')
+      .replace(/\bKimpese\b/gi, 'Kime-péssé')
       .replace(/\bGombe\b/gi, 'Gombé')
       .replace(/\bLukunga\b/gi, 'Loukounga')
       .replace(/\bFuna\b/gi, 'Founa')
@@ -996,13 +1068,24 @@ class SpeechService {
       .replace(/\bMasina\b/gi, 'Massina')
       .replace(/\bLimete\b/gi, 'Limété')
       .replace(/\bNgaliema\b/gi, 'Ngaliéma')
-      .replace(/\bKintambo\b/gi, 'Kinetambo')
-      .replace(/\bBandalungwa\b/gi, 'Bandaloungwa')
+      .replace(/\bKintambo\b/gi, 'Ki-ntambo')
+      .replace(/\bKinetambo\b/gi, 'Ki-ntambo')
+      .replace(/\bBandalungwa\b/gi, 'Bandaloungoua')
+      .replace(/\bBandaloungwa\b/gi, 'Bandaloungoua')
       .replace(/\bSelembao\b/gi, 'Sélémbao')
-      .replace(/\bKimbanseke\b/gi, 'Kimbanséké')
+      .replace(/\bKimbanseke\b/gi, 'Kime-banséké')
+      .replace(/\bKimbanséké\b/gi, 'Kime-banséké')
       .replace(/\bMaluku\b/gi, 'Maloukou')
-      // 4. Proper Names & Surnames of DRC Practitioners & Historical Figures
-      .replace(/\bKibakweto\b/gi, 'Kibakwéto')
+      .replace(/\bKalamu\b/gi, 'Kalamou')
+      .replace(/\bBarumbu\b/gi, 'Baroumbou')
+      .replace(/\bLingwala\b/gi, 'Li-ngouala')
+      .replace(/\bMatete\b/gi, 'Matété')
+      .replace(/\bLemba\b/gi, 'Lémba')
+      .replace(/\bNsele\b/gi, 'Nsélé')
+      .replace(/\bMont[\s-]+Ngafula\b/gi, 'Mont-Ngafoula')
+      // 4. Proper Names & Surnames of DRC Practitioners & Historical Figures (pure French phonetics without English 'w')
+      .replace(/\bKibakweto\b/gi, 'Kibakouéto')
+      .replace(/\bKibakwéto\b/gi, 'Kibakouéto')
       .replace(/\bMukendi\b/gi, 'Moukéndi')
       .replace(/\bKabangu\b/gi, 'Kabangou')
       .replace(/\bIlunga\b/gi, 'Ilounga')
@@ -1015,14 +1098,22 @@ class SpeechService {
       .replace(/\bMobutu\b/gi, 'Moboutou')
       .replace(/\bLukonde\b/gi, 'Loukondé')
       .replace(/\bMbuyi\b/gi, 'Mbouyi')
+      .replace(/\bTshiamala\b/gi, 'Tchiamala')
+      .replace(/\bKabasele\b/gi, 'Kabassélé')
+      .replace(/\bLukoji\b/gi, 'Loukodji')
+      .replace(/\bLukusa\b/gi, 'Loukoussa')
+      .replace(/\bLufungula\b/gi, 'Loufoungoula')
+      .replace(/\bMavungu\b/gi, 'Mavoungou')
       .replace(/\bMutombo\b/gi, 'Moutombo')
       .replace(/\bMulumba\b/gi, 'Mouloumba')
       .replace(/\bNgalula\b/gi, 'Ngaloula')
       .replace(/\bMputu\b/gi, 'Mpoutou')
       .replace(/\bKyungu\b/gi, 'Kyoungou')
-      .replace(/\bLukwebo\b/gi, 'Loukwébo')
+      .replace(/\bLukwebo\b/gi, 'Loukouébo')
+      .replace(/\bLoukwébo\b/gi, 'Loukouébo')
       .replace(/\bSuminwa\b/gi, 'Souminoua')
       .replace(/\bTuluka\b/gi, 'Toulouka')
+      .replace(/\bKapend\b/gi, 'Kapénd')
       // 5. General Congolese proper-noun phonetic rule for capitalized Tsh- names
       .replace(/\bTsh([a-zàâéèêëîïôùû]+)/g, 'Tch$1');
   }
@@ -1133,11 +1224,22 @@ class SpeechService {
       .replace(/\bUSD\b/g, 'dollars américains')
       .replace(/\b([Dd]e\s+la|[Àà]\s+la|[Ee]n|[Ll]a)\s+RDC\b/g, '$1 République Démocratique du Congo')
       .replace(/\bRDC\b/g, 'la République Démocratique du Congo')
-      .replace(/(\d+)\s*%/g, '$1 pourcent')
-      // Replace colons and em-dashes with natural breathing commas so prosody never sounds like a machine reading form labels
+      .replace(/(\d+)\s*%/g, '$1 pour cent')
+      // Preserve natural conversational French punctuation so fr-FR-VivienneMultilingualNeural
+      // produces its authentic breath pauses (~180ms on commas, ~400ms between sentences)
+      .replace(/\s*\(([^)]+)\)\s*/g, ', $1, ')
+      .replace(/\s*[➔→]+\s*/g, ', puis ')
+      .replace(/\s*•\s*/g, '. ')
+      .replace(/\s*\+\s*/g, ', ainsi que ')
+      .replace(/\s*&\s*/g, ' et ')
       .replace(/\s*:\s*([A-ZÀÂÉÈÊËÎÏÔÙÛÇ])/g, (_m, ch) => `, ${ch.toLowerCase()}`)
       .replace(/\s*:\s*/g, ', ')
+      .replace(/\s*;\s*/g, ', ')
       .replace(/\s*—\s*/g, ', ')
+      .replace(/\.{4,}/g, '...')
+      .replace(/\s*,\s*,+/g, ', ')
+      .replace(/\s+\./g, '.')
+      .replace(/\s+,/g, ',')
       .replace(/\s+/g, ' ')
       .trim()
     );
@@ -1147,7 +1249,8 @@ class SpeechService {
     const clean = this.normalizeForSpeech(raw);
     if (!clean) return [];
 
-    const rawChunks = clean.split(/(?<=[.!?:\n])\s+/);
+    // Do not split on ellipsis '...' so short greetings or transitions stay connected to their French sentence
+    const rawChunks = clean.split(/(?<!\.\.)(?<=[.!?:\n])\s+/);
     const result: string[] = [];
 
     for (const chunk of rawChunks) {
@@ -1171,6 +1274,12 @@ class SpeechService {
       }
     }
 
+    // Merge any short opening fragment (< 50 chars) with the following sentence so the neural voice has full French context
+    if (result.length >= 2 && result[0].length < 50) {
+      result[1] = `${result[0]} ${result[1]}`.trim();
+      result.shift();
+    }
+
     return result.length > 0 ? result : [clean];
   }
 
@@ -1180,14 +1289,18 @@ class SpeechService {
     if (!voices || voices.length === 0) return null;
 
     const frVoices = voices.filter(
-      (v) => v.lang.toLowerCase().startsWith('fr') || v.lang.toLowerCase().includes('fr')
+      (v) => v.lang.toLowerCase().startsWith('fr') || v.lang.toLowerCase().includes('fr-fr') || v.lang.toLowerCase().includes('fr_fr')
     );
-    const pool = frVoices.length > 0 ? frVoices : voices;
+    if (frVoices.length === 0) return null;
+
+    const pool = frVoices;
 
     const naturalFemininePriority = [
       'vivienne',
       'denise',
       'eloise',
+      'charline',
+      'ariane',
       'brigitte',
       'céleste',
       'celeste',
@@ -1196,8 +1309,8 @@ class SpeechService {
       'audrey',
       'aurélie',
       'aurelie',
-      'julie',
       'hortense',
+      'julie',
       'marie',
       'céline',
       'celine',
@@ -1206,8 +1319,8 @@ class SpeechService {
       'chloé',
       'chloe',
       'google français',
-      'natural',
-      'neural',
+      'français',
+      'french',
     ];
 
     for (const keyword of naturalFemininePriority) {
@@ -1235,16 +1348,18 @@ class SpeechService {
     effectiveDurationSec: number,
     playbackRate: number,
     analyser: AnalyserNode | null,
-    wordBoundaries: TtsWordBoundary[]
+    wordBoundaries: TtsWordBoundary[],
+    emotionalTags?: TtsEmotionalTag[],
+    emotionOverride?: AvatarEmotion
   ) {
     this.clearCadenceTimer();
     if (typeof window === 'undefined' || !sentence) return;
 
     this.currentStartTimeCtx = startTimeCtx;
     this.currentPlaybackRate = playbackRate;
-    const detectedEmotion = detectSentenceEmotion(sentence);
+    const detectedEmotion = emotionOverride || detectSentenceEmotion(sentence);
     if (this.sentenceWorkerListener) {
-      this.sentenceWorkerListener(sentence, wordBoundaries || [], detectedEmotion);
+      this.sentenceWorkerListener(sentence, wordBoundaries || [], detectedEmotion, emotionalTags);
     }
 
     const timeDomainData = analyser ? new Uint8Array(analyser.fftSize) : null;
@@ -1378,11 +1493,14 @@ class SpeechService {
     const charsPerMs = (19.5 * Math.max(0.85, Math.min(1.6, effectiveRate))) / 1000;
     const estDurationMs = Math.max(600, Math.round(sentence.length / charsPerMs));
     this.webSpeechBoundaries = buildClientEstimatedBoundaries(sentence, estDurationMs);
+    const detectedEmo = detectSentenceEmotion(sentence);
+    const extractedTags = extractTtsEmotionalTags(sentence, this.webSpeechBoundaries, detectedEmo);
     if (this.sentenceWorkerListener) {
       this.sentenceWorkerListener(
         sentence,
         this.webSpeechBoundaries,
-        detectSentenceEmotion(sentence)
+        detectedEmo,
+        extractedTags
       );
     }
     const leadChars = Math.max(3, Math.round(sentence.length * 0.06));
@@ -1433,7 +1551,7 @@ class SpeechService {
     timeoutMs: number = 15000
   ): Promise<DecodedNeuralEntry | null> {
     if (!this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `prof_eloquente_v14::${voice}::${sentence}`;
+    const cacheKey = `prof_vivienne_smile_v21::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1467,10 +1585,20 @@ class SpeechService {
                 let decoded: AudioBuffer | null = null;
 
                 try {
+                  const rawBuf = base64ToArrayBuffer(data.audioData);
                   const ctx = this.getAudioContext();
-                  if (ctx) {
-                    const arrayBuffer = base64ToArrayBuffer(data.audioData);
-                    decoded = await ctx.decodeAudioData(arrayBuffer);
+                  if (ctx && ctx.state === 'running') {
+                    decoded = await ctx.decodeAudioData(rawBuf.slice(0));
+                  }
+                  if (!decoded && typeof window !== 'undefined') {
+                    const OfflineCtx =
+                      window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+                    if (OfflineCtx) {
+                      const offline = new OfflineCtx(1, 1, 24000);
+                      decoded = await offline.decodeAudioData(rawBuf.slice(0));
+                    } else if (ctx) {
+                      decoded = await ctx.decodeAudioData(rawBuf.slice(0));
+                    }
                   }
                 } catch {
                   decoded = null;
@@ -1483,12 +1611,22 @@ class SpeechService {
                   env5ms,
                   decoded ? decoded.duration * 1000 : undefined
                 );
+                const resolvedEmotion: AvatarEmotion =
+                  (data.emotion as AvatarEmotion) || detectSentenceEmotion(sentence);
+                const calibratedTags = reanchorEmotionalTagsToBoundaries(
+                  Array.isArray(data.emotionalTags) ? data.emotionalTags : [],
+                  calibratedBoundaries,
+                  sentence,
+                  resolvedEmotion
+                );
 
                 const entry: DecodedNeuralEntry = {
                   audioBuffer: decoded,
                   envelope5ms: env5ms,
                   audioDataUrl,
                   wordBoundaries: calibratedBoundaries,
+                  emotionalTags: calibratedTags,
+                  emotion: resolvedEmotion,
                   provider: data.provider || 'neural-vivienne-hd',
                 };
                 this.audioBufferCache.set(cacheKey, entry);
@@ -1688,11 +1826,11 @@ class SpeechService {
     const sentenceIdx = this.currentSentenceIndex;
     const sentence = this.queue[sentenceIdx];
     const voiceName = this.currentOptions?.voice || this.preferredPersona;
-    const userSpeed = this.currentOptions?.speed || 0.9;
+    const userSpeed = this.currentOptions?.speed || 1.0;
 
-    // 1. Primary: Expressive Neural Human Voice (Denise HD / Charline HD / Vivienne HD)
+    // 1. Primary: Reference Expressive Neural Voice (fr-FR-VivienneMultilingualNeural)
     if (this.neuralTtsAvailable) {
-      const cacheKey = `prof_eloquente_v14::${voiceName}::${sentence}`;
+      const cacheKey = `prof_vivienne_smile_v21::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -1720,20 +1858,10 @@ class SpeechService {
 
       if (neuralEntry) {
         const ctx = this.getAudioContext();
-        // Server already synthesizes at poised rate (-6%), so 0.9x maps to 1.000 native buffer rate
-        // -> ZERO pitch lowering/distortion! Voice stays 100% bright, warm, and feminine.
-        const sentenceEmotion = detectSentenceEmotion(sentence);
-        const emotionRateFactor =
-          sentenceEmotion === 'empathetic'
-            ? 0.97
-            : sentenceEmotion === 'solemn'
-            ? 0.98
-            : sentenceEmotion === 'enthusiastic'
-            ? 1.02
-            : 1.0;
-        const baseRate = userSpeed <= 0.86 ? 0.95 : userSpeed <= 0.93 ? 1.0 : 1.05;
-        const playbackRate = baseRate * emotionRateFactor;
-        let { audioBuffer, audioDataUrl, wordBoundaries, provider } = neuralEntry;
+        // Keep playbackRate at 1.000 for normal speeds so Web Audio API preserves the exact reference voice timbre & tempo!
+        const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
+        const playbackRate = userSpeed <= 0.86 ? 0.94 : userSpeed >= 1.08 ? 1.08 : 1.0;
+        let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
 
         if (ctx && ctx.state === 'suspended') {
           await Promise.race([
@@ -1757,6 +1885,13 @@ class SpeechService {
                 audioBuffer.duration * 1000
               );
               wordBoundaries = neuralEntry.wordBoundaries;
+              emotionalTags = reanchorEmotionalTagsToBoundaries(
+                emotionalTags || [],
+                wordBoundaries,
+                sentence,
+                sentenceEmotion
+              );
+              neuralEntry.emotionalTags = emotionalTags;
             }
           } catch {}
         }
@@ -1770,47 +1905,49 @@ class SpeechService {
           );
           neuralEntry.wordBoundaries = wordBoundaries;
         }
+        if (!emotionalTags || emotionalTags.length === 0) {
+          emotionalTags = extractTtsEmotionalTags(sentence, wordBoundaries, sentenceEmotion);
+          neuralEntry.emotionalTags = emotionalTags;
+        }
 
-        // Path 1A: Web Audio API with Emotion-Adaptive Studio Vocal Warmth & Presence EQ
+        // Path 1A: Web Audio API with Natural Broadcast Condenser Microphone Warmth & De-Harshing EQ
         if (ctx && ctx.state === 'running' && audioBuffer) {
           try {
             const sourceNode = ctx.createBufferSource();
             sourceNode.buffer = audioBuffer;
             sourceNode.playbackRate.value = playbackRate;
 
-            // 1. Emotion-Adaptive Warmth Peaking Filter (230 Hz)
+            // 1. Transparent Studio Condenser Warmth (195 Hz) preserving VivienneMultilingualNeural's natural timbre
             const warmthFilter = ctx.createBiquadFilter();
             warmthFilter.type = 'peaking';
-            warmthFilter.frequency.value = sentenceEmotion === 'solemn' ? 205 : 230;
-            warmthFilter.Q.value = 1.0;
-            warmthFilter.gain.value =
-              sentenceEmotion === 'empathetic'
-                ? 2.8
-                : sentenceEmotion === 'solemn'
-                ? 2.4
-                : 1.8;
+            warmthFilter.frequency.value = 195;
+            warmthFilter.Q.value = 0.8;
+            warmthFilter.gain.value = 0.5;
 
-            // 2. Emotion-Adaptive Silky Presence High-Shelf Filter (4200 Hz)
+            // 2. Natural Articulatory Presence (2800 Hz)
             const presenceFilter = ctx.createBiquadFilter();
-            presenceFilter.type = 'highshelf';
-            presenceFilter.frequency.value = 4200;
-            presenceFilter.gain.value =
-              sentenceEmotion === 'enthusiastic' || sentenceEmotion === 'encouraging'
-                ? 3.2
-                : sentenceEmotion === 'curious'
-                ? 2.8
-                : 2.4;
+            presenceFilter.type = 'peaking';
+            presenceFilter.frequency.value = 2800;
+            presenceFilter.Q.value = 0.85;
+            presenceFilter.gain.value = 0.4;
+
+            // 3. Full-Bandwidth Studio Air (14000 Hz)
+            const deHarshFilter = ctx.createBiquadFilter();
+            deHarshFilter.type = 'lowpass';
+            deHarshFilter.frequency.value = 14000;
+            deHarshFilter.Q.value = 0.7;
 
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 256;
             analyser.smoothingTimeConstant = 0.14;
 
             const gainNode = ctx.createGain();
-            gainNode.gain.value = 1.12;
+            gainNode.gain.value = 1.08;
 
             sourceNode.connect(warmthFilter);
             warmthFilter.connect(presenceFilter);
-            presenceFilter.connect(analyser);
+            presenceFilter.connect(deHarshFilter);
+            deHarshFilter.connect(analyser);
             analyser.connect(gainNode);
             gainNode.connect(ctx.destination);
 
@@ -1863,7 +2000,7 @@ class SpeechService {
                 if (this.isCancelled) return;
                 this.currentSentenceIndex++;
                 this.playNextInQueue();
-              }, 380);
+              }, 680);
             };
 
             const exactStartAt = ctx.currentTime;
@@ -1874,7 +2011,9 @@ class SpeechService {
               effectiveDuration,
               playbackRate,
               analyser,
-              wordBoundaries
+              wordBoundaries,
+              emotionalTags,
+              sentenceEmotion
             );
             return;
           } catch (err) {
@@ -1886,6 +2025,9 @@ class SpeechService {
         if (audioDataUrl) {
           try {
             const audioEl = new Audio(audioDataUrl);
+            (audioEl as any).preservesPitch = true;
+            (audioEl as any).mozPreservesPitch = true;
+            (audioEl as any).webkitPreservesPitch = true;
             audioEl.playbackRate = playbackRate;
             this.currentAudioElement = audioEl;
 
@@ -1926,9 +2068,14 @@ class SpeechService {
             };
             this.notify();
 
-            // Track HTMLAudioElement currentTime with WordBoundaries & Emotion
+            // Track HTMLAudioElement currentTime with WordBoundaries, Emotion & Emotional Tags
             if (this.sentenceWorkerListener) {
-              this.sentenceWorkerListener(sentence, wordBoundaries || [], sentenceEmotion);
+              this.sentenceWorkerListener(
+                sentence,
+                wordBoundaries || [],
+                sentenceEmotion,
+                emotionalTags
+              );
             }
             this.clearCadenceTimer();
             this.cadenceTimer = window.setInterval(() => {
@@ -2015,7 +2162,7 @@ class SpeechService {
                 if (this.isCancelled) return;
                 this.currentSentenceIndex++;
                 this.playNextInQueue();
-              }, 380);
+              }, 680);
             };
 
             try {
@@ -2047,7 +2194,7 @@ class SpeechService {
 
     const utterance = new SpeechSynthesisUtterance(sentence);
     utterance.lang = 'fr-FR';
-    const effectiveRate = Math.max(0.82, Math.min(1.2, 0.9 * userSpeed));
+    const effectiveRate = Math.max(0.84, Math.min(0.98, 0.90 * userSpeed));
     utterance.rate = effectiveRate;
     utterance.pitch = 1.0;
 
@@ -2129,8 +2276,11 @@ class SpeechService {
     utterance.onend = () => {
       if (this.isCancelled || this.currentUtterance !== utterance) return;
       this.clearCadenceTimer();
-      this.currentSentenceIndex++;
-      this.playNextInQueue();
+      window.setTimeout(() => {
+        if (this.isCancelled) return;
+        this.currentSentenceIndex++;
+        this.playNextInQueue();
+      }, 650);
     };
 
     utterance.onerror = () => {

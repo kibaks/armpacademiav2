@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Video,
   Award,
-  RefreshCw
+  RefreshCw,
+  Music
 } from 'lucide-react';
 import { CourseModule, UserProfile } from '../types';
 import {
@@ -26,14 +27,17 @@ import {
   LipViseme,
   analyzeFrenchPhonemeAt
 } from '../utils/speechService';
+import { ambientMusicService } from '../utils/ambientMusicService';
 import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
-import imgTutrice from '../assets/images/tutrice_sereine_claude.jpg';
+import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
+import imgTutrice from '../assets/images/aisha_portrait_sans_main_1790912759956.jpg';
 import {
   ContextualSceneType,
   ProfessorContextualStage,
   buildSynchronizedLessonScreens,
   formatProtocolPrecedenceIdentity
 } from './ProfessorFilmScenes';
+import { getPersonalizedLessonAdaptation } from '../utils/profileCoursePersonalization';
 
 export type AnimationTemplateId = 'whiteboard' | 'character' | 'infographic' | 'casestudy';
 
@@ -48,6 +52,9 @@ interface AnimatedLessonPlayerProps {
   playbackState?: SpeechPlaybackState;
   isPreloading?: boolean;
   currentProfile?: UserProfile;
+  compactPreview?: boolean;
+  requestedScreenIndex?: { idx: number; ts: number } | null;
+  onActiveScreenChange?: (screenIdx: number) => void;
 }
 
 export const ANIMATION_TEMPLATE_META: {
@@ -105,7 +112,9 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   onTemplateChange,
   autoPlayVoice = true,
   isPreloading: isCoursePreloading = false,
-  currentProfile
+  currentProfile,
+  requestedScreenIndex,
+  onActiveScreenChange
 }) => {
   const lesson = course.lessons?.[lessonIndex] || course.lessons?.[0];
   const safeTitle = lesson?.title || course.title || 'Module Marchés Publics RDC';
@@ -129,21 +138,26 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     [effectiveUserProfile]
   );
 
+  const profileAdaptation = useMemo(() => {
+    if (!effectiveUserProfile || !lesson) return null;
+    return getPersonalizedLessonAdaptation(course, lesson, lessonIndex, effectiveUserProfile);
+  }, [course, lesson, lessonIndex, effectiveUserProfile]);
+
   const [manualSceneOverride, setManualSceneOverride] = useState<ContextualSceneType | null>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [voiceMuted, setVoiceMuted] = useState<boolean>(!autoPlayVoice);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(0.9);
-  const [voicePersona, setVoicePersona] = useState<VoicePersona>('denise');
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  const [voicePersona, setVoicePersona] = useState<VoicePersona>('vivienne');
 
   const [pipExpanded, setPipExpanded] = useState<boolean>(false);
   const [manualWinkUntil, setManualWinkUntil] = useState<number>(0);
 
-  // Google Flow (Veo 3.1) & Real-Time Wav2Lip Video Engine state
+  // Real-Time 60 FPS Wav2Lip Video Engine state (active by default)
   const [flowVideoUrl, setFlowVideoUrl] = useState<string | null>(null);
   const [flowVideoStatus, setFlowVideoStatus] = useState<'idle' | 'generating' | 'ready' | 'live_neural'>('live_neural');
   const [flowStatusMessage, setFlowStatusMessage] = useState<string>(
-    'Synthèse Vidéo Réelle Wav2Lip HD (60 FPS) active • Synchronisation labiale & mouvements complets'
+    'Synthèse Vidéo Réelle Wav2Lip HD (60 FPS) active • Synchronisation labiale, émotions & gestuelle des mains'
   );
   const flowVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -160,6 +174,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   // Direct DOM Refs for 60 FPS Zero-Lag Wav2Lip Video Synthesis & HUD Overlays
   const headerWav2LipCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const headerEmotionBadgeRef = useRef<SVGTextElement | null>(null);
+  const headerPostureBadgeRef = useRef<SVGTextElement | null>(null);
+  const headerVisemeBadgeRef = useRef<SVGTextElement | null>(null);
   const headerEqBarRefs = useRef<(SVGRectElement | null)[]>([]);
 
   // Smoothly damped facial & gesture kinematics ref so Aïsha's movements are fluid and poised
@@ -226,7 +242,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     speechService.prewarmSentences(calibratedLesson.sentences, voicePersona);
   }, [calibratedLesson.sentences, voicePersona]);
 
-  // Subscribe to speechService state without spamming full-component re-renders on micro-ticks
+  // Subscribe to speechService state with fine-grained 0.2% resolution so the hand draws in real time with the voice
   useEffect(() => {
     const unsub = speechService.subscribe((state) => {
       const prev = playbackStateRef.current;
@@ -237,7 +253,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         prev.isLoading !== state.isLoading ||
         prev.currentSentence !== state.currentSentence ||
         prev.currentId !== state.currentId ||
-        Math.abs((prev.wordProgressPct || 0) - (state.wordProgressPct || 0)) >= 1
+        Math.abs((prev.wordProgressPct || 0) - (state.wordProgressPct || 0)) >= 0.2
       ) {
         setPlaybackState(state);
       }
@@ -320,12 +336,12 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     }
   }, [isSpeaking, isPlaying]);
 
-  // Synchronize filmProgress tightly with voice sentence & wordProgressPct (without playbackState tearing down the interval!)
+  // Synchronize filmProgress tightly with voice sentence & wordProgressPct (38ms cadence for real-time hand-drawing lockstep)
   useEffect(() => {
     if (!isPlaying && !isSpeaking) return;
 
-    const intervalMs = 60;
-    const fallbackTotalDurationMs = (60 * 1000) / playbackSpeed;
+    const intervalMs = 38;
+    const fallbackTotalDurationMs = (75 * 1000) / playbackSpeed;
     let subTick = 0;
 
     const commitProgressIfChanged = (targetPct: number) => {
@@ -333,7 +349,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       setFilmProgress((prev) => {
         const prevAct = Math.floor(prev / 20);
         const nextAct = Math.floor(targetPct / 20);
-        if (prevAct !== nextAct || Math.abs(targetPct - prev) >= 0.35 || targetPct === 0 || targetPct >= 99.8) {
+        if (prevAct !== nextAct || Math.abs(targetPct - prev) >= 0.06 || targetPct === 0 || targetPct >= 99.8) {
           return targetPct;
         }
         return prev;
@@ -341,11 +357,12 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     };
 
     const timer = setInterval(() => {
-      subTick = (subTick + 1) % 5;
+      subTick = (subTick + 1) % 2;
       if (subTick === 0) {
         setTickCount((c) => c + 1);
       }
-      const liveState = playbackStateRef.current || speechService.getState();
+      const liveState = speechService.getState();
+      playbackStateRef.current = liveState;
       const activeForThisLesson = Boolean(
         liveState?.currentId &&
           (liveState.currentId === currentLessonAudioId ||
@@ -375,13 +392,13 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         const wordRatio = clamp01((liveState.wordProgressPct ?? liveState.wordProgress ?? 0) / 100);
         const targetVoicePct = act.startPct + wordRatio * (act.endPct - act.startPct);
 
-        // Lock strictly inside [act.startPct, act.endPct - 0.05] so the screen NEVER switches before the voice finishes the sentence!
+        // Lock strictly inside [act.startPct, act.endPct - 0.02] so the screen NEVER switches before the voice finishes the sentence!
         const current = smoothProgressRef.current;
         let next: number;
         if (current < act.startPct || current > act.endPct) {
           next = targetVoicePct;
         } else {
-          next = current + (targetVoicePct - current) * 0.55;
+          next = current + (targetVoicePct - current) * 0.68;
         }
         const clampedInAct = Math.max(act.startPct, Math.min(act.endPct - 0.02, next));
         commitProgressIfChanged(clampedInAct);
@@ -495,16 +512,16 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const handleCycleSpeed = () => {
     speechService.unlockAudio();
-    const speeds = [0.9, 0.85, 1.0];
-    const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 0.9;
+    const speeds = [1.0, 0.9, 0.85];
+    const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 1.0;
     setPlaybackSpeed(nextSpeed);
     if (isPlaying && !voiceMuted) startVoiceAtProgress(filmProgress, nextSpeed);
   };
 
   const handleCycleVoicePersona = () => {
     speechService.unlockAudio();
-    const personas: VoicePersona[] = ['denise', 'charline', 'vivienne', 'eloise'];
-    const nextPersona = personas[(personas.indexOf(voicePersona) + 1) % personas.length] || 'denise';
+    const personas: VoicePersona[] = ['vivienne', 'charline', 'denise', 'eloise'];
+    const nextPersona = personas[(personas.indexOf(voicePersona) + 1) % personas.length] || 'vivienne';
     setVoicePersona(nextPersona);
     speechService.setVoicePersona(nextPersona);
     if (isPlaying && !voiceMuted) {
@@ -521,6 +538,26 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     setManualWinkUntil(Date.now() + 850);
   };
 
+  const [musicEnabled, setMusicEnabled] = useState(() => ambientMusicService.getState().enabled);
+
+  useEffect(() => {
+    const unsubMusic = ambientMusicService.subscribe((st) => {
+      setMusicEnabled(st.enabled);
+    });
+    return () => unsubMusic();
+  }, []);
+
+  useEffect(() => {
+    if (isPlaying) {
+      ambientMusicService.start();
+    } else {
+      ambientMusicService.stop();
+    }
+    return () => {
+      ambientMusicService.stop();
+    };
+  }, [isPlaying]);
+
   // Strictly lock activeAct to the spoken sentence index whenever voice is active!
   const activeAct = useMemo(() => {
     if (isVoiceDriving && playbackState?.currentSentence) {
@@ -534,21 +571,33 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     return calibratedLesson.acts[idx] || calibratedLesson.acts[0];
   }, [isVoiceDriving, playbackState?.currentSentence, calibratedLesson.acts, filmProgress]);
 
-  // Exact 0..1 progress inside the active screen
+  // Exact 0..1 progress inside the active screen (smoothly locked to live audio wordProgressPct)
   const actVoiceProgress = useMemo(() => {
-    if (isSpeaking && playbackState) {
-      const wp = playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0;
-      return clamp01(wp / 100);
-    }
     if (isPreloading) {
       return 0;
     }
     const actSpan = Math.max(1, activeAct.endPct - activeAct.startPct);
-    return clamp01((filmProgress - activeAct.startPct) / actSpan);
+    const smoothRatio = clamp01((filmProgress - activeAct.startPct) / actSpan);
+    if (isSpeaking && playbackState) {
+      const wp = clamp01((playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0) / 100);
+      return clamp01(smoothRatio * 0.45 + wp * 0.55);
+    }
+    return smoothRatio;
   }, [isSpeaking, isPreloading, playbackState, filmProgress, activeAct]);
 
   const currentScreenCard =
     calibratedLesson.sceneData.screens[activeAct.index] || calibratedLesson.sceneData.screens[0];
+
+  useEffect(() => {
+    onActiveScreenChange?.(activeAct.index);
+  }, [activeAct.index, onActiveScreenChange]);
+
+  useEffect(() => {
+    if (requestedScreenIndex && typeof requestedScreenIndex.idx === 'number') {
+      handleJumpToScreen(requestedScreenIndex.idx);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedScreenIndex?.ts]);
 
   // ===========================================================================
   // SYNCHRONIZED LASER POINTER:
@@ -662,22 +711,18 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       effectiveViseme === 'wide' ? 0.18 : effectiveViseme === 'round' ? -0.12 : 0.04;
     const targetSmile = clamp01(isActivelySpeaking ? 0.65 + visemeSmileBoost : 0.74);
 
-    // Expressive, natural whole-head movement (Tilt, Nod, 3D Lateral Turn) synchronized with speech prosody
-    const targetTilt = isActivelySpeaking
-      ? Math.sin(tickCount * 0.042) * 3.4 +
-        Math.cos(tickCount * 0.026) * 1.5 +
-        (targetMouthOpenness > 0.5 ? Math.sin(tickCount * 0.08) * 0.8 : 0)
-      : Math.sin(tickCount * 0.016) * 1.3;
+    // Visage droit et non incliné : aucun basculement latéral (targetTilt = 0)
+    const targetTilt = 0;
 
     const targetNod = isActivelySpeaking
-      ? Math.sin(tickCount * 0.068) * 7.2 +
-        Math.cos(tickCount * 0.039) * 3.8 +
-        targetMouthOpenness * 8.4
-      : Math.sin(tickCount * 0.02) * 2.6;
+      ? Math.sin(tickCount * 0.068) * 5.2 +
+        Math.cos(tickCount * 0.039) * 2.8 +
+        targetMouthOpenness * 6.4
+      : Math.sin(tickCount * 0.02) * 1.8;
 
     const targetTurn = isActivelySpeaking
-      ? Math.sin(tickCount * 0.031) * 11.8 + Math.cos(tickCount * 0.055) * 4.6
-      : Math.sin(tickCount * 0.014) * 3.4;
+      ? Math.sin(tickCount * 0.031) * 2.2
+      : Math.sin(tickCount * 0.014) * 0.8;
 
     const targetBrowLift = isActivelySpeaking
       ? -(targetMouthOpenness * 5.4 + Math.max(0, Math.sin(tickCount * 0.085)) * 2.8)
@@ -693,7 +738,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       gazeY: 0,
       blinkLeft: 0,
       blinkRight: 0,
-      headTilt: prev.headTilt + (targetTilt - prev.headTilt) * 0.22,
+      headTilt: 0,
       headNod: prev.headNod + (targetNod - prev.headNod) * 0.25,
       headTurn: prev.headTurn + (targetTurn - prev.headTurn) * 0.22
     };
@@ -726,13 +771,28 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const isActivelySpeakingRef = useRef(false);
   isActivelySpeakingRef.current = isActivelySpeaking;
 
+  const [manualStudioEmotion, setManualStudioEmotion] = useState<AvatarEmotion | 'auto'>('auto');
+  const manualStudioEmotionRef = useRef<AvatarEmotion | 'auto'>('auto');
+  manualStudioEmotionRef.current = manualStudioEmotion;
+
+  const handleSelectStudioEmotion = (emo: AvatarEmotion | 'auto') => {
+    setManualStudioEmotion(emo);
+    if (emo !== 'auto') {
+      avatarExpressionEngine.setEmotion(emo);
+    }
+  };
+
   useEffect(() => {
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: headerWav2LipCanvasRef.current,
-      wav2lipViewport: { x: 155, y: 133, w: 699, h: 447 },
+      wav2lipViewport: { x: 174, y: 134, w: 548, h: 552 },
       emotionBadgeEl: headerEmotionBadgeRef.current,
+      postureBadgeEl: headerPostureBadgeRef.current,
+      visemeBadgeEl: headerVisemeBadgeRef.current,
       eqBars: headerEqBarRefs.current,
       isSpeakingOverride: () => Boolean(isActivelySpeakingRef.current),
+      emotionOverride: () =>
+        manualStudioEmotionRef.current !== 'auto' ? manualStudioEmotionRef.current : undefined,
     });
     return unregister;
   }, []);
@@ -822,29 +882,16 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     [safeTitle, userPrecedence.spokenFullName]
   );
 
-  // Check on mount if Google Flow video is already cached without auto-exhausting Veo quota
+  // Keep 60 FPS WebGL Wav2Lip engine active by default
   useEffect(() => {
-    let cancelled = false;
-    fetch('/api/ai/flow-video/cache-check')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data) return;
-        if (data.cached && data.videoUrl) {
-          setFlowVideoUrl(data.videoUrl);
-          setFlowVideoStatus('ready');
-          setFlowStatusMessage('Vidéo Google Flow (Veo HD) active & synchronisée avec Vivienne HD');
-        } else {
-          setFlowVideoStatus('live_neural');
-          setFlowStatusMessage('Studio Google Flow Neural HD actif • Expressions faciales & voix synchronisées');
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    setFlowVideoUrl(null);
+    setFlowVideoStatus('live_neural');
+    setFlowStatusMessage(
+      'Synthèse Vidéo Réelle Wav2Lip HD (60 FPS) active • Synchronisation labiale, sourire & port de tête féminin'
+    );
   }, []);
 
-  // Synchronize HTML5 <video> playback with Aïsha's voice when Google Flow MP4 is active
+  // Synchronize optional HTML5 <video> playback if ever loaded
   useEffect(() => {
     const vid = flowVideoRef.current;
     if (!vid || !flowVideoUrl) return;
@@ -909,132 +956,119 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       {/* =========================================================================== */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b-2 border-amber-500/30 p-3 sm:p-4">
         <div className="flex flex-col md:flex-row items-stretch gap-3.5 sm:gap-4">
-          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (BOUCHE, YEUX, SOURCILS, POMMETTES) */}
+          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (POSTURE DROITE, VISAGE FACE CAMÉRA & MAINS EXPRESSIVES) */}
           <div
             className={`relative shrink-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 bg-slate-950 shadow-xl ${
               isActivelySpeaking ? 'border-cyan-400 shadow-cyan-500/20' : 'border-amber-400/70'
             } ${
               pipExpanded
-                ? 'w-full md:w-[390px] xl:w-[440px] h-[230px] sm:h-[255px]'
-                : 'w-full md:w-[310px] lg:w-[350px] xl:w-[380px] h-[205px] sm:h-[225px]'
+                ? 'w-full md:w-[360px] xl:w-[400px] h-[300px] sm:h-[330px]'
+                : 'w-full md:w-[300px] lg:w-[330px] xl:w-[350px] h-[265px] sm:h-[290px]'
             } mx-auto md:mx-0`}
           >
-            {/* Optional Veo MP4 Video Layer when generated by Google Flow */}
-            {flowVideoUrl && (
-              <video
-                ref={flowVideoRef}
-                src={flowVideoUrl}
-                muted
-                loop
-                playsInline
-                className="absolute inset-0 w-full h-full object-cover z-10"
-              />
-            )}
-
             {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer (540-Triangle Dense Mesh + Oral Composite) */}
             <canvas
               ref={headerWav2LipCanvasRef}
-              width={720}
-              height={460}
-              className={`w-full h-full block object-cover ${
-                flowVideoUrl ? 'opacity-0 pointer-events-none' : 'opacity-100'
-              }`}
+              width={640}
+              height={560}
+              className="w-full h-full block object-cover opacity-100"
             />
 
-            {/* Broadcast HUD Overlay (Emotion Badge, Wav2Lip HD Status & Voice Equalizer) */}
+            {/* Broadcast HUD Overlay (Compact Top Bar leaving Aïsha's face, torso & speaking hands 100% unobstructed) */}
             <svg
-              viewBox="0 0 360 230"
+              viewBox="0 0 360 260"
               className="absolute inset-0 w-full h-full pointer-events-none z-20"
               preserveAspectRatio="xMidYMid slice"
             >
-              <defs>
-                <linearGradient id="headerVignetteGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#020617" stopOpacity="0.14" />
-                  <stop offset="68%" stopColor="#020617" stopOpacity="0" />
-                  <stop offset="100%" stopColor="#020617" stopOpacity="0.58" />
-                </linearGradient>
-              </defs>
-
-              {/* Subtle Studio Broadcast Vignette */}
-              <rect x="0" y="0" width="360" height="230" fill="url(#headerVignetteGrad)" />
-
-              {/* Top Overlay Badge inside Video Frame: Active Facial & Vocal Emotion */}
-              <g transform="translate(8, 8)">
+              {/* Top Overlay Badge: Active Facial & Vocal Emotion + Equalizer */}
+              <g transform="translate(6, 6)">
                 <rect
                   x="0"
                   y="0"
-                  width="238"
-                  height="20"
-                  rx="10"
+                  width="244"
+                  height="18"
+                  rx="9"
                   fill="#0F172A"
-                  fillOpacity="0.88"
+                  fillOpacity="0.78"
                   stroke="#22D3EE"
-                  strokeWidth="1.2"
+                  strokeWidth="1"
                 />
-                <circle cx="12" cy="10" r="4" fill={isActivelySpeaking ? '#10B981' : '#F59E0B'} />
+                <circle cx="10" cy="9" r="3.5" fill={isActivelySpeaking ? '#10B981' : '#F59E0B'} />
                 <text
                   ref={headerEmotionBadgeRef}
-                  x="22"
-                  y="13.5"
+                  x="18"
+                  y="12.2"
                   fill="#ECFEFF"
-                  fontSize="8.2"
+                  fontSize="7.4"
                   fontWeight="900"
                 >
                   🎓 Éloquence &amp; Sérénité académique
                 </text>
-              </g>
-
-              {/* Top-Right Wav2Lip HD 60 FPS Real-Video Badge */}
-              <g transform="translate(254, 8)">
-                <rect
-                  x="0"
-                  y="0"
-                  width="98"
-                  height="20"
-                  rx="10"
-                  fill="#020617"
-                  fillOpacity="0.86"
-                  stroke={isActivelySpeaking ? '#10B981' : '#38BDF8'}
-                  strokeWidth="1.1"
-                />
-                <circle cx="11" cy="10" r="3.2" fill={isActivelySpeaking ? '#10B981' : '#38BDF8'} />
-                <text x="19" y="13.2" fill="#E0F2FE" fontSize="7.4" fontWeight="900">
-                  WAV2LIP HD • 60 FPS
-                </text>
-              </g>
-
-              {/* Bottom Overlay Bar inside Video Frame: Posture & Voice Equalizer */}
-              <g transform="translate(8, 200)">
-                <rect
-                  x="0"
-                  y="0"
-                  width="344"
-                  height="22"
-                  rx="8"
-                  fill="#0F172A"
-                  fillOpacity="0.9"
-                  stroke={isActivelySpeaking ? '#22D3EE' : '#475569'}
-                  strokeWidth="1.2"
-                />
-                <text x="10" y="14.5" fill="#FDE68A" fontSize="8.5" fontWeight="900">
-                  🎙️ {gestureKinematics.gestureName.slice(0, 42)}
-                </text>
-                <g transform="translate(296, 5)">
+                <g transform="translate(204, 3)">
                   {[0, 1, 2, 3, 4].map((bIdx) => (
                     <rect
                       key={bIdx}
                       ref={(el) => {
                         headerEqBarRefs.current[bIdx] = el;
                       }}
-                      x={bIdx * 7.5}
+                      x={bIdx * 6.5}
                       y={4.25}
-                      width="4"
+                      width="3.5"
                       height={3.5}
-                      rx="2"
+                      rx="1.75"
                       fill={isActivelySpeaking ? '#22D3EE' : '#64748B'}
                     />
                   ))}
                 </g>
+              </g>
+
+              {/* Top-Right 6-Viseme Phonetic Articulation Badge */}
+              <g transform="translate(256, 6)">
+                <rect
+                  x="0"
+                  y="0"
+                  width="98"
+                  height="18"
+                  rx="9"
+                  fill="#020617"
+                  fillOpacity="0.78"
+                  stroke={isActivelySpeaking ? '#10B981' : '#38BDF8'}
+                  strokeWidth="1"
+                />
+                <circle cx="10" cy="9" r="3" fill={isActivelySpeaking ? '#10B981' : '#38BDF8'} />
+                <text
+                  ref={headerVisemeBadgeRef}
+                  x="17"
+                  y="12.0"
+                  fill="#E0F2FE"
+                  fontSize="7.0"
+                  fontWeight="900"
+                >
+                  VISÈME 1/6
+                </text>
+              </g>
+
+              {/* Hidden/Compact Top-Left Sub-Pill for Posture Ref so hands at bottom remain 100% uncovered */}
+              <g transform="translate(6, 26)" opacity="0.82">
+                <rect
+                  x="0"
+                  y="0"
+                  width="126"
+                  height="14"
+                  rx="7"
+                  fill="#0F172A"
+                  fillOpacity="0.68"
+                />
+                <text
+                  ref={headerPostureBadgeRef}
+                  x="7"
+                  y="9.8"
+                  fill="#FDE68A"
+                  fontSize="5.8"
+                  fontWeight="800"
+                >
+                  🌸 Port de tête féminin • Sourire
+                </text>
               </g>
             </svg>
           </div>
@@ -1071,6 +1105,43 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Middle Row: Interactive Wav2Lip Emotion, Smile & Full-Image Gesture Selector */}
+            <div className="flex flex-wrap items-center gap-1.5 py-1 border-y border-slate-800/80">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 mr-1 flex items-center gap-1">
+                <span>😊</span>
+                <span>Expressions &amp; Sourire Wav2Lip :</span>
+              </span>
+              {(
+                [
+                  { id: 'auto', icon: '✨', label: 'Auto Voix' },
+                  { id: 'smiling', icon: '😊', label: 'Sourire' },
+                  { id: 'pedagogical', icon: '🎓', label: 'Éloquence' },
+                  { id: 'empathetic', icon: '💛', label: 'Empathie' },
+                  { id: 'curious', icon: '🤔', label: 'Réflexion' },
+                  { id: 'enthusiastic', icon: '🌟', label: 'Joie' },
+                  { id: 'astonished', icon: '😲', label: 'Alerte' },
+                  { id: 'solemn', icon: '⚖️', label: 'Rigueur' },
+                ] as Array<{ id: AvatarEmotion | 'auto'; icon: string; label: string }>
+              ).map((preset) => {
+                const active = manualStudioEmotion === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleSelectStudioEmotion(preset.id)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                      active
+                        ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-xs'
+                        : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+                    }`}
+                  >
+                    <span>{preset.icon}</span>
+                    <span>{preset.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Bottom Row in Header Block: Screen Navigation & Engine Status */}
@@ -1117,7 +1188,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         </div>
       </div>
 
-      {/* 2. WIDESCREEN 16:9 FULL-HEIGHT STAGE (NO DUPLICATE SUBTITLES AT BOTTOM) */}
+      {/* 2. WIDESCREEN 16:9 FULL-HEIGHT WHITEBOARD STAGE WITH HAND DRAWING EXPLANATIONS */}
       {showRawVideo && uploadedVideoUrl ? (
         <div className="relative aspect-video w-full bg-black">
           <video
@@ -1129,7 +1200,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
           />
         </div>
       ) : (
-        <div className="relative w-full aspect-video bg-slate-950 overflow-hidden">
+        <div className="relative w-full aspect-video min-h-[380px] sm:min-h-[480px] lg:min-h-[560px] xl:min-h-[640px] bg-slate-950 overflow-hidden">
           <svg
             viewBox="0 0 960 540"
             className="w-full h-full block"
@@ -1150,7 +1221,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
               </filter>
             </defs>
 
-            {/* A. STUDIO BACKGROUND & FULL-HEIGHT PRESENTATION BOARD (516px tall) */}
+            {/* A. STUDIO BACKGROUND & FULL-HEIGHT PRESENTATION WHITEBOARD (516px tall) */}
             <rect x="0" y="0" width="960" height="540" fill="url(#studioWallBg)" />
 
             <g filter="url(#cardDropShadow)">
@@ -1172,7 +1243,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
               <circle cx="54" cy="29" r="5" fill="#FBBF24" />
               <circle cx="70" cy="29" r="5" fill="#10B981" />
               <text x="90" y="33" fill="#FFFFFF" fontSize="11" fontWeight="900">
-                {calibratedLesson.sceneData.sceneBadge} — {safeTitle.slice(0, 44).toUpperCase()}
+                ✍️ TABLEAU BLANC GRAND ÉCRAN — {safeTitle.slice(0, 46).toUpperCase()}
               </text>
               <text
                 x="926"
@@ -1183,11 +1254,11 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
                 fontWeight="800"
                 fontFamily="monospace"
               >
-                {activeAct.zoneTitle} • SYNC {Math.round(actVoiceProgress * 100)}%
+                PLANCHE {activeAct.index + 1}/5 • DESSIN EN DIRECT {Math.round(actVoiceProgress * 100)}%
               </text>
             </g>
 
-            {/* B. DEDICATED FULL SCREEN FOR THE CURRENT CARD ONLY + REALISTIC ANIMATION */}
+            {/* B. WIDESCREEN STAGE WITH ARTICULATED HAND DRAWING EXPLANATIONS */}
             <ProfessorContextualStage
               data={calibratedLesson.sceneData}
               activeActIndex={activeAct.index}
@@ -1196,35 +1267,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
               courseLegalRef={course.legalRef}
               onSelectScreen={handleJumpToScreen}
             />
-
-            {/* C. LUMINOUS PROFESSOR LASER FOCUS POINTER SYNCHRONIZED WITH SPOKEN ZONE */}
-            <g transform={`translate(${focusPose.x}, ${focusPose.y})`}>
-              <circle
-                cx="0"
-                cy="0"
-                r={isActivelySpeaking ? 13 + dampedFace.mouth * 6 : 11}
-                fill="#F59E0B"
-                fillOpacity="0.26"
-                stroke="#F59E0B"
-                strokeWidth="2.2"
-              />
-              <circle cx="0" cy="0" r="5" fill="#E11D48" stroke="#FFFFFF" strokeWidth="1.6" />
-              <g transform="translate(-96, -32)">
-                <rect
-                  x="0"
-                  y="0"
-                  width="192"
-                  height="21"
-                  rx="10.5"
-                  fill="#0F172A"
-                  stroke="#FBBF24"
-                  strokeWidth="1.5"
-                />
-                <text x="96" y="14" textAnchor="middle" fill="#FDE68A" fontSize="8.6" fontWeight="900">
-                  {focusPose.label.slice(0, 32)}
-                </text>
-              </g>
-            </g>
           </svg>
         </div>
       )}
@@ -1320,6 +1362,20 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
             <button
               type="button"
+              onClick={() => ambientMusicService.toggleEnabled()}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer ${
+                musicEnabled
+                  ? 'bg-indigo-950/75 border-indigo-400/50 text-indigo-200'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              }`}
+              title="Activer ou couper la musique douce d'ambiance au fond"
+            >
+              <Music className="w-3.5 h-3.5 text-amber-300" />
+              <span>{musicEnabled ? 'Musique douce : ON' : 'Musique : OFF'}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCycleSpeed}
               className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-black transition cursor-pointer"
               title="Vitesse de diction posée d'Aïsha"
@@ -1343,7 +1399,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
             </button>
           </div>
 
-          {/* 5 Quick Screen Jump Pills */}
+          {/* 5 Quick Screen Jump Pills (Structured 5 Pillars) */}
           <div className="flex items-center gap-1 overflow-x-auto">
             {calibratedLesson.sceneData.screens.map((scr, idx) => {
               const isAct = activeAct.index === idx;
@@ -1352,18 +1408,35 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
                   key={scr.screenNumber}
                   type="button"
                   onClick={() => handleJumpToScreen(idx)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition whitespace-nowrap ${
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition whitespace-nowrap cursor-pointer ${
                     isAct
                       ? 'bg-amber-400 text-slate-950 shadow-xs'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
                   }`}
                 >
-                  Écran {scr.screenNumber}/5
+                  {scr.shortTabLabel}
                 </button>
               );
             })}
           </div>
         </div>
+
+        {/* Bandeau d'adaptation personnalisée au profil connecté (comme avec la Tutrice Virtuelle) */}
+        {profileAdaptation && (
+          <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-start sm:items-center gap-2 min-w-0">
+              <span className="px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> {profileAdaptation.profileBadge}
+              </span>
+              <span className="text-[11px] text-slate-200 font-semibold italic truncate">
+                {profileAdaptation.animatedProfessorCallout}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono font-bold text-cyan-300 shrink-0">
+              Livrable : {profileAdaptation.expectedDeliverable.slice(0, 58)}…
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

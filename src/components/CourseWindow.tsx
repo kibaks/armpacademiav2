@@ -39,7 +39,10 @@ import {
   RefreshCw,
   Share2,
   ShieldCheck,
-  Film
+  Film,
+  Phone,
+  Mic,
+  Waves
 } from 'lucide-react';
 import { CourseModule, UserProfile, CourseQAItem } from '../types';
 import { ArmpLogo } from './ArmpLogo';
@@ -52,15 +55,21 @@ import {
 } from './ProfessorFilmScenes';
 import { saveCourseQAToFirestore, fetchCourseQAFromFirestore } from '../firebase';
 import { AnimatedLessonPlayer } from './AnimatedLessonPlayer';
+import { StructuredChapterArchitecture } from './StructuredChapterArchitecture';
+import {
+  getPersonalizedLessonAdaptation,
+  getProfilePedagogicalConfig
+} from '../utils/profileCoursePersonalization';
 
 interface CourseWindowProps {
   course: CourseModule;
   onClose: () => void;
   currentProfile: UserProfile;
   onCompleteModule: (courseId: string, score?: number) => void;
-  onUpdateCourseProgress?: (courseId: string, progressPct: number, completedLessonIndices: number[], quizScore?: number) => void;
+  onUpdateCourseProgress?: (courseId: string, progressPct: number, completedLessonIndices: number[], quizScore?: number, activeLessonIdx?: number) => void;
   onSaveCourseNote?: (courseId: string, lessonIdx: number, noteText: string) => void;
   onAskTutor?: (question: string) => void;
+  onCallTutor?: (action: 'chat' | 'call' | 'video' | 'voice', tutorId?: any, question?: string) => void;
 }
 
 type Mode = 'reading' | 'resources' | 'qa' | 'quiz' | 'certificate' | 'notes';
@@ -84,7 +93,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   onCompleteModule,
   onUpdateCourseProgress,
   onSaveCourseNote,
-  onAskTutor
+  onAskTutor,
+  onCallTutor
 }) => {
   // Preloader state
   const [isPreloading, setIsPreloading] = useState(true);
@@ -106,6 +116,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   // Video & Audio
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [activeCardScreenIdx, setActiveCardScreenIdx] = useState<number>(0);
+  const [requestedScreenJump, setRequestedScreenJump] = useState<{ idx: number; ts: number } | null>(null);
+  const [openSummaryVideoNow, setOpenSummaryVideoNow] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechRate, setSpeechRate] = useState<number>(0.92);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
@@ -323,7 +335,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   };
 
   // Lesson progression
-  const handleMarkAsCompleted = (index: number) => {
+  const handleMarkAsCompleted = (index: number, nextActiveIndex?: number) => {
     const next = new Set(completedLessons);
     next.add(index);
     const arr = Array.from(next);
@@ -332,16 +344,18 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     try {
       localStorage.setItem(`armp_completed_lessons_${course.id}`, JSON.stringify(arr));
     } catch {}
-    onUpdateCourseProgress?.(course.id, pct, arr);
+    onUpdateCourseProgress?.(course.id, pct, arr, undefined, nextActiveIndex ?? index);
   };
 
   const handleNextLesson = () => {
-    handleMarkAsCompleted(activeLessonIndex);
     if (activeLessonIndex < safeLessons.length - 1) {
-      setActiveLessonIndex(prev => prev + 1);
+      const nextIdx = activeLessonIndex + 1;
+      handleMarkAsCompleted(activeLessonIndex, nextIdx);
+      setActiveLessonIndex(nextIdx);
       setMode('reading');
       stopSpeech();
     } else {
+      handleMarkAsCompleted(activeLessonIndex, activeLessonIndex);
       setMode('quiz');
       stopSpeech();
     }
@@ -349,7 +363,11 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
   const handlePrevLesson = () => {
     if (activeLessonIndex > 0) {
-      setActiveLessonIndex(prev => prev - 1);
+      const prevIdx = activeLessonIndex - 1;
+      setActiveLessonIndex(prevIdx);
+      const arr = Array.from(completedLessons);
+      const pct = Math.min(100, Math.round((arr.length / Math.max(1, safeLessons.length)) * 100));
+      onUpdateCourseProgress?.(course.id, pct, arr, undefined, prevIdx);
       setMode('reading');
       stopSpeech();
     }
@@ -1037,17 +1055,29 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                 })}
               </div>
 
-              {/* Bottom Final Exam Trigger */}
-              <div className="p-3 border-t border-slate-800/60">
+              {/* Bottom Summary Video & Final Exam Triggers */}
+              <div className="p-3 border-t border-slate-800/60 space-y-2">
+                <button
+                  onClick={() => {
+                    setMode('reading');
+                    setOpenSummaryVideoNow(true);
+                    setIsMobileChaptersOpen(false);
+                    stopSpeech();
+                  }}
+                  className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/40 text-amber-300 font-black text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                >
+                  <Film className="w-4 h-4 text-amber-400 shrink-0" />
+                  {!isSidebarCollapsed && <span>🎬 Petite Vidéo Résumé du Cours</span>}
+                </button>
                 <button
                   onClick={() => {
                     setMode('quiz');
                     setIsMobileChaptersOpen(false);
                     stopSpeech();
                   }}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs shadow-md transition flex items-center justify-center space-x-1.5"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer"
                 >
-                  <Award className="w-4 h-4 text-slate-950" />
+                  <Award className="w-4 h-4 text-slate-950 shrink-0" />
                   {!isSidebarCollapsed && <span>Examen Certifiant Final</span>}
                 </button>
               </div>
@@ -1057,506 +1087,168 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
           )}
 
           {/* ======================================================================= */}
-          {/* CENTER CANVAS: READING & LESSON BODY (AGRANDI, RESPONSIVE, PLEIN ÉCRAN) */}
+          {/* CENTER CANVAS: WIDESCREEN HAND-DRAWING WHITEBOARD STUDIO (ÉCRAN LARGE)  */}
           {/* ======================================================================= */}
-          <main className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-6 xl:p-8 flex flex-col items-center">
+          <main className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4 xl:p-5 flex flex-col items-center">
             
-            {/* TAB 1: READING VIEW */}
+            {/* TAB 1: WIDESCREEN HAND-DRAWN WHITEBOARD VIEW (NO WALLS OF TEXT) */}
             {mode === 'reading' && (
-              <div className={`w-full ${isZenMode ? 'max-w-7xl 2xl:max-w-[1600px]' : 'max-w-6xl xl:max-w-7xl 2xl:max-w-[1460px]'} mx-auto space-y-6 pb-20`}>
+              <div className="w-full max-w-[1760px] mx-auto space-y-4 pb-14">
                 
-                {/* MEDIA BAR — 7 formats : Vidéo / Audio / Animation / IA PPT / PDF / Visio / Texte */}
+                {/* WIDESCREEN HAND-DRAWING WHITEBOARD PLAYER (MAIN EXPLANATION ENGINE) */}
+                <AnimatedLessonPlayer
+                  course={course}
+                  lesson={currentLesson}
+                  lessonIndex={activeLessonIndex}
+                  isSpeaking={isSpeaking}
+                  onToggleSpeech={toggleSpeech}
+                  playbackState={playbackState}
+                  isPreloading={isPreloading}
+                  currentProfile={currentProfile}
+                  requestedScreenIndex={requestedScreenJump}
+                  onActiveScreenChange={setActiveCardScreenIdx}
+                />
+
+                {/* STRUCTURED 5-PILLAR CHAPTER ARCHITECTURE + COURSE SUMMARY VIDEO */}
+                <StructuredChapterArchitecture
+                  course={course}
+                  lesson={currentLesson}
+                  lessonIndex={activeLessonIndex}
+                  currentProfile={currentProfile}
+                  activeScreenIndex={activeCardScreenIdx}
+                  onJumpToWhiteboardScreen={(idx) =>
+                    setRequestedScreenJump({ idx, ts: Date.now() })
+                  }
+                  onCompleteChapterAndNext={handleNextLesson}
+                  isChapterCompleted={completedLessons.has(activeLessonIndex)}
+                  isLastChapter={activeLessonIndex >= safeLessons.length - 1}
+                  autoOpenSummaryVideo={openSummaryVideoNow}
+                  onCloseSummaryVideo={() => setOpenSummaryVideoNow(false)}
+                />
+
+                {/* OPTIONAL COMPLEMENTARY MEDIA IF UPLOADED (PDF / VISIO / VIDEO) */}
                 {(() => {
                   const fmt = (currentLesson as any).format || 'animation';
                   const mediaUrl = (currentLesson as any).mediaUrl;
-                  const aiPrompt = (currentLesson as any).aiPrompt;
-                  const templateId = (currentLesson as any).templateId;
                   const visioLink = (currentLesson as any).visioLink;
                   const visioDate = (currentLesson as any).visioDate;
                   const visioPlatform = (currentLesson as any).visioPlatform;
-                  // Vidéo
-                  if (fmt === 'video') {
+
+                  if (fmt === 'pdf' && mediaUrl) {
                     return (
-                      <div className="rounded-3xl overflow-hidden border border-slate-800 bg-black shadow-2xl relative">
-                        {isVideoMode ? (
-                          <div className="w-full aspect-video bg-black flex items-center justify-center relative">
-                            <video src={mediaUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"} controls autoPlay playsInline className="w-full h-full object-contain" />
-                            <button onClick={() => setIsVideoMode(false)} className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 z-10"><BookOpen className="w-3.5 h-3.5" /><span>Mode Lecture</span></button>
+                      <div className="rounded-2xl border border-red-800/50 bg-slate-900/90 p-4 shadow-xl flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center"><FileText className="w-5 h-5" /></div>
+                          <div>
+                            <div className="text-[11px] font-bold text-red-300 uppercase">Support PDF Complémentaire</div>
+                            <div className="text-xs font-bold text-white">{currentLesson.title}.pdf</div>
                           </div>
-                        ) : (
-                          <div onClick={() => setIsVideoMode(true)} className="relative aspect-video sm:aspect-21/9 w-full bg-slate-950 flex items-center justify-center cursor-pointer group">
-                            <img src={course.coverImage} alt={course.title} className="absolute inset-0 w-full h-full object-cover opacity-45 group-hover:scale-105 transition duration-500" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/20" />
-                            <div className="relative flex flex-col items-center space-y-2">
-                              <div className="w-16 h-16 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-2xl group-hover:scale-110 transition"><Play className="w-7 h-7 fill-white ml-1" /></div>
-                              <span className="text-xs font-black uppercase tracking-wider text-white bg-black/60 px-3 py-1 rounded-full">🎬 Lancer la Vidéo ({currentLesson.duration})</span>
-                            </div>
-                            <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white text-xs">
-                              <span className="px-2.5 py-1 rounded-lg bg-black/70 font-mono text-[11px] font-bold">Chapitre {activeLessonIndex + 1} • {currentLesson.title}</span>
-                              <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-[11px]">Vidéo HD</span>
-                            </div>
-                          </div>
-                        )}
+                        </div>
+                        <a href={mediaUrl} target="_blank" rel="noreferrer" className="px-3.5 py-2 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center gap-1.5">
+                          <Download className="w-3.5 h-3.5" /> Télécharger le PDF
+                        </a>
                       </div>
                     );
                   }
-                  // Audio
-                  if (fmt === 'audio') {
-                    return (
-                      <div className="rounded-3xl border border-purple-800/50 bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 p-6 shadow-2xl">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0"><Headphones className="w-7 h-7" /></div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-bold text-purple-300 uppercase tracking-wider">🎙️ Leçon Audio • {currentLesson.duration}</div>
-                            <div className="text-sm font-bold text-white truncate">{currentLesson.title}</div>
-                          </div>
-                          <button onClick={toggleSpeech} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${isSpeaking ? 'bg-amber-500 text-slate-950' : 'bg-purple-600 text-white'}`}>{isSpeaking ? <><Pause className="w-4 h-4" /> Pause</> : <><Play className="w-4 h-4" /> Écouter</>}</button>
-                        </div>
-                        <div className="mt-4">
-                          {mediaUrl ? <audio controls src={mediaUrl} className="w-full" /> : <div className="p-3 rounded-xl bg-black/40 border border-white/10 text-xs text-slate-300">Aucun fichier audio uploadé — synthèse vocale disponible via le bouton Écouter</div>}
-                        </div>
-                        <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-400"><div className="flex gap-0.5">{[1,2,3,4,5,6,7,8,9,10,11,12].map(i=> <div key={i} className={`w-1 rounded-full ${i%3===0 ? 'h-6 bg-purple-400' : 'h-3 bg-slate-600'}`} />)}</div><span>Podcast • Lecture à 1x</span></div>
-                      </div>
-                    );
-                  }
-                  // Animation Animaker (Vidéo Animée Interactive)
-                  if (fmt === 'animation') {
-                    return (
-                      <AnimatedLessonPlayer
-                        course={course}
-                        lesson={currentLesson}
-                        lessonIndex={activeLessonIndex}
-                        isSpeaking={isSpeaking}
-                        onToggleSpeech={toggleSpeech}
-                        playbackState={playbackState}
-                        isPreloading={isPreloading}
-                        currentProfile={currentProfile}
-                      />
-                    );
-                  }
-                  // IA PPT
-                  if (fmt === 'ia_ppt') {
-                    return (
-                      <div className="rounded-3xl border border-indigo-800/50 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-6 shadow-2xl">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center"><Sparkles className="w-6 h-6" /></div>
-                          <div><div className="text-xs font-bold text-indigo-300 uppercase">🤖 IA • Présentation PPT</div><div className="text-sm font-bold text-white">Slides générées à partir du prompt</div></div>
-                          <span className="ml-auto px-2 py-1 rounded-lg bg-indigo-600 text-white text-[10px] font-mono">8 slides</span>
-                        </div>
-                        {aiPrompt && <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300 mb-3"><span className="font-bold text-indigo-300">Prompt :</span> {aiPrompt.slice(0,180)}{aiPrompt.length>180?'...':''}</div>}
-                        {mediaUrl ? (
-                          <div className="rounded-xl overflow-hidden border border-slate-700 bg-white p-2"><a href={mediaUrl} target="_blank" className="flex items-center gap-2 text-sm font-bold text-indigo-600"><FileText className="w-4 h-4" /> Ouvrir le PPT / PDF généré</a><iframe src={mediaUrl} className="w-full h-64 mt-2 rounded-lg border" title="ppt" /></div>
-                        ) : (
-                          <div className="grid grid-cols-4 gap-2">
-                            {[1,2,3,4,5,6,7,8].map(n=> <div key={n} className="aspect-[4/3] rounded-xl bg-white border border-slate-200 p-2 flex flex-col"><div className="text-[10px] font-mono text-indigo-600">Slide {n}</div><div className="text-[11px] font-bold text-slate-900 line-clamp-3 mt-1">{n===1 ? currentLesson.title : n===2 ? 'Objectifs pédagogiques' : n===8 ? 'Quiz final' : `Point clé ${n-1} — Loi 10/010`}</div><div className="mt-auto h-1 rounded-full bg-indigo-100"><div className="h-1 rounded-full bg-indigo-600" style={{width: `${60+n*5}%`}} /></div></div>)}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  // PDF
-                  if (fmt === 'pdf') {
-                    return (
-                      <div className="rounded-3xl border border-red-800/50 bg-gradient-to-br from-red-950 via-slate-900 to-slate-950 p-6 shadow-2xl">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center"><FileText className="w-6 h-6" /></div>
-                          <div><div className="text-xs font-bold text-red-300 uppercase">📄 Document PDF</div><div className="text-sm font-bold text-white truncate max-w-md">{mediaUrl ? mediaUrl.split('/').pop()?.slice(0,40) : currentLesson.title + '.pdf'}</div></div>
-                          {mediaUrl && <a href={mediaUrl} target="_blank" className="ml-auto px-3 py-1.5 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center gap-1"><Download className="w-3.5 h-3.5" /> Télécharger</a>}
-                        </div>
-                        {mediaUrl ? <iframe src={mediaUrl} className="w-full h-80 rounded-xl bg-white border" title="pdf" /> : <div className="p-8 rounded-xl bg-white text-center text-sm text-slate-500">Aucun PDF uploadé — le formateur ajoutera le support (DAO Type, guide, fiche).</div>}
-                      </div>
-                    );
-                  }
-                  // Visioconférence
+
                   if (fmt === 'visioconference') {
                     return (
-                      <div className="rounded-3xl border border-emerald-800/50 bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 p-6 shadow-2xl">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center"><Video className="w-6 h-6" /></div>
-                          <div><div className="text-xs font-bold text-emerald-300 uppercase">📹 Visioconférence • {visioPlatform || 'Zoom'}</div><div className="text-sm font-bold text-white">{currentLesson.title}</div><div className="text-xs text-slate-400">{visioDate ? new Date(visioDate).toLocaleString('fr-FR') : currentLesson.duration} • En direct</div></div>
+                      <div className="rounded-2xl border border-emerald-800/50 bg-slate-900/90 p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center"><Video className="w-5 h-5" /></div>
+                          <div>
+                            <div className="text-[11px] font-bold text-emerald-300 uppercase">Session Visio • {visioPlatform || 'Studio Visio HD'}</div>
+                            <div className="text-xs font-bold text-white">{visioDate ? new Date(visioDate).toLocaleString('fr-FR') : currentLesson.duration}</div>
+                          </div>
                         </div>
-                        <div className="aspect-video rounded-2xl bg-black flex flex-col items-center justify-center p-6 text-center border border-white/10">
-                          <div className="w-16 h-16 rounded-full bg-emerald-600 text-white flex items-center justify-center mb-3"><Video className="w-8 h-8" /></div>
-                          <div className="text-white font-bold">Cours en direct prévu</div>
-                          <div className="text-xs text-slate-400 max-w-md mt-1">Rejoignez la salle virtuelle à l'heure indiquée. Le formateur partagera son écran et répondra à vos questions.</div>
-                          {visioLink ? <a href={visioLink} target="_blank" className="mt-4 px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm flex items-center gap-2">Rejoindre la visio →</a> : <div className="mt-4 px-6 py-3 rounded-2xl bg-slate-800 text-slate-400 font-bold text-sm">Lien à venir</div>}
+                        <div className="flex items-center gap-2">
+                          {visioLink && (
+                            <a href={visioLink} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5">
+                              <Video className="w-3.5 h-3.5" /> Salle externe →
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onCallTutor?.(
+                                'video',
+                                'denise',
+                                `Peux-tu m'expliquer en visio les points essentiels du chapitre « ${currentLesson.title} » (${course.code}) ?`
+                              )
+                            }
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5"
+                          >
+                            <Video className="w-3.5 h-3.5" /> Visio avec la Tutrice
+                          </button>
                         </div>
                       </div>
                     );
                   }
-                  // Texte / Autre — pas de barre média, juste header
                   return null;
                 })()}
 
-                {/* AUDIO NARRATOR & LESSON HEADER CARD */}
-                <div className={`p-5 sm:p-7 rounded-3xl border ${themeStyles.cardBg} space-y-5 transition-colors`}>
+                {/* COMPACT WIDESCREEN CHAPTER FOOTER: LEGAL ARTICLES & CHAPTER NAVIGATION */}
+                <div className={`p-4 sm:p-5 rounded-3xl border ${themeStyles.cardBg} flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors`}>
                   
-                  {/* Lesson Meta Strip */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4 border-slate-800/40">
-                    <div className="space-y-1">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#0866FF]">
-                        Chapitre {activeLessonIndex + 1} sur {course.lessons.length} • {progress}% complété
+                  {/* Left: Legal Foundations Pills */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-[#0866FF] flex items-center gap-1.5 mr-1">
+                      <Scale className="w-4 h-4" />
+                      <span>Références Loi 10/010 :</span>
+                    </span>
+                    {currentKeyArticles.length > 0 ? (
+                      currentKeyArticles.map((art, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-mono text-xs font-bold flex items-center gap-1.5"
+                        >
+                          <Bookmark className="w-3 h-3 text-blue-400" />
+                          <span>{art}</span>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-mono text-xs font-bold">
+                        {course.legalRef}
                       </span>
-                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                        {currentLesson.title}
-                      </h2>
-                    </div>
-
-                    {/* Audio Synthesizer Narration Button */}
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={toggleSpeech}
-                        className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center space-x-2 ${
-                          isSpeaking
-                            ? 'bg-amber-500 text-slate-950 shadow-lg animate-pulse'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                        }`}
-                      >
-                        {isSpeaking ? (
-                          <>
-                            <Pause className="w-4 h-4 fill-current" />
-                            <span>Pause Audio</span>
-                          </>
-                        ) : (
-                          <>
-                            <Headphones className="w-4 h-4" />
-                            <span>Écouter la leçon</span>
-                          </>
-                        )}
-                      </button>
-
-                      {/* Bouton Toggle Lecture Automatique du cours */}
-                      <button
-                        onClick={toggleAutoReadLessons}
-                        className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition flex items-center space-x-1.5 border ${
-                          autoReadLessons
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-sm'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                        }`}
-                        title="Activer ou désactiver la lecture automatique vocale à chaque chapitre"
-                      >
-                        {autoReadLessons ? (
-                          <>
-                            <Volume2 className="w-3.5 h-3.5 text-emerald-200 animate-pulse" />
-                            <span>Lecture auto : ON</span>
-                          </>
-                        ) : (
-                          <>
-                            <VolumeX className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Lecture auto : OFF</span>
-                          </>
-                        )}
-                      </button>
-
-                      {isSpeaking ? (
-                        <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 shadow-md">
-                          <AishaAvatar isSpeaking={isSpeaking} size={40} showWave={false} />
-                          <div className="flex items-center gap-1">
-                            <span className="w-1 rounded-full bg-cyan-400" style={{ height: `${6 + (playbackState.mouthOpenness || 0) * 16}px`, transition: 'height 60ms linear' }} />
-                            <span className="w-1 rounded-full bg-cyan-400" style={{ height: `${8 + (playbackState.mouthOpenness || 0) * 12}px`, transition: 'height 60ms linear' }} />
-                            <span className="w-1 rounded-full bg-cyan-400" style={{ height: `${5 + (playbackState.mouthOpenness || 0) * 14}px`, transition: 'height 60ms linear' }} />
-                          </div>
-                          <div className="flex flex-col leading-tight">
-                            <span className="text-[11px] text-cyan-300 font-bold">
-                              Aïsha explique ({currentProfile?.roleTitle || 'Praticien'})
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              Écran {playbackState.currentSentence || 1}/{playbackState.totalSentences || 5}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-800/60 border border-slate-700/60">
-                          <AishaAvatar isSpeaking={false} size={32} />
-                          <span className="text-[11px] text-slate-400 font-medium">Aïsha prête à lire</span>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
 
-                  {/* Main Reading Typography (Formatted cleanly without raw pipe separators or scene tags) */}
-                  <div className={`${fontClasses} ${themeStyles.text} whitespace-pre-line leading-relaxed font-normal`}>
-                    {(() => {
-                      let occIdx = 0;
-                      return (currentLesson.content || '')
-                        .replace(/\[Scène\s*:\s*[a-z0-9_]+\]\s*/gi, '')
-                        .replace(/\s*\|\s*Application\s+terrain\s*:\s*/gi, () => {
-                          const v =
-                            PEDAGOGICAL_TRANSITION_VARIATIONS[
-                              (activeLessonIndex * 5 + occIdx++) %
-                                PEDAGOGICAL_TRANSITION_VARIATIONS.length
-                            ];
-                          return `\n   ↳ ${v.spokenLeadIn} `;
-                        });
-                    })()}
-                  </div>
-
-                  {/* Contextualized Professor's Visual Synthesis Board (Varies Structure & SVG Objects by Lesson Topic!) */}
-                  {/* Single-Card-Per-Screen Interactive Deck ("Chaque carte doit avoir son écran") */}
-                  {(() => {
-                    const { sceneData, sentences } = buildSynchronizedLessonScreens(
-                      currentLesson.title || course.title || '',
-                      currentLesson.content || course.description || '',
-                      course.code || '',
-                      course.legalRef || 'Loi n° 10/010',
-                      activeLessonIndex,
-                      null,
-                      currentProfile
-                    );
-
-                    const borderColors = [
-                      'border-blue-500/50 bg-slate-900/90',
-                      'border-emerald-500/50 bg-slate-900/90',
-                      'border-amber-500/50 bg-slate-900/90',
-                      'border-purple-500/50 bg-slate-900/90',
-                      'border-rose-500/50 bg-slate-900/90'
-                    ];
-
-                    const screenCards = sceneData.screens.map((scr, idx) => ({
-                      num: scr.screenNumber,
-                      badge: `ÉCRAN ${scr.screenNumber} / 5 • ${scr.categoryTag}`,
-                      title: scr.title,
-                      text: scr.explanation,
-                      rule: scr.fieldRule,
-                      leadInTitle: scr.fieldBoxTitle,
-                      explanationStartRatio: scr.explanationStartRatio,
-                      fieldRuleStartRatio: scr.fieldRuleStartRatio,
-                      color: borderColors[idx] || borderColors[0]
-                    }));
-
-                    const effectiveIdx =
-                      isSpeaking && (playbackState.currentSentence || 0) > 0
-                        ? Math.max(0, Math.min(4, (playbackState.currentSentence || 1) - 1))
-                        : Math.max(0, Math.min(4, activeCardScreenIdx));
-
-                    const activeCard = screenCards[effectiveIdx] || screenCards[0];
-                    const wpRatio = isSpeaking ? (playbackState.wordProgressPct || 0) / 100 : 0;
-                    const readingZone = !isSpeaking
-                      ? 0
-                      : wpRatio < activeCard.fieldRuleStartRatio
-                      ? 2
-                      : 3;
-
-                    const playScreenIdx = (idx: number) => {
-                      setActiveCardScreenIdx(idx);
-                      speechService.unlockAudio();
-                      speechService.play(
-                        sentences.join(' '),
-                        `lesson-${course.id}-${activeLessonIndex}`,
-                        {
-                          speed: speechRate,
-                          voice: speechService.getVoicePersona(),
-                          startSentenceIndex: idx,
-                          customSentences: sentences
-                        }
-                      );
-                    };
-
-                    return (
-                      <div className="pt-4 space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>{sceneData.sceneBadge} • Explication Directe</span>
-                          </span>
-
-                          {/* Screen Tabs 1..5 */}
-                          <div className="flex items-center gap-1">
-                            {screenCards.map((sc, idx) => (
-                              <button
-                                key={sc.num}
-                                type="button"
-                                onClick={() => setActiveCardScreenIdx(idx)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition ${
-                                  effectiveIdx === idx
-                                    ? 'bg-amber-400 text-slate-950 shadow-xs'
-                                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                                }`}
-                              >
-                                Écran {sc.num}/5
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Single Dedicated Screen for the Active Card Only */}
-                        <div className={`p-5 rounded-2xl border-2 ${activeCard.color} shadow-xl space-y-4 transition-all`}>
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                            <div>
-                              <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider">
-                                {activeCard.badge}
-                              </div>
-                              <h5 className="text-base sm:text-lg font-black text-white mt-0.5">
-                                {activeCard.title}
-                              </h5>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => playScreenIdx(effectiveIdx)}
-                                className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 transition"
-                              >
-                                <Volume2 className="w-3.5 h-3.5" />
-                                <span>Écouter l’explication</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setIsVideoMode(true)}
-                                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition"
-                              >
-                                <Film className="w-3.5 h-3.5" />
-                                <span>Voir l’animation</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          <div
-                            className={`p-3.5 rounded-xl transition-all ${
-                              readingZone === 2
-                                ? 'bg-blue-950/60 border-2 border-blue-400 shadow-md'
-                                : 'bg-slate-950/50 border border-slate-800'
-                            }`}
-                          >
-                            <p className="text-sm text-slate-100 leading-relaxed font-medium">
-                              {activeCard.text}
-                            </p>
-                          </div>
-
-                          <div
-                            className={`p-3.5 rounded-xl flex items-start gap-2.5 transition-all ${
-                              readingZone === 3
-                                ? 'bg-amber-500/25 border-2 border-amber-400 shadow-md'
-                                : 'bg-amber-500/10 border border-amber-500/30'
-                            }`}
-                          >
-                            <span className="text-amber-400 text-xs sm:text-sm font-black shrink-0">
-                              {activeCard.leadInTitle} :
-                            </span>
-                            <span className="text-xs text-amber-200 font-bold leading-relaxed">
-                              {activeCard.rule}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                            <button
-                              type="button"
-                              onClick={() => setActiveCardScreenIdx((i) => Math.max(0, i - 1))}
-                              disabled={effectiveIdx <= 0}
-                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-bold flex items-center gap-1"
-                            >
-                              <ChevronLeft className="w-4 h-4" />
-                              <span>Carte précédente</span>
-                            </button>
-                            <span className="text-xs font-mono font-bold text-slate-400">
-                              Carte {effectiveIdx + 1} sur 5
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setActiveCardScreenIdx((i) => Math.min(4, i + 1))}
-                              disabled={effectiveIdx >= 4}
-                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-bold flex items-center gap-1"
-                            >
-                              <span>Carte suivante</span>
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Legal Foundations & Loi 10/010 Callout */}
-                  {currentKeyArticles.length > 0 && (
-                    <div className={`p-4 sm:p-5 rounded-2xl border ${themeStyles.highlightBg} space-y-2 mt-6`}>
-                      <div className="flex items-center space-x-2 text-xs font-bold text-[#0866FF]">
-                        <Scale className="w-4 h-4 text-[#0866FF]" />
-                        <span>Fondements Légaux & Textes Réglementaires de Référence :</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {currentKeyArticles.map((art, idx) => (
-                          <div
-                            key={idx}
-                            className="px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 font-mono text-xs font-bold flex items-center space-x-1.5"
-                          >
-                            <Bookmark className="w-3.5 h-3.5 text-blue-400" />
-                            <span>{art}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-[11px] text-slate-400 pt-1 leading-normal">
-                        Conformément au Code des marchés publics de la RDC et aux arrêtés d'application homologués par l'ARMP.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Bottom Navigation & Progression Buttons */}
-                  <div className="flex items-center justify-between pt-6 border-t border-slate-800/40 gap-3">
+                  {/* Right: Chapter Progression Controls */}
+                  <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2.5">
                     <button
                       disabled={activeLessonIndex === 0}
                       onClick={handlePrevLesson}
-                      className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white font-bold text-xs flex items-center space-x-2 transition"
+                      className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white font-bold text-xs flex items-center space-x-2 transition cursor-pointer"
                     >
                       <ChevronLeft className="w-4 h-4" />
                       <span>Chapitre précédent</span>
                     </button>
 
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleMarkAsCompleted(activeLessonIndex)}
-                        className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition flex items-center space-x-1.5 ${
-                          completedLessons.has(activeLessonIndex)
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Assimilé</span>
-                      </button>
-
-                      <button
-                        onClick={handleNextLesson}
-                        className="px-5 py-2.5 rounded-2xl bg-[#0866FF] hover:bg-blue-600 text-white font-bold text-xs shadow-md transition flex items-center space-x-2"
-                      >
-                        <span>
-                          {activeLessonIndex < safeLessons.length - 1
-                            ? 'Chapitre suivant'
-                            : 'Passer à l’examen final'}
-                        </span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* STUDENT PERSONAL NOTE TAKER DRAWER */}
-                <div className={`p-5 rounded-3xl border ${themeStyles.cardBg} space-y-3`}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
-                      <FileEdit className="w-4 h-4 text-amber-400" />
-                      <span>Bloc-Notes de l'apprenant (Chapitre {activeLessonIndex + 1})</span>
-                    </h3>
-                    {notesSavedToast && (
-                      <span className="text-xs text-emerald-400 font-bold animate-in fade-in">
-                        ✓ Enregistré !
-                      </span>
-                    )}
-                  </div>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Saisissez vos remarques, points de vigilance ou questions pour le formateur..."
-                    rows={3}
-                    className="w-full p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                  <div className="flex justify-end">
                     <button
-                      onClick={handleSaveNotes}
-                      className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition"
+                      onClick={() => handleMarkAsCompleted(activeLessonIndex)}
+                      className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                        completedLessons.has(activeLessonIndex)
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                      }`}
                     >
-                      Enregistrer mes notes
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Assimilé</span>
+                    </button>
+
+                    <button
+                      onClick={handleNextLesson}
+                      className="px-5 py-2.5 rounded-2xl bg-[#0866FF] hover:bg-blue-600 text-white font-bold text-xs shadow-md transition flex items-center space-x-2 cursor-pointer"
+                    >
+                      <span>
+                        {activeLessonIndex < safeLessons.length - 1
+                          ? 'Chapitre suivant'
+                          : 'Passer à l’examen final'}
+                      </span>
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
+
                 </div>
 
               </div>
@@ -1697,10 +1389,32 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     </div>
                     <div className="flex flex-col gap-2 shrink-0">
                       <button
-                        onClick={() => onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)}
-                        className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition flex items-center gap-1.5"
+                        onClick={() =>
+                          onCallTutor
+                            ? onCallTutor('call', 'denise')
+                            : onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)
+                        }
+                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
                       >
-                        <Sparkles className="w-4 h-4" />
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>Appeler la Tutrice</span>
+                      </button>
+                      <button
+                        onClick={() =>
+                          onCallTutor
+                            ? onCallTutor('voice', 'denise')
+                            : onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)
+                        }
+                        className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
+                      >
+                        <Waves className="w-3.5 h-3.5" />
+                        <span>Envoyer un Voice</span>
+                      </button>
+                      <button
+                        onClick={() => onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
                         <span>Studio Q/R Complet</span>
                       </button>
                       {playbackState.isPlaying && playbackState.currentId?.startsWith('qa-voice-') && (

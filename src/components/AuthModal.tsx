@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  Lock, 
-  User, 
-  ArrowRight, 
+import {
+  ShieldCheck,
+  Lock,
+  User,
+  ArrowRight,
   ArrowLeft,
-  CheckCircle2, 
-  Building2, 
-  Scale, 
-  X,
+  CheckCircle2,
+  Building2,
   AlertCircle,
   Sparkles,
   UserPlus,
@@ -16,15 +14,52 @@ import {
   Shield,
   KeyRound,
   Mail,
-  RefreshCw
+  RefreshCw,
+  MapPin,
+  Briefcase,
+  Hash,
+  Users,
+  FileText,
+  UserCheck
 } from 'lucide-react';
-import { UserProfile, UserRole } from '../types';
-import { 
-  firebaseLoginUser, 
-  firebaseRegisterUser, 
-  firebaseGoogleLogin, 
-  firebaseResetPassword 
+import {
+  UserProfile,
+  UserRole,
+  CgpmpCellMember,
+  CgpmpCreationDocumentInfo,
+  CgpmpAccountCreationRequest
+} from '../types';
+import { PME_DEMO_ACCOUNTS, DEMO_PROFILES } from '../data/initialData';
+import {
+  firebaseLoginUser,
+  firebaseGoogleAuthenticate,
+  saveGoogleRegisteredProfile,
+  checkExistingRegisteredUser,
+  firebaseResetPassword,
+  getLocalCgpmpAccountRequests,
+  saveCgpmpAccountRequestToFirestore,
+  validateCgpmpAccountRequestByArmp,
+  rejectCgpmpAccountRequestByArmp
 } from '../firebase';
+import {
+  formatDRCPhoneMask,
+  isValidDRCPhone,
+  filterPersonNameMask,
+  filterInstitutionMask,
+  filterRoleTitleMask,
+  formatMatriculeOrRccmMask,
+  getDefaultMatriculePrefixByRole,
+  filterEmailMask,
+  DRC_PROVINCES
+} from '../utils/inputMasks';
+import { AuthPortalLeftColumn } from './AuthPortalLeftColumn';
+import {
+  CgpmpCreationDocumentSection,
+  CgpmpMembersRosterStep,
+  CgpmpSubmittedConfirmationCard
+} from './CgpmpMemberAndDocSteps';
+import { CgpmpAdminValidationPanel } from './CgpmpAdminValidationPanel';
+import { ArmpLogo } from './ArmpLogo';
 
 export interface RegisterLearnerData {
   name: string;
@@ -35,9 +70,311 @@ export interface RegisterLearnerData {
   twoFactorEnabled?: boolean;
 }
 
+interface RoleCreationFieldSpec {
+  label: string;
+  shortDesc: string;
+  badgeText: string;
+  institutionLabel: string;
+  institutionPlaceholder: string;
+  institutionPresets: string[];
+  subCategoryLabel: string;
+  subCategoryOptions: string[];
+  specialtyLabel: string;
+  specialtyOptions: string[];
+  roleTitleLabel: string;
+  roleTitlePlaceholder: string;
+  roleTitlePresets: string[];
+  matriculeLabel: string;
+  matriculePlaceholder: string;
+  secondaryIdLabel: string;
+  secondaryIdPlaceholder: string;
+  defaultSecondaryId: string;
+}
+
+const ROLE_CREATION_CONFIG: Record<UserRole, RoleCreationFieldSpec> = {
+  pme: {
+    label: '🏢 PME & Sous-Traitant',
+    shortDesc: 'Loi 17/001 • ARSP • Contenu Local 51%',
+    badgeText: 'Champs PME & Sous-Traitance (Loi n° 17/001) chargés',
+    institutionLabel: 'Dénomination Sociale de la PME / Entreprise *',
+    institutionPlaceholder: 'ex: CONGO BÂTI-TECH SARL',
+    institutionPresets: [
+      'CONGO BÂTI-TECH SARL',
+      'KATANGA LOGISTIQUE & MINES SAS',
+      'KIN-ÉNERGIE & TECH SARL',
+      'GROUPE KASAÏ INFRASTRUCTURES SA'
+    ],
+    subCategoryLabel: "Secteur d'Activité PME & Sous-Traitance *",
+    subCategoryOptions: [
+      'BTP, Génie Civil & Infrastructures Routières',
+      'Fournitures, Équipements & Matériels Techniques',
+      'Mines, Énergie, Eau & Hydrocarbures (Sous-Traitance)',
+      'Informatique, Numérique, Télécoms & SIGMAP',
+      'Logistique, Transport, Douane & Manutention',
+      'Services Généraux, Sécurité & Maintenance',
+      'Santé, Médicaments & Agro-industrie'
+    ],
+    specialtyLabel: 'Forme Juridique & Part du Capital Congolais (Loi 17/001) *',
+    specialtyOptions: [
+      'SARL — ≥ 51% Capital Congolais (Éligible Contenu Local ARSP)',
+      'SAS — ≥ 51% Capital Congolais (Éligible Contenu Local ARSP)',
+      'SA — Société Anonyme de Droit Congolais (100% RDC)',
+      'Établissement / Entreprise Individuelle (100% Congolais)',
+      'Groupement Momentané d’Entreprises (GME PME RDC)'
+    ],
+    roleTitleLabel: 'Fonction du Dirigeant ou Représentant PME *',
+    roleTitlePlaceholder: 'ex: Gérant Statutaire & Responsable Marchés',
+    roleTitlePresets: [
+      'Gérant Statutaire & Responsable Marchés',
+      'Directeur Général PME',
+      'Responsable Appels d’Offres & Soumissions',
+      'Directeur Technique & Opérations'
+    ],
+    matriculeLabel: "N° Attestation d'Enregistrement ARSP *",
+    matriculePlaceholder: 'ARSP-RDC-2026-0412',
+    secondaryIdLabel: 'N° RCCM ou Identification Nationale (ID Nat) *',
+    secondaryIdPlaceholder: 'CD/KIN/RCCM/26-B-0412',
+    defaultSecondaryId: 'CD/KIN/RCCM/26-B-0412'
+  },
+  particulier: {
+    label: '👤 Consultant / Candidat',
+    shortDesc: 'Expert indépendant, bureau d’études',
+    badgeText: 'Champs Consultant & Prestations Intellectuelles chargés',
+    institutionLabel: "Cabinet d'Études, Université ou Statut Indépendant *",
+    institutionPlaceholder: 'ex: Consultant Individuel Indépendant — Kinshasa',
+    institutionPresets: [
+      'Consultant Individuel Indépendant (RDC)',
+      'Cabinet Afrique Conseil & Ingénierie',
+      'Bureau d’Études Techniques & Audit RDC',
+      'Chercheur Associé — Université de Kinshasa'
+    ],
+    subCategoryLabel: "Domaine d'Expertise (Prestations Intellectuelles) *",
+    subCategoryOptions: [
+      'Passation des Marchés & Élaboration DAO / DP / TDR',
+      'Ingénierie, Architecture & Maîtrise d’Œuvre BTP',
+      'Audit Financier, Comptable & Revue Indépendante',
+      'Droit Public, Contentieux & Arbitrage des Marchés',
+      'Suivi-Évaluation Projets (Banque Mondiale / BAD / UE)',
+      'Systèmes d’Information, Digitalisation & E-Procurement'
+    ],
+    specialtyLabel: "Niveau de Qualification & Années d'Expérience *",
+    specialtyOptions: [
+      'Expert Senior Certifié (+10 ans d’expérience)',
+      'Consultant Confirmé — Master / Ingénieur (5 à 10 ans)',
+      'Consultant Junior — Licence / Master (2 à 5 ans)',
+      'Enseignant-Chercheur / Docteur en Droit ou Économie'
+    ],
+    roleTitleLabel: 'Titre Professionnel du Consultant *',
+    roleTitlePlaceholder: 'ex: Consultant Senior en Passation des Marchés',
+    roleTitlePresets: [
+      'Consultant Senior en Passation des Marchés',
+      'Ingénieur-Conseil Maîtrise d’Œuvre',
+      'Auditeur Indépendant Commande Publique',
+      'Juriste-Conseil en Marchés Publics & PPP'
+    ],
+    matriculeLabel: 'N° Identifiant Consultant / Candidat *',
+    matriculePlaceholder: 'CAND-RDC-0412',
+    secondaryIdLabel: 'N° Ordre Professionnel (ONEC / OAC / Barreau) ou NIF *',
+    secondaryIdPlaceholder: 'NIF-RDC-2026-0412',
+    defaultSecondaryId: 'NIF-RDC-2026-0412'
+  },
+  cgpmp_member: {
+    label: '🏛️ Cellule CGPMP',
+    shortDesc: 'Secrétaire Permanent • Acte & Membres',
+    badgeText: 'Procédure CGPMP : Secrétaire Permanent + Acte de Création + Liste des Membres',
+    institutionLabel: 'Ministère, Gouvernorat ou Autorité Contractante *',
+    institutionPlaceholder: 'ex: Ministère des Infrastructures et Travaux Publics',
+    institutionPresets: [
+      'Ministère du Budget — Secrétariat Général',
+      'Ministère des Infrastructures et Travaux Publics (ITPR)',
+      'Ministère de la Santé Publique, Hygiène et Prévoyance',
+      'Ministère des Finances — CGPMP',
+      'Gouvernorat Provincial de Kinshasa'
+    ],
+    subCategoryLabel: "Catégorie d'Autorité Contractante *",
+    subCategoryOptions: [
+      'Ministère du Gouvernement Central (Kinshasa)',
+      'Gouvernorat de Province (Exécutif Provincial)',
+      'Entité Territoriale Décentralisée (Ville, Commune, Secteur)',
+      'Établissement Public ou Entreprise du Portefeuille',
+      'Unité de Gestion de Projet (BCECO / CEP-O / CFEF)'
+    ],
+    specialtyLabel: 'Organe de Direction de la CGPMP *',
+    specialtyOptions: [
+      'Secrétariat Permanent de la CGPMP (Habilité à créer le compte CGPMP)',
+      'Commission de Passation des Marchés (CPM)',
+      'Sous-Commission Technique d’Analyse des Offres'
+    ],
+    roleTitleLabel: 'Qualité Officielle du Créateur du Compte (Verrouillé) *',
+    roleTitlePlaceholder: 'Secrétaire Permanent de la CGPMP',
+    roleTitlePresets: ['Secrétaire Permanent de la CGPMP'],
+    matriculeLabel: 'N° Matricule du Secrétaire Permanent CGPMP *',
+    matriculePlaceholder: 'CGPMP-RDC-0412',
+    secondaryIdLabel: 'Réf. Arrêté Ministériel / Acte portant Création CGPMP *',
+    secondaryIdPlaceholder: 'ARR-CAB-MIN-2026-018',
+    defaultSecondaryId: 'ARR-CAB-MIN-2026-018'
+  },
+  armp_agent: {
+    label: '⚖️ Régulateur ARMP',
+    shortDesc: 'DFAT, CRD, Réglementation, Audit',
+    badgeText: 'Champs Autorité de Régulation (ARMP) chargés',
+    institutionLabel: "Direction ou Antenne Provinciale de l'ARMP *",
+    institutionPlaceholder: 'ex: Autorité de Régulation des Marchés Publics (DG-ARMP)',
+    institutionPresets: [
+      'Autorité de Régulation des Marchés Publics (DG-ARMP)',
+      'ARMP — Direction de la Formation et Appuis Techniques (DFAT)',
+      'ARMP — Comité de Règlement des Différends (CRD)',
+      'ARMP — Direction des Statistiques, Audits et Enquêtes'
+    ],
+    subCategoryLabel: "Direction ou Organe ARMP d'affectation *",
+    subCategoryOptions: [
+      'Direction Générale (DG-ARMP — Kinshasa Gombe)',
+      'Direction de la Formation et des Appuis Techniques (DFAT)',
+      'Comité de Règlement des Différends (CRD — Recours)',
+      'Direction de la Réglementation et des Études',
+      'Direction des Statistiques, Audits et Enquêtes',
+      'Antenne Provinciale ARMP'
+    ],
+    specialtyLabel: "Domaine d'Habilitation Réglementaire ARMP *",
+    specialtyOptions: [
+      'Instruction des Recours & Contentieux devant le CRD',
+      'Homologation Pédagogique & Renforcement des Capacités',
+      'Audit a posteriori Indépendant & Enquêtes Nationales',
+      'Système d’Information, Statistiques & Portail ARMP'
+    ],
+    roleTitleLabel: "Fonction Officielle à l'ARMP *",
+    roleTitlePlaceholder: 'ex: Cadre Technique DFAT & Chargé de Régulation',
+    roleTitlePresets: [
+      'Cadre Technique DFAT & Appuis Techniques',
+      'Rapporteur près le Comité de Règlement des Différends (CRD)',
+      'Auditeur des Marchés Publics & Enquêtes',
+      'Chargé d’Études Juridiques & Réglementation'
+    ],
+    matriculeLabel: 'N° Matricule Agent ARMP *',
+    matriculePlaceholder: 'ARMP-DIR-0412',
+    secondaryIdLabel: "N° Décision d'Affectation / Carte d'Agent ARMP *",
+    secondaryIdPlaceholder: 'DEC-DG-ARMP-2026-09',
+    defaultSecondaryId: 'DEC-DG-ARMP-2026-09'
+  },
+  dgcmp_agent: {
+    label: '🛡️ Contrôleur DGCMP',
+    shortDesc: 'Contrôle a priori, Seuils & ANO',
+    badgeText: 'Champs Contrôle a priori (DGCMP) chargés',
+    institutionLabel: 'Direction ou Pool de Contrôle DGCMP *',
+    institutionPlaceholder: 'ex: Direction Générale du Contrôle des Marchés Publics (DGCMP)',
+    institutionPresets: [
+      'Direction Générale du Contrôle des Marchés Publics (DGCMP)',
+      'DGCMP — Direction du Contrôle a priori (Kinshasa)',
+      'DGCMP — Commission d’Avis de Non-Objection (ANO)',
+      'Direction Provinciale du Contrôle des Marchés Publics'
+    ],
+    subCategoryLabel: 'Pool Technique de Contrôle DGCMP *',
+    subCategoryOptions: [
+      'Pool Contrôle a priori — Travaux & Infrastructures',
+      'Pool Contrôle a priori — Fournitures, Santé & Équipements',
+      'Pool Contrôle a priori — Prestations Intellectuelles',
+      'Commission d’Émission des Avis de Non-Objection (ANO)',
+      'Cellule Examen des Dérogations & Gré à Gré'
+    ],
+    specialtyLabel: "Périmètre & Seuil d'Habilitation de Contrôle *",
+    specialtyOptions: [
+      'Marchés Nationaux ≥ Seuil de Contrôle a priori',
+      'Marchés sur Financements Extérieurs (Banque Mondiale / BAD)',
+      'Contrôle des Plans de Passation des Marchés (PPM)',
+      'Autorisations Spéciales de Gré à Gré & Urgences'
+    ],
+    roleTitleLabel: 'Fonction de Contrôleur DGCMP *',
+    roleTitlePlaceholder: 'ex: Vérificateur Principal des DAO & ANO',
+    roleTitlePresets: [
+      'Vérificateur Principal des Dossiers d’Appel d’Offres (DAO)',
+      'Analyste Avis de Non-Objection (ANO)',
+      'Chef de Bureau Contrôle a priori DGCMP',
+      'Contrôleur National des Marchés Publics'
+    ],
+    matriculeLabel: 'N° Matricule Contrôleur DGCMP *',
+    matriculePlaceholder: 'DGCMP-CTRL-0412',
+    secondaryIdLabel: 'N° Habilitation Contrôle a priori / Commission ANO *',
+    secondaryIdPlaceholder: 'HAB-DGCMP-2026-044',
+    defaultSecondaryId: 'HAB-DGCMP-2026-044'
+  },
+  formateur: {
+    label: '🎓 Formateur DFAT',
+    shortDesc: 'Studio IA, Visio & Cours Homologués',
+    badgeText: 'Champs Formateur Homologué DFAT chargés',
+    institutionLabel: 'Institution Académique ou Centre Homologué DFAT *',
+    institutionPlaceholder: 'ex: Direction de la Formation et des Appuis Techniques (DFAT - ARMP)',
+    institutionPresets: [
+      'Direction de la Formation et des Appuis Techniques (DFAT - ARMP)',
+      'École Nationale d’Administration (ENA RDC)',
+      'École Nationale des Finances (ENF — Ministère des Finances)',
+      'Faculté de Droit — Université de Kinshasa (UNIKIN)'
+    ],
+    subCategoryLabel: 'Chaire / Spécialité Pédagogique Enseignée *',
+    subCategoryOptions: [
+      'Procédures de Passation & Montage des DAO (Loi 10/010)',
+      'Contrôle a priori, Seuils & Avis de Non-Objection (DGCMP)',
+      'Contentieux, Recours & Arbitrage (CRD / ARMP)',
+      'Sous-Traitance, PME & Contenu Local 51% (Loi 17/001)',
+      'Exécution Financière, Garanties, Avenants & Audits'
+    ],
+    specialtyLabel: "Grade Académique & Mode d'Intervention *",
+    specialtyOptions: [
+      'Formateur Senior Certifié DFAT — Studio IA, Visio & Présentiel',
+      'Professeur Associé Commande Publique — Masterclass Nationale',
+      'Expert Formateur National — Coaching CGPMP & PME'
+    ],
+    roleTitleLabel: 'Titre Académique / Grade de Formateur *',
+    roleTitlePlaceholder: 'ex: Formateur Senior Certifié DFAT / ARMP',
+    roleTitlePresets: [
+      'Formateur Senior Certifié DFAT / ARMP',
+      'Professeur & Expert en Commande Publique RDC',
+      'Maître de Conférences & Auteur de Modules ARMP'
+    ],
+    matriculeLabel: "N° d'Agrément Formateur DFAT *",
+    matriculePlaceholder: 'DFAT-FORM-0412',
+    secondaryIdLabel: "N° Décision d'Homologation Pédagogique ARMP *",
+    secondaryIdPlaceholder: 'HOM-DFAT-ARMP-2026-12',
+    defaultSecondaryId: 'HOM-DFAT-ARMP-2026-12'
+  },
+  dfat_admin: {
+    label: '🏛️ Administration DFAT',
+    shortDesc: 'Pilotage National & Certification',
+    badgeText: 'Champs Administration DFAT chargés',
+    institutionLabel: 'Direction Nationale DFAT / ARMP *',
+    institutionPlaceholder: 'Direction de la Formation et des Appuis Techniques (DFAT)',
+    institutionPresets: [
+      'Direction de la Formation et des Appuis Techniques (DFAT)',
+      'Secrétariat Technique National de Certification ARMP'
+    ],
+    subCategoryLabel: 'Service de Pilotage DFAT *',
+    subCategoryOptions: [
+      'Homologation des Programmes & Certification Nationale',
+      'Coordination des Sessions Ministérielles & Provinciales',
+      'Administration de la Plateforme ACADEMIA ITECH'
+    ],
+    specialtyLabel: 'Niveau d’Accréditation *',
+    specialtyOptions: [
+      'Administrateur National DFAT / ARMP',
+      'Coordinateur Pédagogique National'
+    ],
+    roleTitleLabel: 'Fonction Administrative DFAT *',
+    roleTitlePlaceholder: 'Directeur / Coordinateur DFAT',
+    roleTitlePresets: [
+      'Coordinateur National Formation & Certification DFAT',
+      'Chef de Division Appuis Techniques DFAT'
+    ],
+    matriculeLabel: 'N° Matricule Administrateur DFAT *',
+    matriculePlaceholder: 'DFAT-ADM-0412',
+    secondaryIdLabel: 'N° Acte d’Habilitation DFAT *',
+    secondaryIdPlaceholder: 'ACT-DFAT-2026-01',
+    defaultSecondaryId: 'ACT-DFAT-2026-01'
+  }
+};
+
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  canClose?: boolean;
   allProfiles?: Record<string, UserProfile>;
   onLoginSuccess?: (profile: UserProfile) => void;
   onDemoLogin?: (role: UserRole) => void;
@@ -46,11 +383,14 @@ interface AuthModalProps {
   pendingCourseTitle?: string | null;
   targetCourseTitle?: string | null;
   onShowToast?: (msg: string) => void;
+  cgpmpAccountRequests?: CgpmpAccountCreationRequest[];
+  onUpdateCgpmpAccountRequests?: (list: CgpmpAccountCreationRequest[]) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
+  canClose = false,
   allProfiles,
   onLoginSuccess,
   onDemoLogin,
@@ -58,123 +398,415 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = 'login',
   pendingCourseTitle,
   targetCourseTitle,
-  onShowToast
+  onShowToast,
+  cgpmpAccountRequests: externalCgpmpReqs,
+  onUpdateCgpmpAccountRequests
 }) => {
   const courseTitle = pendingCourseTitle || targetCourseTitle;
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot_password'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot_password' | 'armp_admin'>(initialMode);
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
-  
-  // Registration fields & Steps
-  const [registerStep, setRegisterStep] = useState<1 | 2 | 3>(1);
+
+  // Registration steps (1 to 5 for CGPMP, 1 to 4 for other profiles)
+  const [registerStep, setRegisterStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [stepError, setStepError] = useState<string | null>(null);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+
+  // Google Auth State
+  const [googleAuthUid, setGoogleAuthUid] = useState<string | null>(null);
+  const [googlePhotoUrl, setGooglePhotoUrl] = useState<string | null>(null);
+  const [isGoogleVerified, setIsGoogleVerified] = useState(false);
+  const [existingGoogleAccount, setExistingGoogleAccount] = useState<UserProfile | null>(null);
+
+  // Civil Identity Fields (Step 2 — Separated from Step 1)
+  const [civiliteInput, setCiviliteInput] = useState<string>('M.');
+  const [nomInput, setNomInput] = useState<string>('');
+  const [postnomInput, setPostnomInput] = useState<string>('');
+  const [prenomInput, setPrenomInput] = useState<string>('');
+  const [sexeInput, setSexeInput] = useState<'M' | 'F'>('M');
+  const [dateNaissanceInput, setDateNaissanceInput] = useState<string>('1984-06-15');
+  const [lieuNaissanceInput, setLieuNaissanceInput] = useState<string>('Kinshasa');
+  const [nationaliteInput, setNationaliteInput] = useState<string>('Congolaise (RDC)');
+  const [etatCivilInput, setEtatCivilInput] = useState<string>('Marié(e)');
+  const [pieceIdentiteInput, setPieceIdentiteInput] = useState<string>('ONIP-RDC-24389104');
+  const [adressePhysiqueInput, setAdressePhysiqueInput] = useState<string>('Boulevard du 30 Juin, Commune de la Gombe, Kinshasa');
+
+  // Dynamic Profile Fields
+  const initialConfig = ROLE_CREATION_CONFIG[initialRole] || ROLE_CREATION_CONFIG.cgpmp_member;
   const [nameInput, setNameInput] = useState('');
-  const [phoneInput, setPhoneInput] = useState('');
-  const [institutionInput, setInstitutionInput] = useState('');
-  const [enable2FAOnRegister, setEnable2FAOnRegister] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('+243 ');
+  const [institutionInput, setInstitutionInput] = useState(initialConfig.institutionPresets[0] || '');
+  const [roleTitleInput, setRoleTitleInput] = useState(initialConfig.roleTitlePresets[0] || '');
+  const [subCategoryInput, setSubCategoryInput] = useState(initialConfig.subCategoryOptions[0] || '');
+  const [specialtyInput, setSpecialtyInput] = useState(initialConfig.specialtyOptions[0] || '');
+  const [provinceInput, setProvinceInput] = useState<string>(DRC_PROVINCES[0]);
+  const [matriculeInput, setMatriculeInput] = useState(
+    `${getDefaultMatriculePrefixByRole(initialRole)}0412`
+  );
+  const [secondaryIdInput, setSecondaryIdInput] = useState(initialConfig.defaultSecondaryId);
+  const [enable2FAOnRegister, setEnable2FAOnRegister] = useState(true);
   const [acceptEthicsCharter, setAcceptEthicsCharter] = useState(true);
 
+  // CGPMP Specific Conditions State:
+  // 1) Seul le Secrétaire Permanent peut créer le compte CGPMP
+  const [cgpmpApplicantCapacity, setCgpmpApplicantCapacity] = useState<'secretaire_permanent' | 'membre_ordinaire'>('secretaire_permanent');
+  // 2) Document portant création de la cellule CGPMP
+  const [creationDocType, setCreationDocType] = useState<CgpmpCreationDocumentInfo['documentType']>('Arrêté Ministériel');
+  const [creationDocRef, setCreationDocRef] = useState('ARR-CAB-MIN/BUDGET/2026/018');
+  const [creationDocDate, setCreationDocDate] = useState('2026-02-15');
+  const [creationDocSignatory, setCreationDocSignatory] = useState('Ministre de Tutelle / Autorité Contractante');
+  const [creationDocFileName, setCreationDocFileName] = useState('');
+  const [creationDocFileSize, setCreationDocFileSize] = useState('');
+  const [creationDocMimeType, setCreationDocMimeType] = useState('application/pdf');
+  const [creationDocDataUrl, setCreationDocDataUrl] = useState<string | undefined>(undefined);
+  // 3) Liste des membres CGPMP (Noms complets + Adresses email)
+  const [cgpmpMembers, setCgpmpMembers] = useState<CgpmpCellMember[]>([
+    {
+      id: 'MEM-INIT-1',
+      fullName: 'Ir. Célestin Kabuya Mutombo',
+      email: 'c.kabuya@infrastructures.gouv.cd',
+      functionInCell: 'Président de la Commission de Passation des Marchés (CPM)'
+    },
+    {
+      id: 'MEM-INIT-2',
+      fullName: 'Me Mireille Ngalula Tshimanga',
+      email: 'm.ngalula@infrastructures.gouv.cd',
+      functionInCell: 'Expert en Passation des Marchés & Montage DAO'
+    }
+  ]);
+  // 4) Submitted CGPMP Request awaiting ARMP validation
+  const [submittedCgpmpRequest, setSubmittedCgpmpRequest] = useState<CgpmpAccountCreationRequest | null>(null);
+  const [localCgpmpRequests, setLocalCgpmpRequests] = useState<CgpmpAccountCreationRequest[]>(() =>
+    getLocalCgpmpAccountRequests()
+  );
+  const [processingArmpReqId, setProcessingArmpReqId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync mode when initialMode changes or modal opens
+  const activeCgpmpRequests = externalCgpmpReqs || localCgpmpRequests;
+  const activeRoleConfig = ROLE_CREATION_CONFIG[selectedRole] || ROLE_CREATION_CONFIG.cgpmp_member;
+  const isCgpmp = selectedRole === 'cgpmp_member';
+
+  const updateCgpmpRequestsList = (next: CgpmpAccountCreationRequest[]) => {
+    setLocalCgpmpRequests(next);
+    onUpdateCgpmpAccountRequests?.(next);
+  };
+
+  const applyDynamicFieldsForRole = (role: UserRole, existingProf?: UserProfile | null) => {
+    const cfg = ROLE_CREATION_CONFIG[role] || ROLE_CREATION_CONFIG.cgpmp_member;
+    setSelectedRole(role);
+
+    const defaultPrefix = getDefaultMatriculePrefixByRole(role);
+    const currentSuffix = matriculeInput.split('-').pop() || '0412';
+    const nextMatricule = existingProf?.matricule
+      ? formatMatriculeOrRccmMask(existingProf.matricule)
+      : formatMatriculeOrRccmMask(`${defaultPrefix}${currentSuffix}`);
+    setMatriculeInput(nextMatricule);
+
+    setInstitutionInput(
+      existingProf?.institution
+        ? filterInstitutionMask(existingProf.institution)
+        : cfg.institutionPresets[0] || ''
+    );
+    setRoleTitleInput(
+      role === 'cgpmp_member'
+        ? 'Secrétaire Permanent de la CGPMP'
+        : existingProf?.roleTitle
+        ? filterRoleTitleMask(existingProf.roleTitle)
+        : cfg.roleTitlePresets[0] || ''
+    );
+    setSubCategoryInput(
+      existingProf?.subCategory && cfg.subCategoryOptions.includes(existingProf.subCategory)
+        ? existingProf.subCategory
+        : cfg.subCategoryOptions[0] || ''
+    );
+    setSpecialtyInput(
+      existingProf?.specialty && cfg.specialtyOptions.includes(existingProf.specialty)
+        ? existingProf.specialty
+        : cfg.specialtyOptions[0] || ''
+    );
+    setSecondaryIdInput(
+      existingProf?.secondaryIdNumber
+        ? formatMatriculeOrRccmMask(existingProf.secondaryIdNumber)
+        : cfg.defaultSecondaryId
+    );
+    if (existingProf?.phone) {
+      setPhoneInput(formatDRCPhoneMask(existingProf.phone));
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
       setRegisterStep(1);
       setStepError(null);
       setResetSuccessMessage(null);
+      setExistingGoogleAccount(null);
+      setSubmittedCgpmpRequest(null);
+      setLocalCgpmpRequests(getLocalCgpmpAccountRequests());
+      applyDynamicFieldsForRole(initialRole);
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, initialRole]);
+
+  const handleSelectRoleInRegistration = (role: UserRole) => {
+    setSubmittedCgpmpRequest(null);
+    applyDynamicFieldsForRole(role, existingGoogleAccount?.role === role ? existingGoogleAccount : null);
+  };
 
   if (!isOpen) return null;
 
-  // Translate Firebase errors into clean French messages
   const getFriendlyAuthError = (err: unknown): string => {
     const raw = err instanceof Error ? err.message : String(err);
+    if (raw.startsWith('CGPMP_PENDING_ARMP:')) {
+      return raw.replace('CGPMP_PENDING_ARMP:', '');
+    }
+    if (raw.startsWith('CGPMP_REJECTED_ARMP:')) {
+      return raw.replace('CGPMP_REJECTED_ARMP:', '');
+    }
     const message = raw.toLowerCase();
-    if (message.includes('auth/unauthorized-domain') || message.includes('is not authorized') || message.includes('unauthorized domain') || raw.includes('armpacademia.vercel.app')) {
-      return 'Domaine armpacademia.vercel.app non autorisé côté Firebase. Admin : Firebase Console → Authentication → Settings → Authorized domains → Ajouter « armpacademia.vercel.app » puis réessayez. En attendant, utilisez Email/Mot de passe ou Accès démo ci-dessous.';
+    if (message.includes('auth/unauthorized-domain') || message.includes('is not authorized')) {
+      return 'Domaine non encore autorisé côté Firebase Console. Poursuivez avec la vérification Google ci-dessous.';
     }
-    if (message.includes('auth/operation-not-allowed') || message.includes('operation-not-allowed')) {
-      return 'Connexion Google désactivée dans ce projet Firebase. Admin : Firebase Console → Authentication → Sign-in method → Google → Activer.';
-    }
-    if (message.includes('auth/popup-blocked') || message.includes('popup-blocked')) {
-      return 'Popup Google bloquée par le navigateur. Autorisez les popups pour armpacademia.vercel.app et réessayez, ou utilisez Email/Mot de passe.';
-    }
-    if (message.includes('auth/popup-closed-by-user') || message.includes('popup-closed-by-user')) {
-      return 'La fenêtre de connexion Google a été fermée avant la fin.';
-    }
-    if (message.includes('auth/cancelled-popup-request') || message.includes('cancelled-popup')) {
-      return 'Requête Google annulée (double-clic). Patientez 2s puis réessayez.';
-    }
-    if (message.includes('auth/network-request-failed') || message.includes('network-request-failed')) {
-      return 'Réseau instable — vérifiez votre connexion et réessayez.';
-    }
-    if (message.includes('auth/too-many-requests')) {
-      return 'Trop de tentatives. Patientez quelques minutes avant de réessayer.';
+    if (message.includes('auth/popup-blocked') || message.includes('popup-closed-by-user')) {
+      return 'Popup Google fermée ou bloquée. Utilisez la vérification directe par adresse email ci-dessous.';
     }
     if (message.includes('auth/invalid-credential') || message.includes('auth/wrong-password')) {
-      return 'Identifiants invalides. Vérifiez votre email et mot de passe.';
+      return 'Identifiants ou mot de passe invalides. Si vous êtes membre CGPMP, utilisez le mot de passe reçu par mail après validation ARMP.';
     }
     if (message.includes('auth/user-not-found')) {
-      return 'Aucun compte trouvé pour cette adresse email.';
+      return 'Aucun compte actif trouvé pour cet email.';
     }
-    if (message.includes('auth/email-already-in-use')) {
-      return 'Cette adresse email est déjà enregistrée. Veuillez vous connecter.';
+    return `Information d'authentification : ${raw.slice(0, 240)}`;
+  };
+
+  // File upload handler for CGPMP Creation Document
+  const handleCreationDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCreationDocFileName(file.name);
+    const sizeKb = Math.max(1, Math.round(file.size / 1024));
+    setCreationDocFileSize(sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(2)} Mo` : `${sizeKb} Ko`);
+    setCreationDocMimeType(file.type || 'application/pdf');
+    setStepError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && reader.result.length < 150000) {
+        setCreationDocDataUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+    onShowToast?.(`Document portant création de la CGPMP joint : ${file.name}`);
+  };
+
+  const handleAttachSpecimenDocument = () => {
+    const cleanInst = institutionInput.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 25) || 'Ministere';
+    setCreationDocFileName(`Arrete_Creation_Cellule_CGPMP_${cleanInst}_2026.pdf`);
+    setCreationDocFileSize('1.38 Mo');
+    setCreationDocMimeType('application/pdf');
+    if (!creationDocRef.trim()) {
+      setCreationDocRef('ARR-CAB-MIN/CGPMP/2026/018');
     }
-    if (message.includes('auth/weak-password')) {
-      return 'Le mot de passe doit comporter au moins 6 caractères.';
+    setStepError(null);
+    onShowToast?.('Spécimen officiel d’Arrêté portant création de la CGPMP attaché avec succès.');
+  };
+
+  // Helper to sync composed full name whenever nom, postnom, prenom or civilite changes
+  const composeOfficialFullName = (
+    civ = civiliteInput,
+    prenom = prenomInput,
+    nom = nomInput,
+    postnom = postnomInput
+  ) => {
+    const cleanNom = filterPersonNameMask(nom).trim().toUpperCase();
+    const cleanPost = filterPersonNameMask(postnom).trim().toUpperCase();
+    const cleanPre = filterPersonNameMask(prenom).trim();
+    if (!cleanNom && !cleanPost && !cleanPre) return nameInput.trim();
+    return `${civ ? `${civ} ` : ''}${[cleanPre, cleanNom, cleanPost].filter(Boolean).join(' ')}`.trim();
+  };
+
+  // Step 1/2 Google Verification
+  const handleGoogleRegistrationStep1 = async () => {
+    setStepError(null);
+    if (isCgpmp && cgpmpApplicantCapacity !== 'secretaire_permanent') {
+      setStepError(
+        'Accès refusé : Seul le Secrétaire Permanent de la CGPMP est habilité à créer le compte de la cellule et à enregistrer la liste des membres.'
+      );
+      return;
     }
-    if (message.includes('auth/invalid-email')) {
-      return 'Le format de l\'adresse email est invalide.';
+    setIsSubmitting(true);
+    try {
+      const googleRes = await firebaseGoogleAuthenticate(allProfiles);
+      setGoogleAuthUid(googleRes.uid);
+      setEmailInput(filterEmailMask(googleRes.email));
+      const fullDisplay = filterPersonNameMask(googleRes.displayName || 'Fidèle Kabasele Lukoji');
+      setNameInput(fullDisplay);
+      const parts = fullDisplay.split(' ').filter(Boolean);
+      if (parts.length >= 3) {
+        setPrenomInput(parts[0]);
+        setNomInput(parts[1].toUpperCase());
+        setPostnomInput(parts.slice(2).join(' ').toUpperCase());
+      } else if (parts.length === 2) {
+        setPrenomInput(parts[0]);
+        setNomInput(parts[1].toUpperCase());
+      } else if (parts.length === 1) {
+        setNomInput(parts[0].toUpperCase());
+      }
+      setGooglePhotoUrl(googleRes.photoURL);
+      setIsGoogleVerified(true);
+
+      if (googleRes.existingProfile) {
+        const ep = googleRes.existingProfile;
+        setExistingGoogleAccount(ep);
+        applyDynamicFieldsForRole(ep.role || selectedRole, ep);
+        onShowToast?.(`Compte Google déjà enregistré détecté : ${ep.name} (${ep.institution}).`);
+        return;
+      }
+
+      setExistingGoogleAccount(null);
+      applyDynamicFieldsForRole(selectedRole, null);
+      setRegisterStep(2);
+      onShowToast?.(`Identité Google pré-remplie (${googleRes.email}). Complétez vos informations civiles à l'Étape 2.`);
+    } catch (err) {
+      setStepError(getFriendlyAuthError(err));
+    } finally {
+      setIsSubmitting(false);
     }
-    // Include raw code for debugging if unknown
-    return `Erreur authentification : ${raw.slice(0, 220)}`;
+  };
+
+  const handleVerifyCivilIdentityStep2 = async () => {
+    setStepError(null);
+    if (isCgpmp && cgpmpApplicantCapacity !== 'secretaire_permanent') {
+      setStepError(
+        'Seul le Secrétaire Permanent de la CGPMP peut initier la création du compte de la Cellule CGPMP.'
+      );
+      return;
+    }
+    const cleanNom = filterPersonNameMask(nomInput).trim().toUpperCase();
+    const cleanPostnom = filterPersonNameMask(postnomInput).trim().toUpperCase();
+    const cleanPrenom = filterPersonNameMask(prenomInput).trim();
+    const cleanMail = filterEmailMask(emailInput).trim().toLowerCase();
+
+    if (cleanNom.length < 2) {
+      setStepError('Veuillez renseigner votre Nom de famille (au moins 2 lettres).');
+      return;
+    }
+    if (cleanPostnom.length < 2) {
+      setStepError('Veuillez renseigner votre Post-nom (au moins 2 lettres).');
+      return;
+    }
+    if (cleanPrenom.length < 2) {
+      setStepError('Veuillez renseigner votre Prénom (au moins 2 lettres).');
+      return;
+    }
+    if (!cleanMail || !cleanMail.includes('@') || !cleanMail.includes('.')) {
+      setStepError('Veuillez saisir une adresse email officielle valide.');
+      return;
+    }
+
+    const fullComposed = composeOfficialFullName(civiliteInput, cleanPrenom, cleanNom, cleanPostnom);
+    setNameInput(fullComposed);
+    setNomInput(cleanNom);
+    setPostnomInput(cleanPostnom);
+    setPrenomInput(cleanPrenom);
+    setEmailInput(cleanMail);
+
+    setIsSubmitting(true);
+    try {
+      const check = await checkExistingRegisteredUser({
+        email: cleanMail,
+        knownProfiles: allProfiles
+      });
+
+      if (check.exists && check.profile) {
+        const ep = check.profile;
+        setExistingGoogleAccount(ep);
+        setGoogleAuthUid(ep.id || `GOOGLE-USR-${Date.now().toString().slice(-6)}`);
+        setGooglePhotoUrl(ep.avatarUrl || null);
+        setIsGoogleVerified(true);
+        applyDynamicFieldsForRole(ep.role || selectedRole, ep);
+        onShowToast?.(`Utilisateur déjà enregistré détecté : ${ep.name} (${ep.institution}).`);
+        return;
+      }
+
+      setExistingGoogleAccount(null);
+      setGoogleAuthUid(`GOOGLE-USR-${Date.now().toString().slice(-6)}`);
+      setIsGoogleVerified(true);
+      applyDynamicFieldsForRole(selectedRole, null);
+      setRegisterStep(3);
+      onShowToast?.(`Identité civile validée (${fullComposed}). Passage à l'Étape 3.`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleNextStep = () => {
     setStepError(null);
     if (registerStep === 1) {
-      if (!nameInput.trim() || nameInput.trim().length < 2) {
-        setStepError('Veuillez saisir votre nom et prénom complets.');
-        return;
-      }
-      if (!emailInput.trim() || !emailInput.includes('@') || !emailInput.includes('.')) {
-        setStepError('Veuillez saisir une adresse email valide.');
+      if (isCgpmp && cgpmpApplicantCapacity !== 'secretaire_permanent') {
+        setStepError('Seul le Secrétaire Permanent peut créer le compte CGPMP.');
         return;
       }
       setRegisterStep(2);
     } else if (registerStep === 2) {
-      setRegisterStep(3);
+      void handleVerifyCivilIdentityStep2();
+    } else if (registerStep === 3) {
+      const cleanInst = filterInstitutionMask(institutionInput).trim();
+      if (cleanInst.length < 3) {
+        setStepError('Veuillez renseigner l’Autorité Contractante ou Organisation.');
+        return;
+      }
+      // Mandatory check for CGPMP: Document portant création de la cellule
+      if (isCgpmp) {
+        if (!creationDocRef.trim() || creationDocRef.trim().length < 4) {
+          setStepError(
+            'Condition CGPMP : Veuillez indiquer la référence officielle du document portant création de la cellule.'
+          );
+          return;
+        }
+        if (!creationDocFileName) {
+          setStepError(
+            'Condition CGPMP obligatoire : Vous devez joindre le document portant création de la cellule CGPMP (ou cliquer sur « Charger un spécimen d’Arrêté CGPMP ») pour passer à la liste des membres.'
+          );
+          return;
+        }
+        setSecondaryIdInput(formatMatriculeOrRccmMask(creationDocRef));
+      }
+      setRegisterStep(4);
+    } else if (registerStep === 4 && isCgpmp) {
+      if (cgpmpMembers.length === 0) {
+        setStepError(
+          'Veuillez ajouter au moins un membre de la Cellule CGPMP (Nom, Post-nom, Prénom et adresse email) dans la liste.'
+        );
+        return;
+      }
+      setRegisterStep(5);
     }
   };
 
   const handlePrevStep = () => {
     setStepError(null);
     if (registerStep > 1) {
-      setRegisterStep((prev) => (prev - 1) as 1 | 2);
+      setRegisterStep((prev) => (prev - 1) as 1 | 2 | 3 | 4);
     }
   };
 
-  // Handle Login or Register with Firebase
+  // Final Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStepError(null);
 
-    // Password Reset Flow
     if (mode === 'forgot_password') {
-      if (!emailInput.trim() || !emailInput.includes('@')) {
-        setStepError('Veuillez renseigner votre adresse email pour réinitialiser le mot de passe.');
+      const cleanMail = filterEmailMask(emailInput);
+      if (!cleanMail || !cleanMail.includes('@')) {
+        setStepError('Veuillez renseigner votre adresse email.');
         return;
       }
       setIsSubmitting(true);
       try {
-        await firebaseResetPassword(emailInput.trim());
-        setResetSuccessMessage(`Un lien de réinitialisation sécurisé a été envoyé à ${emailInput.trim()}. Veuillez vérifier votre boîte de réception.`);
-        onShowToast?.('Email de réinitialisation envoyé avec succès.');
+        await firebaseResetPassword(cleanMail);
+        setResetSuccessMessage(`Un lien de réinitialisation a été envoyé à ${cleanMail}.`);
+        onShowToast?.('Email de réinitialisation envoyé.');
       } catch (err) {
         setStepError(getFriendlyAuthError(err));
       } finally {
@@ -183,39 +815,153 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Registration Flow
     if (mode === 'register') {
-      if (registerStep !== 3) {
+      const finalStep = isCgpmp ? 5 : 4;
+      if (registerStep !== finalStep) {
         handleNextStep();
         return;
       }
-      if (!passwordInput || passwordInput.length < 6) {
-        setStepError('Le mot de passe doit comporter au moins 6 caractères.');
+
+      if (!isValidDRCPhone(phoneInput)) {
+        setStepError('Numéro de téléphone RDC invalide. Format exigé : +243 suivi de 9 chiffres.');
         return;
       }
-      if (confirmPasswordInput && passwordInput !== confirmPasswordInput) {
-        setStepError('Les mots de passe saisis ne sont pas identiques.');
+      const cleanMatricule = formatMatriculeOrRccmMask(matriculeInput);
+      if (cleanMatricule.length < 6) {
+        setStepError('Veuillez saisir un numéro de matricule / identifiant valide (min. 6 caractères).');
         return;
       }
       if (!acceptEthicsCharter) {
-        setStepError('Vous devez accepter les principes d\'intégrité de la commande publique.');
+        setStepError('Vous devez accepter la Charte d’intégrité de la commande publique (Loi n° 10/010).');
         return;
       }
 
+      const finalComposedName = composeOfficialFullName();
+
+      // SPECIAL CGPMP WORKFLOW: Submit Request for ARMP Administration Validation!
+      if (isCgpmp) {
+        if (!creationDocFileName) {
+          setStepError('Le document portant création de la cellule CGPMP est obligatoire.');
+          return;
+        }
+        if (cgpmpMembers.length === 0) {
+          setStepError('La liste des membres de la CGPMP ne peut pas être vide.');
+          return;
+        }
+
+        setIsSubmitting(true);
+        try {
+          const newCgpmpReq: CgpmpAccountCreationRequest = {
+            id: `CGPMP-ACC-2026-${Math.floor(110 + Math.random() * 880)}`,
+            institution: institutionInput.trim(),
+            subCategory: subCategoryInput || activeRoleConfig.subCategoryOptions[0],
+            province: provinceInput,
+            permanentSecretaryName: finalComposedName || nameInput.trim(),
+            permanentSecretaryNom: nomInput.trim().toUpperCase(),
+            permanentSecretaryPostnom: postnomInput.trim().toUpperCase(),
+            permanentSecretaryPrenom: prenomInput.trim(),
+            permanentSecretarySexe: sexeInput,
+            permanentSecretaryCivilite: civiliteInput,
+            permanentSecretaryDateNaissance: dateNaissanceInput,
+            permanentSecretaryLieuNaissance: lieuNaissanceInput,
+            permanentSecretaryNationalite: nationaliteInput,
+            permanentSecretaryEtatCivil: etatCivilInput,
+            permanentSecretaryPieceIdentite: pieceIdentiteInput,
+            permanentSecretaryEmail: emailInput.trim().toLowerCase(),
+            permanentSecretaryPhone: phoneInput.trim(),
+            permanentSecretaryMatricule: cleanMatricule,
+            creationDocument: {
+              documentRef: creationDocRef.trim(),
+              documentType: creationDocType,
+              signedDate: creationDocDate,
+              signatoryAuthority: creationDocSignatory.trim(),
+              fileName: creationDocFileName,
+              fileSizeLabel: creationDocFileSize || '1.20 Mo',
+              fileMimeType: creationDocMimeType,
+              uploadedAt: new Date().toLocaleDateString('fr-FR'),
+              verificationHash: `SHA256-ARMP-${Date.now().toString(16).toUpperCase()}`,
+              fileDataUrl: creationDocDataUrl
+            },
+            members: cgpmpMembers,
+            status: 'En attente de validation ARMP',
+            createdAt: 'À l’instant'
+          };
+
+          await saveCgpmpAccountRequestToFirestore(newCgpmpReq);
+          const updatedList = [
+            newCgpmpReq,
+            ...activeCgpmpRequests.filter((r) => r.id !== newCgpmpReq.id)
+          ];
+          updateCgpmpRequestsList(updatedList);
+          setSubmittedCgpmpRequest(newCgpmpReq);
+          onShowToast?.(
+            `Demande de compte CGPMP (${newCgpmpReq.id}) soumise à l'Administration ARMP ! Les coordonnées seront envoyées par mail aux ${cgpmpMembers.length + 1} membres dès validation ARMP.`
+          );
+        } catch (err) {
+          setStepError(getFriendlyAuthError(err));
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      // Standard Registration for Non-CGPMP Profiles
       setIsSubmitting(true);
       try {
-        const userProfile = await firebaseRegisterUser(
-          emailInput.trim(),
-          passwordInput,
-          nameInput.trim() || 'Apprenant ARMP',
-          selectedRole,
-          {
-            phone: phoneInput.trim(),
-            institution: institutionInput.trim() || (selectedRole === 'cgpmp_member' ? 'Ministère du Budget' : 'Secteur Public RDC'),
-            twoFactorEnabled: enable2FAOnRegister
-          }
+        const defaultRoleTitle =
+          roleTitleInput.trim() ||
+          DEMO_PROFILES[selectedRole]?.roleTitle ||
+          'Cadre de la Commande Publique';
+        const defaultInstitution =
+          institutionInput.trim() || 'Administration / Organisation RDC';
+        const cleanSecondaryId = formatMatriculeOrRccmMask(
+          secondaryIdInput || activeRoleConfig.defaultSecondaryId
         );
-        onShowToast?.(`Compte créé avec succès ! Bienvenue ${userProfile.name}.`);
+
+        const extraDetails: Partial<UserProfile> = {
+          nom: nomInput.trim().toUpperCase(),
+          postnom: postnomInput.trim().toUpperCase(),
+          prenom: prenomInput.trim(),
+          sexe: sexeInput,
+          civilite: civiliteInput,
+          dateNaissance: dateNaissanceInput,
+          lieuNaissance: lieuNaissanceInput,
+          nationalite: nationaliteInput,
+          etatCivil: etatCivilInput,
+          pieceIdentite: pieceIdentiteInput,
+          adressePhysique: adressePhysiqueInput,
+          phone: phoneInput.trim(),
+          whatsapp: phoneInput.trim(),
+          whatsappLinked: true,
+          institution: defaultInstitution,
+          roleTitle: defaultRoleTitle,
+          matricule: cleanMatricule,
+          secondaryIdNumber: cleanSecondaryId,
+          subCategory: subCategoryInput || activeRoleConfig.subCategoryOptions[0],
+          specialty: specialtyInput || activeRoleConfig.specialtyOptions[0],
+          legalForm: selectedRole === 'pme' ? specialtyInput : undefined,
+          localContentShare: selectedRole === 'pme' ? '≥ 51% Capital Congolais (Loi 17/001)' : undefined,
+          location: `${provinceInput}, RDC`,
+          province: provinceInput,
+          twoFactorEnabled: enable2FAOnRegister,
+          bio: `${defaultRoleTitle} • ${defaultInstitution} (${provinceInput}). Identifiant : ${cleanMatricule}.`
+        };
+
+        const uidToUse =
+          googleAuthUid && !googleAuthUid.startsWith('GOOGLE-USR-')
+            ? googleAuthUid
+            : `USR-GOOGLE-${Date.now()}`;
+
+        const userProfile = await saveGoogleRegisteredProfile({
+          uid: uidToUse,
+          email: emailInput.trim(),
+          name: finalComposedName || nameInput.trim(),
+          role: selectedRole,
+          photoURL: googlePhotoUrl,
+          extraDetails
+        });
+
+        onShowToast?.(`Inscription complétée avec succès ! Bienvenue ${userProfile.name}.`);
         onLoginSuccess?.(userProfile);
         onClose();
       } catch (err) {
@@ -226,21 +972,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Standard Login Flow
     if (mode === 'login') {
-      if (!emailInput.trim() || !emailInput.includes('@')) {
-        setStepError('Veuillez saisir votre adresse email.');
+      const cleanMail = filterEmailMask(emailInput);
+      if (!cleanMail || !cleanMail.includes('@')) {
+        setStepError('Veuillez saisir une adresse email valide.');
         return;
       }
       if (!passwordInput) {
-        setStepError('Veuillez saisir votre mot de passe.');
+        setStepError('Veuillez saisir votre mot de passe (ou le mot de passe reçu par mail).');
         return;
       }
 
       setIsSubmitting(true);
       try {
-        const userProfile = await firebaseLoginUser(emailInput.trim(), passwordInput);
-        onShowToast?.(`Connexion réussie : Bienvenue ${userProfile.name}.`);
+        const userProfile = await firebaseLoginUser(cleanMail, passwordInput);
+        onShowToast?.(`Connexion réussie : Bienvenue ${userProfile.name} (${userProfile.roleTitle}).`);
         onLoginSuccess?.(userProfile);
         onClose();
       } catch (err) {
@@ -251,14 +997,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Google Sign-In with Firebase
   const handleGoogleSignIn = async () => {
     setStepError(null);
     setIsSubmitting(true);
     try {
-      const userProfile = await firebaseGoogleLogin();
-      onShowToast?.(`Connexion Google réussie : Bienvenue ${userProfile.name}.`);
-      onLoginSuccess?.(userProfile);
+      const googleRes = await firebaseGoogleAuthenticate(allProfiles);
+      if (googleRes.isNewAccount || !googleRes.existingProfile) {
+        setGoogleAuthUid(googleRes.uid);
+        setEmailInput(filterEmailMask(googleRes.email));
+        setNameInput(filterPersonNameMask(googleRes.displayName || 'Apprenant ARMP'));
+        setGooglePhotoUrl(googleRes.photoURL);
+        setIsGoogleVerified(true);
+        setExistingGoogleAccount(null);
+        applyDynamicFieldsForRole(selectedRole, null);
+        setMode('register');
+        setRegisterStep(2);
+        onShowToast?.('Nouvel utilisateur Google détecté. Complétez les étapes de création de compte.');
+        return;
+      }
+      onShowToast?.(`Compte reconnu : Bienvenue ${googleRes.existingProfile.name}.`);
+      onLoginSuccess?.(googleRes.existingProfile);
       onClose();
     } catch (err) {
       setStepError(getFriendlyAuthError(err));
@@ -267,11 +1025,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Instant demo preset helper
-  const handleSelectDemo = (role: UserRole) => {
+  const handleSelectDemo = (role: UserRole, customProfile?: UserProfile) => {
     setSelectedRole(role);
-    if (allProfiles && allProfiles[role]) {
-      setEmailInput(allProfiles[role].email);
+    if (customProfile) {
+      onLoginSuccess?.(customProfile);
+      onShowToast?.(`Session active : ${customProfile.name} (${customProfile.institution})`);
+      onClose();
+      return;
     }
     if (onDemoLogin) {
       onDemoLogin(role);
@@ -279,670 +1039,1202 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleApproveCgpmpByArmp = async (req: CgpmpAccountCreationRequest, note?: string) => {
+    setProcessingArmpReqId(req.id);
+    try {
+      const updated = await validateCgpmpAccountRequestByArmp(
+        req,
+        'Pr. Antoine Kasongo Muteba (Direction DFAT / Administration ARMP)',
+        note
+      );
+      const nextList = activeCgpmpRequests.map((r) => (r.id === updated.id ? updated : r));
+      updateCgpmpRequestsList(nextList);
+      if (submittedCgpmpRequest?.id === updated.id) {
+        setSubmittedCgpmpRequest(updated);
+      }
+      onShowToast?.(
+        `✅ Demande ${updated.id} validée par l'ARMP ! Les coordonnées d'authentification ont été envoyées par mail au Secrétaire Permanent et aux ${updated.members.length} membres.`
+      );
+    } finally {
+      setProcessingArmpReqId(null);
+    }
+  };
+
+  const handleRejectCgpmpByArmp = async (req: CgpmpAccountCreationRequest, reason: string) => {
+    setProcessingArmpReqId(req.id);
+    try {
+      const updated = await rejectCgpmpAccountRequestByArmp(
+        req,
+        'Administration ARMP (Direction DFAT)',
+        reason
+      );
+      const nextList = activeCgpmpRequests.map((r) => (r.id === updated.id ? updated : r));
+      updateCgpmpRequestsList(nextList);
+      onShowToast?.(`Demande CGPMP ${updated.id} rejetée avec motif transmis.`);
+    } finally {
+      setProcessingArmpReqId(null);
+    }
+  };
+
+  const phoneDigitsCount = phoneInput.replace(/\D/g, '').replace(/^243/, '').length;
+  const isPhoneComplete = isValidDRCPhone(phoneInput);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
-        className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="p-6 bg-gradient-to-r from-blue-950 via-[#0C3B7C] to-slate-950 text-white relative">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
-            aria-label="Fermer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200">
+      {/* COLUMN 1 (LEFT — 6 COLS EQUAL 50% FULL HEIGHT): LOGO, STEPS, LIVE CGPMP DOSSIER, CREDENTIALS SENT BY MAIL & DEMO ACCESS */}
+      <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-[#08244D] text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-6 sm:p-8 xl:p-10">
+        <AuthPortalLeftColumn
+          mode={mode}
+          onChangeMode={(nextMode) => {
+            setMode(nextMode);
+            setStepError(null);
+          }}
+          onClose={canClose ? onClose : undefined}
+          selectedRole={selectedRole}
+          roleLabel={activeRoleConfig.label}
+          roleBadgeText={activeRoleConfig.badgeText}
+          registerStep={registerStep}
+          onSelectStep={(st) => setRegisterStep(st)}
+          isGoogleVerified={isGoogleVerified}
+          nameInput={composeOfficialFullName() || nameInput}
+          nomInput={nomInput}
+          postnomInput={postnomInput}
+          prenomInput={prenomInput}
+          sexeInput={sexeInput}
+          civiliteInput={civiliteInput}
+          dateNaissanceInput={dateNaissanceInput}
+          lieuNaissanceInput={lieuNaissanceInput}
+          nationaliteInput={nationaliteInput}
+          etatCivilInput={etatCivilInput}
+          pieceIdentiteInput={pieceIdentiteInput}
+          emailInput={emailInput}
+          institutionInput={institutionInput}
+          isPermanentSecretary={cgpmpApplicantCapacity === 'secretaire_permanent'}
+          creationDocRef={creationDocRef}
+          creationDocType={creationDocType}
+          creationDocDate={creationDocDate}
+          creationDocSignatory={creationDocSignatory}
+          creationDocFileName={creationDocFileName}
+          creationDocFileSize={creationDocFileSize}
+          cgpmpMembers={cgpmpMembers}
+          cgpmpAccountRequests={activeCgpmpRequests}
+          onSelectDemo={handleSelectDemo}
+          onPrefillLoginFromEmail={(loginEmail, tempPassword, recipientName) => {
+            setEmailInput(loginEmail);
+            setPasswordInput(tempPassword);
+            setMode('login');
+            setStepError(null);
+            onShowToast?.(
+              `Coordonnées reçues par mail pour ${recipientName} pré-remplies dans la colonne d'authentification.`
+            );
+          }}
+          onOpenArmpValidationView={() => setMode('armp_admin')}
+        />
+      </div>
 
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-bold shadow-md">
-              {mode === 'register' ? (
-                <UserPlus className="w-5 h-5" />
-              ) : mode === 'forgot_password' ? (
-                <KeyRound className="w-5 h-5" />
-              ) : (
-                <Lock className="w-5 h-5" />
-              )}
-            </div>
-            <div>
-              <h3 className="text-lg font-extrabold text-white tracking-tight">
-                {mode === 'register' 
-                  ? 'Créer un Compte Apprenant' 
-                  : mode === 'forgot_password' 
-                  ? 'Réinitialisation du Mot de Passe' 
-                  : 'Authentification Institutionnelle'}
-              </h3>
-              <p className="text-xs text-sky-200 font-medium">
-                ACADEMIA ITECH • République Démocratique du Congo
-              </p>
-            </div>
-          </div>
-
-          {courseTitle && (
-            <div className="mt-3 p-2.5 rounded-xl bg-blue-950/70 border border-blue-400/30 flex items-center space-x-2 text-xs">
-              <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
-              <span className="truncate">
-                Requis pour accéder à : <strong className="text-white font-bold">{courseTitle}</strong>
+      {/* COLUMN 2 (RIGHT — 6 COLS EQUAL 50% FULL HEIGHT & FULL WIDTH): AUTHENTICATION, REGISTRATION STEPS OR ARMP VALIDATION */}
+      <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-white dark:bg-slate-950 p-6 sm:p-8 xl:p-10 flex flex-col justify-start">
+        <div className="w-full space-y-5">
+          {/* Large Official ARMP Logo in the White Column */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <ArmpLogo size="2xl" />
+            <div className="text-xs sm:text-right text-slate-600 dark:text-slate-400">
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white block">
+                {mode === 'login'
+                  ? 'Authentification Officielle ARMP & CGPMP'
+                  : mode === 'register'
+                  ? `Création de Compte (${activeRoleConfig.label}) — Étape ${registerStep}/${isCgpmp ? 5 : 4}`
+                  : mode === 'armp_admin'
+                  ? 'Validation Administrative ARMP & Envoi Mail CGPMP'
+                  : 'Réinitialisation des accès'}
+              </span>
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Autorité de Régulation des Marchés Publics • RDC
               </span>
             </div>
-          )}
-
-          {/* Navigation Tabs between Login / Register */}
-          {mode !== 'forgot_password' && (
-            <div className="mt-4 grid grid-cols-2 p-1 bg-slate-950/40 rounded-xl border border-white/10">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setStepError(null);
-                }}
-                className={`py-1.5 text-xs font-bold rounded-lg transition ${
-                  mode === 'login'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                Se connecter
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('register');
-                  setRegisterStep(1);
-                  setStepError(null);
-                }}
-                className={`py-1.5 text-xs font-bold rounded-lg transition ${
-                  mode === 'register'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                Nouvelle inscription
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Step Indicator (Only in Register Mode) */}
-        {mode === 'register' && (
-          <div className="bg-slate-50 dark:bg-slate-800/60 px-6 py-3 border-b border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between text-xs font-bold">
-              <div className={`flex items-center space-x-1.5 ${registerStep >= 1 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${registerStep >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>1</span>
-                <span>Identité</span>
-              </div>
-              <div className="w-8 h-0.5 bg-slate-200 dark:bg-slate-700" />
-              <div className={`flex items-center space-x-1.5 ${registerStep >= 2 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${registerStep >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>2</span>
-                <span>Profil Métier</span>
-              </div>
-              <div className="w-8 h-0.5 bg-slate-200 dark:bg-slate-700" />
-              <div className={`flex items-center space-x-1.5 ${registerStep >= 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${registerStep >= 3 ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}`}>3</span>
-                <span>Sécurité</span>
-              </div>
-            </div>
           </div>
-        )}
+          {courseTitle && (
+            <div className="p-3.5 rounded-2xl bg-blue-950 text-white border border-blue-700 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+                <span>
+                  Authentification requise pour accéder au module :{' '}
+                  <strong className="text-amber-300">{courseTitle}</strong>
+                </span>
+              </div>
+            </div>
+          )}
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           {stepError && (
-            <div className={`p-3 rounded-xl border text-xs space-y-2 ${stepError.includes('Authorized domains') ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200' : 'bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'}`}>
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span className="font-medium leading-relaxed">{stepError}</span>
+            <div className="p-4 rounded-2xl border bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="font-semibold leading-relaxed">{stepError}</span>
               </div>
-              {stepError.includes('Authorized domains') && (
-                <div className="ml-6 space-y-1.5 pt-1 border-t border-amber-200 dark:border-amber-800/60">
-                  <a href="https://console.firebase.google.com/project/gen-lang-client-0775786837/authentication/settings" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 underline hover:text-blue-900">
-                    → Ouvrir Firebase Console → Authorized domains ↗
-                  </a>
-                  <div className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300/90">
-                    Cliquez <strong>+ Add domain</strong> → saisissez <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 font-mono text-[11px]">armpacademia.vercel.app</code> puis aussi <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 font-mono text-[11px]">armpacademia-*.vercel.app</code> pour les previews. Sauvegardez — effet immédiat (30s).<br/>
-                    + Vérifiez aussi : <a href="https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0775786837" target="_blank" rel="noreferrer" className="underline font-bold">Google Cloud → Credentials → OAuth 2.0 Client</a> → Authorized JavaScript origins → ajouter <code className="px-1 py-0.5 rounded bg-white dark:bg-slate-800 font-mono">https://armpacademia.vercel.app</code>
-                  </div>
-                  <div className="text-[10px] text-slate-600 dark:text-slate-400">En attendant, utilisez ci-dessous <strong>Email / Mot de passe</strong> ou <strong>Accès démo</strong> — ils ne nécessitent pas Google.</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {resetSuccessMessage && (
-            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
-              <div className="flex items-center space-x-2 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Email de réinitialisation transmis !</span>
-              </div>
-              <p>{resetSuccessMessage}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setResetSuccessMessage(null);
-                }}
-                className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 underline"
-              >
-                Retourner à la page de connexion
-              </button>
-            </div>
-          )}
-
-          {/* MODE 1: FORGOT PASSWORD */}
-          {mode === 'forgot_password' && !resetSuccessMessage && (
-            <div className="space-y-4">
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                Indiquez votre adresse email enregistrée. Un lien officiel vous permettant de réinitialiser votre mot de passe en toute sécurité vous sera envoyé via Firebase Auth.
-              </p>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Adresse Email du compte
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="ex: jean.kabila@budget.gouv.cd"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
+              {stepError.includes("Administration de l'ARMP") && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setMode('login');
-                    setStepError(null);
-                  }}
-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline flex items-center space-x-1"
+                  onClick={() => setMode('armp_admin')}
+                  className="px-3 py-1.5 rounded-lg bg-red-700 text-white font-bold text-[11px] shrink-0 cursor-pointer"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Retour à la connexion</span>
+                  Valider dans Admin ARMP →
                 </button>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition flex items-center space-x-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Envoi en cours...</span>
-                    </>
-                  ) : (
-                    <span>Envoyer le lien</span>
-                  )}
-                </button>
-              </div>
+              )}
             </div>
           )}
 
-          {/* MODE 2: LOGIN */}
-          {mode === 'login' && (
-            <div className="space-y-4">
-              {/* Google One-Click Login Button */}
-              <div>
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-100 font-bold text-xs transition flex items-center justify-center space-x-2 shadow-xs"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  <span>Continuer avec Google</span>
-                </button>
-
-                <div className="relative my-3">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200 dark:border-slate-800" />
-                  </div>
-                  <div className="relative flex justify-center text-[10px] uppercase">
-                    <span className="bg-white dark:bg-slate-900 px-2 text-slate-400 font-bold">
-                      ou avec identifiants officiels
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Email Input */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Adresse Email ou Matricule
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="ex: cgpmp.budget@armp-rdc.org"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Password Input */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Mot de passe
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('forgot_password');
-                      setStepError(null);
-                    }}
-                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    Mot de passe oublié ?
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Connexion à la session Firestore...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Accéder à mon espace sécurisé</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-              {/* Fast Institutional Demo Access */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">
-                  Accès démo prédéfini par rôle institutionnel :
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('formateur')}
-                    className="p-2 rounded-lg border border-amber-300 dark:border-amber-700/60 bg-amber-50/70 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-left transition flex items-center space-x-2 col-span-2 sm:col-span-1 shadow-xs"
-                    title="Connexion démo Formateur Senior ARMP"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-[11px] font-extrabold text-amber-900 dark:text-amber-300">🎓 Formateur (Démo)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('cgpmp_member')}
-                    className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-left transition flex items-center space-x-2"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-purple-500" />
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">CGPMP (Ministères)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('armp_agent')}
-                    className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-left transition flex items-center space-x-2"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">ARMP (Régulateur)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('dgcmp_agent')}
-                    className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-left transition flex items-center space-x-2"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">DGCMP (Contrôleur)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('particulier')}
-                    className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left transition flex items-center space-x-2 col-span-2 sm:col-span-2"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Secteur Privé / Soumissionnaire (PME & Candidat)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('formateur')}
-                    className="p-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-left transition flex items-center space-x-2 ring-1 ring-amber-400/30"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-[11px] font-bold text-amber-800 dark:text-amber-200">Formateur ⭐</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('dfat_admin')}
-                    className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700 text-left transition flex items-center space-x-2"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-slate-700" />
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">DFAT Admin</span>
-                  </button>
-                </div>
-                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-2 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Accès démo = 1 clic, sans Firebase — fonctionne même si Google est désactivé
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* MODE 3: REGISTER (3-STEP WIZARD) */}
-          {mode === 'register' && (
-            <div>
-              {/* STEP 1: IDENTITÉ */}
-              {registerStep === 1 && (
-                <div className="space-y-3 animate-in fade-in duration-200">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Nom complet & Post-nom *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={nameInput}
-                      onChange={(e) => setNameInput(e.target.value)}
-                      placeholder="ex: Dieudonné Bakongo Tshisekedi"
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Adresse Email professionnelle ou personnelle *
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="email"
-                        required
-                        value={emailInput}
-                        onChange={(e) => setEmailInput(e.target.value)}
-                        placeholder="ex: dieudonne.bakongo@gmail.com"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Numéro de téléphone (WhatsApp ou SMS)
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="tel"
-                        value={phoneInput}
-                        onChange={(e) => setPhoneInput(e.target.value)}
-                        placeholder="+243 81 234 5678"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleNextStep}
-                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center space-x-1.5"
-                    >
-                      <span>Étape suivante : Profil Métier</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 2: PROFIL MÉTIER */}
-              {registerStep === 2 && (
-                <div className="space-y-3 animate-in fade-in duration-200">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Corps d'activité / Profil de rattachement *
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('particulier')}
-                        className={`p-3 rounded-xl border text-left transition ${
-                          selectedRole === 'particulier'
-                            ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-slate-900 dark:text-white">Secteur Privé / Soumissionnaire</span>
-                        <span className="text-[10px] text-slate-500">Entreprise, consultant, candidat</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('cgpmp_member')}
-                        className={`p-3 rounded-xl border text-left transition ${
-                          selectedRole === 'cgpmp_member'
-                            ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/30'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-slate-900 dark:text-white">Cellule CGPMP</span>
-                        <span className="text-[10px] text-slate-500">Ministère, Province, Établissement public</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('armp_agent')}
-                        className={`p-3 rounded-xl border text-left transition ${
-                          selectedRole === 'armp_agent'
-                            ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/30'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-slate-900 dark:text-white">Régulateur ARMP</span>
-                        <span className="text-[10px] text-slate-500">Direction Formation, Contentieux, Audit</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('dgcmp_agent')}
-                        className={`p-3 rounded-xl border text-left transition ${
-                          selectedRole === 'dgcmp_agent'
-                            ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="block text-xs font-bold text-slate-900 dark:text-white">Contrôleur DGCMP</span>
-                        <span className="text-[10px] text-slate-500">Contrôle a priori, ANO, Dérogations</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRole('formateur')}
-                        className={`p-3 rounded-xl border text-left transition col-span-2 ${
-                          selectedRole === 'formateur'
-                            ? 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/40'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span className="block text-xs font-extrabold text-amber-900 dark:text-amber-300">🎓 Formateur Certifié / Expert ARMP</span>
-                        <span className="text-[10px] text-slate-500">Création de formations, animation d'ateliers, studio vidéo & masterclass</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Ministère, Province, Société ou Organisation
-                    </label>
-                    <div className="relative">
-                      <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        value={institutionInput}
-                        onChange={(e) => setInstitutionInput(e.target.value)}
-                        placeholder="ex: Ministère du Budget / Bureau d'Études Katanga"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={handlePrevStep}
-                      className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center space-x-1"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>Précédent</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleNextStep}
-                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center space-x-1.5"
-                    >
-                      <span>Étape suivante : Sécurité & Mot de passe</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: SÉCURITÉ & 2FA */}
-              {registerStep === 3 && (
-                <div className="space-y-3 animate-in fade-in duration-200">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Créer un mot de passe sécurisé (min. 6 caractères) *
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="password"
-                        required
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Confirmer le mot de passe *
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="password"
-                        required
-                        value={confirmPasswordInput}
-                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 2FA Option */}
-                  <div className="p-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30 flex items-start space-x-3">
-                    <input
-                      type="checkbox"
-                      id="enable2fa"
-                      checked={enable2FAOnRegister}
-                      onChange={(e) => setEnable2FAOnRegister(e.target.checked)}
-                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                    />
-                    <label htmlFor="enable2fa" className="text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <span className="font-bold flex items-center space-x-1">
-                        <Shield className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Activer l'Authentification à Double Facteur (2FA)</span>
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                        Exige une confirmation par code SMS ou Email pour les actions critiques.
-                      </span>
-                    </label>
-                  </div>
-
-                  {/* Ethics Charter */}
-                  <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-start space-x-3">
-                    <input
-                      type="checkbox"
-                      id="ethics"
-                      checked={acceptEthicsCharter}
-                      onChange={(e) => setAcceptEthicsCharter(e.target.checked)}
-                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                    />
-                    <label htmlFor="ethics" className="text-[11px] text-slate-600 dark:text-slate-300 cursor-pointer">
-                      Je certifie l'exactitude de mes informations et m'engage à respecter les règles déontologiques prévues par la Loi n° 10/010 du 27 avril 2010.
-                    </label>
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={handlePrevStep}
-                      className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center space-x-1"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>Précédent</span>
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition flex items-center space-x-2"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Création du compte Firebase...</span>
-                        </>
+          {mode === 'armp_admin' ? (
+            <CgpmpAdminValidationPanel
+              requests={activeCgpmpRequests}
+              isProcessingId={processingArmpReqId}
+              onApproveRequest={handleApproveCgpmpByArmp}
+              onRejectRequest={handleRejectCgpmpByArmp}
+              onUseDispatchedCredentialsForLogin={(loginEmail, tempPassword, recipientName) => {
+                setEmailInput(loginEmail);
+                setPasswordInput(tempPassword);
+                setMode('login');
+                setStepError(null);
+                onShowToast?.(
+                  `Coordonnées reçues par mail chargées pour ${recipientName}. Cliquez sur « Accéder à mon espace sécurisé » pour vous connecter.`
+                );
+              }}
+            />
+          ) : mode === 'register' && submittedCgpmpRequest ? (
+            <CgpmpSubmittedConfirmationCard
+              request={submittedCgpmpRequest}
+              onOpenArmpAdminConsole={() => setMode('armp_admin')}
+              onBackToLogin={() => {
+                setSubmittedCgpmpRequest(null);
+                setMode('login');
+              }}
+            />
+          ) : (
+            <form onSubmit={handleSubmit} className="w-full space-y-5">
+                  {/* ======================================================== */}
+                  {/* MODE 1: FORGOT PASSWORD */}
+                  {/* ======================================================== */}
+                  {mode === 'forgot_password' && (
+                    <div className="space-y-4">
+                      {resetSuccessMessage ? (
+                        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
+                          <div className="font-bold flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>{resetSuccessMessage}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMode('login');
+                              setResetSuccessMessage(null);
+                            }}
+                            className="text-xs font-bold text-blue-600 underline"
+                          >
+                            Retourner à la connexion
+                          </button>
+                        </div>
                       ) : (
                         <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
-                          <span>Valider mon inscription & Commencer</span>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            Saisissez votre adresse email professionnelle pour recevoir un lien de réinitialisation.
+                          </p>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Adresse Email officielle *
+                            </label>
+                            <div className="relative">
+                              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                              <input
+                                type="email"
+                                required
+                                value={emailInput}
+                                onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
+                                placeholder="ex: f.kabasele@budget.gouv.cd"
+                                className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setMode('login')}
+                              className="text-xs font-bold text-slate-500 hover:underline flex items-center gap-1"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Retour à la connexion</span>
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSubmitting}
+                              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
+                            >
+                              Envoyer le lien
+                            </button>
+                          </div>
                         </>
                       )}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </form>
+                    </div>
+                  )}
 
-        {/* Footer info */}
-        <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-          <div className="flex items-center space-x-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Chiffrement TLS & Sauvegarde Firestore RDC</span>
-          </div>
-          <span className="font-mono text-[10px]">v3.2 • Sécurisé</span>
+                  {/* ======================================================== */}
+                  {/* MODE 2: LOGIN (RIGHT COLUMN OF 2-COLUMN FULL PAGE) */}
+                  {/* ======================================================== */}
+                  {mode === 'login' && (
+                    <div className="space-y-5">
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={isSubmitting}
+                        className="w-full py-3.5 px-4 rounded-2xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-900 dark:text-white font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-3 shadow-xs cursor-pointer"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                        </svg>
+                        <span>Continuer avec Google (Vérification instantanée du profil)</span>
+                      </button>
+
+                      <div className="relative my-2">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-slate-200 dark:border-slate-800" />
+                        </div>
+                        <div className="relative flex justify-center text-[11px]">
+                          <span className="bg-white dark:bg-slate-900 px-3 text-slate-500 font-bold">
+                            ou connexion avec les coordonnées reçues par mail (CGPMP / Officiel)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Identifiant / Adresse Email officielle *
+                        </label>
+                        <div className="relative">
+                          <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                          <input
+                            type="email"
+                            required
+                            value={emailInput}
+                            onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
+                            placeholder="ex: s.mwanza@budget.gouv.cd"
+                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Mot de passe d’authentification (ou mot de passe reçu par mail ARMP) *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMode('forgot_password');
+                              setStepError(null);
+                            }}
+                            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            Mot de passe oublié ?
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                          <input
+                            type="text"
+                            required
+                            value={passwordInput}
+                            onChange={(e) => setPasswordInput(e.target.value)}
+                            placeholder="ex: ARMP-CGPMP-2026-BUD1"
+                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full py-3.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Vérification de l’habilitation ARMP...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Accéder à mon espace sécurisé</span>
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        )}
+                      </button>
+
+                      {/* Quick Action Switch & CGPMP Info */}
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <p className="text-[11px] leading-relaxed">
+                          <strong>Membre ou Secrétaire Permanent CGPMP :</strong> seul le Secrétaire Permanent crée le compte avec l’acte de création et la liste des membres. Vos coordonnées sont envoyées par mail dès validation par l’Administration ARMP.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode('register');
+                            setStepError(null);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shrink-0 cursor-pointer"
+                        >
+                          Créer un compte →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ======================================================== */}
+                  {/* MODE 3: REGISTER (MULTI-STEP IN RIGHT COLUMN) */}
+                  {/* ======================================================== */}
+                  {mode === 'register' && (
+                    <div className="space-y-5">
+                      {/* STEP 1: ROLE SELECTION + CGPMP PERMANENT SECRETARY CONDITION (SEPARATED FROM NAMES & EMAILS) */}
+                      {registerStep === 1 && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200 mb-2">
+                              Étape 1/{isCgpmp ? 5 : 4} — Choisissez le profil de compte à créer *
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                              {(
+                                [
+                                  'cgpmp_member',
+                                  'pme',
+                                  'particulier',
+                                  'armp_agent',
+                                  'dgcmp_agent',
+                                  'formateur'
+                                ] as UserRole[]
+                              ).map((rKey) => {
+                                const cfg = ROLE_CREATION_CONFIG[rKey];
+                                const isSelected = selectedRole === rKey;
+                                return (
+                                  <button
+                                    key={rKey}
+                                    type="button"
+                                    onClick={() => handleSelectRoleInRegistration(rKey)}
+                                    className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
+                                      isSelected
+                                        ? 'border-blue-600 bg-blue-50/90 dark:bg-blue-950/60 ring-2 ring-blue-500/30'
+                                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                    }`}
+                                  >
+                                    <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                      {cfg.label}
+                                    </span>
+                                    <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                      {cfg.shortDesc}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* EXCLUSIVE CGPMP CONDITION: SEUL LE SECRÉTAIRE PERMANENT PEUT CRÉER LE COMPTE CGPMP */}
+                          {isCgpmp && (
+                            <div className="p-4 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border-2 border-indigo-400 dark:border-indigo-700 space-y-3">
+                              <div className="flex items-center gap-2 text-xs font-extrabold text-indigo-950 dark:text-indigo-200">
+                                <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                                <span>
+                                  Habilitation Réglementaire CGPMP : Seul le Secrétaire Permanent peut créer le compte CGPMP *
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                                Conformément aux dispositions régissant les Cellules de Gestion des Projets et des Marchés Publics, <strong>seul le Secrétaire Permanent</strong> est habilité à créer le compte de la cellule, à joindre le document portant création de la CGPMP et à inscrire la liste des membres.
+                              </p>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setCgpmpApplicantCapacity('secretaire_permanent')}
+                                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                    cgpmpApplicantCapacity === 'secretaire_permanent'
+                                      ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-200 font-extrabold'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600'
+                                  }`}
+                                >
+                                  <div className="text-xs font-extrabold">
+                                    ✓ Je suis le Secrétaire Permanent de la CGPMP
+                                  </div>
+                                  <div className="text-[10px] opacity-80 mt-0.5">
+                                    Habilité à créer le compte CGPMP et ajouter les membres
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setCgpmpApplicantCapacity('membre_ordinaire')}
+                                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                    cgpmpApplicantCapacity === 'membre_ordinaire'
+                                      ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/50 text-amber-950 dark:text-amber-200 font-extrabold'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600'
+                                  }`}
+                                >
+                                  <div className="text-xs font-bold">
+                                    Je suis un Membre de la CGPMP (CPM / Expert)
+                                  </div>
+                                  <div className="text-[10px] opacity-80 mt-0.5">
+                                    Inscrit par le Secrétaire Permanent (accès reçu par mail)
+                                  </div>
+                                </button>
+                              </div>
+
+                              {cgpmpApplicantCapacity === 'membre_ordinaire' && (
+                                <div className="p-3.5 rounded-xl bg-amber-100/90 dark:bg-amber-950/80 border border-amber-400 text-xs text-amber-950 dark:text-amber-200 space-y-2">
+                                  <div className="font-extrabold">
+                                    🔒 Création directe verrouillée pour les membres individuels :
+                                  </div>
+                                  <p className="text-[11px] leading-relaxed">
+                                    En tant que membre de la CGPMP, vous ne créez pas de compte individuellement. Votre <strong>Secrétaire Permanent</strong> vous inscrit sur la liste officielle de la cellule avec votre nom complet et votre adresse email. Dès que <strong>l’Administration de l’ARMP</strong> valide la demande, le système vous envoie vos coordonnées d’authentification par mail.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMode('login')}
+                                    className="px-3.5 py-2 rounded-lg bg-[#0C3B7C] text-white font-bold text-[11px] cursor-pointer"
+                                  >
+                                    Aller à la page de connexion (utiliser mes coordonnées reçues par mail) →
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Summary of what Steps 2 to 5 will collect */}
+                          {(!isCgpmp || cgpmpApplicantCapacity === 'secretaire_permanent') && (
+                            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                              <div className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                                Profil sélectionné : <span className="text-blue-600 dark:text-blue-400">{activeRoleConfig.label}</span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                                L’étape suivante (<strong>Étape 2/{isCgpmp ? 5 : 4}</strong>) est dédiée à vos informations d’identité civile complète (<strong>Nom, Post-nom, Prénom, Sexe, Date et Lieu de naissance, Nationalité, Pièce d’identité et Adresse Email officielle</strong>).
+                              </p>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={handleGoogleRegistrationStep1}
+                                  disabled={isSubmitting}
+                                  className="py-3 px-4 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-900 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                  </svg>
+                                  <span>Pré-remplir avec Google</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={handleNextStep}
+                                  className="py-3 px-4 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                  <span>Continuer vers l’Identité Civile (Étape 2/{isCgpmp ? 5 : 4})</span>
+                                  <ArrowRight className="w-4 h-4 shrink-0" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* STEP 2 (NOUVELLE ÉTAPE DÉDIÉE): IDENTITÉ CIVILE COMPLÈTE (NOM, POSTNOM, PRÉNOM, SEXE, EMAIL & AUTRES INFOS UTILES) */}
+                      {registerStep === 2 && (
+                        <div className="space-y-4">
+                          {/* Existing Google Account Detected Card */}
+                          {existingGoogleAccount && (
+                            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-400 space-y-3">
+                              <div className="text-xs font-extrabold text-slate-900 dark:text-white">
+                                ✓ Utilisateur déjà enregistré détecté : {existingGoogleAccount.name} ({existingGoogleAccount.institution})
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onLoginSuccess?.(existingGoogleAccount);
+                                    onClose();
+                                  }}
+                                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs cursor-pointer"
+                                >
+                                  Me connecter directement à ce compte
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRegisterStep(3)}
+                                  className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs cursor-pointer"
+                                >
+                                  Poursuivre vers l’Étape 3 →
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="text-xs font-extrabold text-slate-900 dark:text-white">
+                                  Étape 2/{isCgpmp ? 5 : 4} — Identité Civile Complète & Adresse Email {isCgpmp ? 'du Secrétaire Permanent CGPMP' : 'du Titulaire'}
+                                </div>
+                                <p className="text-[11px] text-slate-500">
+                                  Renseignez votre Nom, Post-nom, Prénom, Sexe et toutes les informations civiles requises.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCiviliteInput('M.');
+                                  setNomInput('KABASELE');
+                                  setPostnomInput('LUKOJI');
+                                  setPrenomInput('Fidèle');
+                                  setSexeInput('M');
+                                  setDateNaissanceInput('1982-04-18');
+                                  setLieuNaissanceInput('Kinshasa');
+                                  setNationaliteInput('Congolaise (RDC)');
+                                  setEtatCivilInput('Marié(e)');
+                                  setPieceIdentiteInput('ONIP-RDC-24390812');
+                                  if (!emailInput) {
+                                    setEmailInput(
+                                      isCgpmp
+                                        ? 'sp.cgpmp@infrastructures.gouv.cd'
+                                        : 'f.kabasele@finances.gouv.cd'
+                                    );
+                                  }
+                                  setStepError(null);
+                                  onShowToast?.('Exemple d’identité civile complète pré-rempli.');
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 text-[11px] font-extrabold hover:bg-blue-200 transition cursor-pointer"
+                              >
+                                + Pré-remplir un exemple d’identité
+                              </button>
+                            </div>
+
+                            {/* Row 1: Civilité & Sexe */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Civilité / Titre *
+                                </label>
+                                <select
+                                  value={civiliteInput}
+                                  onChange={(e) => setCiviliteInput(e.target.value)}
+                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                >
+                                  <option value="M.">Monsieur (M.)</option>
+                                  <option value="Mme">Madame (Mme)</option>
+                                  <option value="Ir.">Ingénieur (Ir.)</option>
+                                  <option value="Me">Maître (Me)</option>
+                                  <option value="Dr">Docteur (Dr)</option>
+                                  <option value="Pr.">Professeur (Pr.)</option>
+                                  <option value="Hon.">Honorable (Hon.)</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Sexe / Genre *
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSexeInput('M')}
+                                    className={`py-2.5 px-3 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
+                                      sexeInput === 'M'
+                                        ? 'border-blue-600 bg-blue-600 text-white'
+                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    Masculin (M)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSexeInput('F')}
+                                    className={`py-2.5 px-3 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
+                                      sexeInput === 'F'
+                                        ? 'border-blue-600 bg-blue-600 text-white'
+                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    Féminin (F)
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Row 2: Nom, Post-nom, Prénom */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Nom (Nom de famille) *
+                                </label>
+                                <div className="relative">
+                                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                  <input
+                                    type="text"
+                                    required
+                                    value={nomInput}
+                                    onChange={(e) => setNomInput(filterPersonNameMask(e.target.value).toUpperCase())}
+                                    placeholder="ex: KABASELE"
+                                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Post-nom *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={postnomInput}
+                                  onChange={(e) => setPostnomInput(filterPersonNameMask(e.target.value).toUpperCase())}
+                                  placeholder="ex: LUKOJI"
+                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Prénom *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={prenomInput}
+                                  onChange={(e) => setPrenomInput(filterPersonNameMask(e.target.value))}
+                                  placeholder="ex: Fidèle"
+                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Row 3: Adresse Email officielle & N° Pièce d'Identité */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  {isCgpmp ? 'Adresse Email officielle du Secrétaire Permanent *' : 'Adresse Email professionnelle / officielle *'}
+                                </label>
+                                <div className="relative">
+                                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                  <input
+                                    type="email"
+                                    required
+                                    value={emailInput}
+                                    onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
+                                    placeholder="ex: sp.cgpmp@finances.gouv.cd"
+                                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  N° Pièce d’Identité (Carte d’Électeur ONIP / Passeport) *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={pieceIdentiteInput}
+                                  onChange={(e) => setPieceIdentiteInput(formatMatriculeOrRccmMask(e.target.value))}
+                                  placeholder="ex: ONIP-RDC-24389104"
+                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white uppercase"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Row 4: Date de naissance, Lieu de naissance, Nationalité, État civil */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Date de naissance
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dateNaissanceInput}
+                                  onChange={(e) => setDateNaissanceInput(e.target.value)}
+                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Lieu de naissance
+                                </label>
+                                <input
+                                  type="text"
+                                  value={lieuNaissanceInput}
+                                  onChange={(e) => setLieuNaissanceInput(filterPersonNameMask(e.target.value))}
+                                  placeholder="ex: Kinshasa"
+                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  Nationalité
+                                </label>
+                                <input
+                                  type="text"
+                                  value={nationaliteInput}
+                                  onChange={(e) => setNationaliteInput(e.target.value)}
+                                  placeholder="Congolaise (RDC)"
+                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                  État civil
+                                </label>
+                                <select
+                                  value={etatCivilInput}
+                                  onChange={(e) => setEtatCivilInput(e.target.value)}
+                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                >
+                                  <option value="Marié(e)">Marié(e)</option>
+                                  <option value="Célibataire">Célibataire</option>
+                                  <option value="Veuf / Veuve">Veuf / Veuve</option>
+                                  <option value="Divorcé(e)">Divorcé(e)</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={handlePrevStep}
+                              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Étape 1 (Profil)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleVerifyCivilIdentityStep2}
+                              disabled={isSubmitting}
+                              className="px-5 py-2.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+                            >
+                              <span>
+                                {isCgpmp
+                                  ? 'Suivant : Document de Création CGPMP (Étape 3/5)'
+                                  : 'Suivant : Institution & Fonction (Étape 3/4)'}
+                              </span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STEP 3: INSTITUTION + MANDATORY CGPMP CREATION DOCUMENT (OR ROLE DYNAMIC FIELDS) */}
+                      {registerStep === 3 && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              {activeRoleConfig.institutionLabel}
+                            </label>
+                            <div className="relative">
+                              <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                              <input
+                                type="text"
+                                required
+                                value={institutionInput}
+                                onChange={(e) => setInstitutionInput(filterInstitutionMask(e.target.value))}
+                                placeholder={activeRoleConfig.institutionPlaceholder}
+                                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {activeRoleConfig.institutionPresets.map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => setInstitutionInput(filterInstitutionMask(preset))}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                    institutionInput === preset
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                {activeRoleConfig.subCategoryLabel}
+                              </label>
+                              <select
+                                value={subCategoryInput}
+                                onChange={(e) => setSubCategoryInput(e.target.value)}
+                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                              >
+                                {activeRoleConfig.subCategoryOptions.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                {activeRoleConfig.roleTitleLabel}
+                              </label>
+                              <div className="relative">
+                                <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                <input
+                                  type="text"
+                                  readOnly={isCgpmp}
+                                  value={isCgpmp ? 'Secrétaire Permanent de la CGPMP' : roleTitleInput}
+                                  onChange={(e) => setRoleTitleInput(filterRoleTitleMask(e.target.value))}
+                                  className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs font-bold ${
+                                    isCgpmp
+                                      ? 'border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-300 cursor-not-allowed'
+                                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white'
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* IF CGPMP: MANDATORY DOCUMENT PORTANT CRÉATION DE LA CELLULE */}
+                          {isCgpmp ? (
+                            <CgpmpCreationDocumentSection
+                              creationDocType={creationDocType}
+                              setCreationDocType={setCreationDocType}
+                              creationDocRef={creationDocRef}
+                              setCreationDocRef={setCreationDocRef}
+                              creationDocDate={creationDocDate}
+                              setCreationDocDate={setCreationDocDate}
+                              creationDocSignatory={creationDocSignatory}
+                              setCreationDocSignatory={setCreationDocSignatory}
+                              creationDocFileName={creationDocFileName}
+                              creationDocFileSize={creationDocFileSize}
+                              onFileUpload={handleCreationDocUpload}
+                              onAttachSpecimenDocument={handleAttachSpecimenDocument}
+                            />
+                          ) : (
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                {activeRoleConfig.specialtyLabel}
+                              </label>
+                              <select
+                                value={specialtyInput}
+                                onChange={(e) => setSpecialtyInput(e.target.value)}
+                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                              >
+                                {activeRoleConfig.specialtyOptions.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={handlePrevStep}
+                              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Étape 2 (Identité Civile)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleNextStep}
+                              className="px-5 py-2.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+                            >
+                              <span>
+                                {isCgpmp
+                                  ? 'Suivant : Liste des Membres CGPMP (Étape 4/5)'
+                                  : 'Suivant : Coordonnées RDC & Activation (Étape 4/4)'}
+                              </span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STEP 4 FOR CGPMP: LISTE DES MEMBRES (NOM, POST-NOM, PRÉNOM, SEXE & ADRESSES EMAIL) */}
+                      {registerStep === 4 && isCgpmp && (
+                        <div className="space-y-4">
+                          <CgpmpMembersRosterStep
+                            permanentSecretaryName={composeOfficialFullName() || nameInput || 'Secrétaire Permanent'}
+                            permanentSecretaryEmail={emailInput}
+                            institutionName={institutionInput}
+                            members={cgpmpMembers}
+                            onAddMember={(newMem) => {
+                              setCgpmpMembers((prev) => [
+                                ...prev,
+                                { ...newMem, id: `MEM-${Date.now()}` }
+                              ]);
+                              onShowToast?.(
+                                `Membre ajouté : ${newMem.fullName} (${newMem.email}).`
+                              );
+                            }}
+                            onRemoveMember={(id) =>
+                              setCgpmpMembers((prev) => prev.filter((m) => m.id !== id))
+                            }
+                            onLoadDefaultMembers={() => {
+                              setCgpmpMembers([
+                                {
+                                  id: 'MEM-PRE-1',
+                                  fullName: 'Ir. Célestin KABUYA MUTOMBO',
+                                  nom: 'KABUYA',
+                                  postnom: 'MUTOMBO',
+                                  prenom: 'Célestin',
+                                  sexe: 'M',
+                                  email: 'c.kabuya@infrastructures.gouv.cd',
+                                  functionInCell:
+                                    'Président de la Commission de Passation des Marchés (CPM)'
+                                },
+                                {
+                                  id: 'MEM-PRE-2',
+                                  fullName: 'Me Mireille NGALULA TSHIMANGA',
+                                  nom: 'NGALULA',
+                                  postnom: 'TSHIMANGA',
+                                  prenom: 'Mireille',
+                                  sexe: 'F',
+                                  email: 'm.ngalula@infrastructures.gouv.cd',
+                                  functionInCell: 'Expert en Passation des Marchés & Montage DAO'
+                                },
+                                {
+                                  id: 'MEM-PRE-3',
+                                  fullName: 'M. Serge MBUYI KALONJI',
+                                  nom: 'MBUYI',
+                                  postnom: 'KALONJI',
+                                  prenom: 'Serge',
+                                  sexe: 'M',
+                                  email: 's.mbuyi@infrastructures.gouv.cd',
+                                  functionInCell: 'Expert Technique & Analyse des Offres'
+                                }
+                              ]);
+                              onShowToast?.('3 membres types de la Cellule CGPMP chargés.');
+                            }}
+                          />
+
+                          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={handlePrevStep}
+                              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Étape 3 (Acte de création)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleNextStep}
+                              className="px-5 py-2.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+                            >
+                              <span>Suivant : Coordonnées & Soumission ARMP (Étape 5/5)</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* FINAL STEP (STEP 5 FOR CGPMP, STEP 4 FOR OTHERS): DRC PHONE MASK, MATRICULE & SUBMIT */}
+                      {((registerStep === 5 && isCgpmp) || (registerStep === 4 && !isCgpmp)) && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                Province de rattachement (RDC) *
+                              </label>
+                              <div className="relative">
+                                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                                <select
+                                  value={provinceInput}
+                                  onChange={(e) => setProvinceInput(e.target.value)}
+                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                                >
+                                  {DRC_PROVINCES.map((prov) => (
+                                    <option key={prov} value={prov}>
+                                      {prov}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                  Téléphone RDC (+243 verrouillé) *
+                                </label>
+                                <span
+                                  className={`text-[10px] font-mono font-bold ${
+                                    isPhoneComplete ? 'text-emerald-600' : 'text-amber-600'
+                                  }`}
+                                >
+                                  {isPhoneComplete ? '✓ 9/9 chiffres' : `${phoneDigitsCount}/9 chiffres`}
+                                </span>
+                              </div>
+                              <div className="relative">
+                                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                <input
+                                  type="tel"
+                                  required
+                                  value={phoneInput}
+                                  onChange={(e) => setPhoneInput(formatDRCPhoneMask(e.target.value))}
+                                  placeholder="+243 81 234 5678"
+                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Adresse physique / Siège administratif (RDC)
+                            </label>
+                            <input
+                              type="text"
+                              value={adressePhysiqueInput}
+                              onChange={(e) => setAdressePhysiqueInput(e.target.value)}
+                              placeholder="ex: Boulevard du 30 Juin, Commune de la Gombe, Kinshasa"
+                              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                {activeRoleConfig.matriculeLabel}
+                              </label>
+                              <div className="relative">
+                                <Hash className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                <input
+                                  type="text"
+                                  required
+                                  value={matriculeInput}
+                                  onChange={(e) =>
+                                    setMatriculeInput(formatMatriculeOrRccmMask(e.target.value))
+                                  }
+                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs font-bold text-slate-900 dark:text-white uppercase"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                {activeRoleConfig.secondaryIdLabel}
+                              </label>
+                              <div className="relative">
+                                <FileText className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                <input
+                                  type="text"
+                                  required
+                                  readOnly={isCgpmp}
+                                  value={isCgpmp ? creationDocRef : secondaryIdInput}
+                                  onChange={(e) =>
+                                    setSecondaryIdInput(formatMatriculeOrRccmMask(e.target.value))
+                                  }
+                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs font-bold text-slate-900 dark:text-white uppercase"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* CGPMP Final Recap Box before submitting to ARMP Admin */}
+                          {isCgpmp && (
+                            <div className="p-4 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs space-y-2">
+                              <div className="font-extrabold text-blue-950 dark:text-blue-200 flex items-center gap-2">
+                                <ShieldCheck className="w-4 h-4 text-blue-600" />
+                                <span>
+                                  Récapitulatif de la Demande CGPMP soumise à la Validation de l’ARMP :
+                                </span>
+                              </div>
+                              <ul className="space-y-1 text-[11px] text-slate-700 dark:text-slate-300">
+                                <li>
+                                  • <strong>Secrétaire Permanent :</strong> {composeOfficialFullName() || nameInput} — Sexe: {sexeInput} ({emailInput})
+                                </li>
+                                <li>
+                                  • <strong>Document portant création joint :</strong> {creationDocType} n°{' '}
+                                  <span className="font-mono font-bold">{creationDocRef}</span> ({creationDocFileName})
+                                </li>
+                                <li>
+                                  • <strong>Membres inscrits ({cgpmpMembers.length}) :</strong>{' '}
+                                  {cgpmpMembers.map((m) => `${m.fullName} (${m.email})`).join(' · ')}
+                                </li>
+                                <li className="text-emerald-800 dark:text-emerald-300 font-bold pt-1">
+                                  ➔ Le système enverra par mail les coordonnées d’authentification au Secrétaire Permanent et à chaque membre dès validation de cette demande par l’Administration de l’ARMP.
+                                </li>
+                              </ul>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2.5 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={enable2FAOnRegister}
+                                onChange={(e) => setEnable2FAOnRegister(e.target.checked)}
+                                className="rounded text-blue-600 w-4 h-4"
+                              />
+                              <span className="font-bold flex items-center gap-1.5">
+                                <Shield className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Activer la Double Protection (2FA)</span>
+                              </span>
+                            </label>
+
+                            <label className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2.5 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={acceptEthicsCharter}
+                                onChange={(e) => setAcceptEthicsCharter(e.target.checked)}
+                                className="rounded text-blue-600 w-4 h-4"
+                              />
+                              <span className="font-medium">
+                                J’accepte la Charte d’intégrité (Loi 10/010)
+                              </span>
+                            </label>
+                          </div>
+
+                          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={handlePrevStep}
+                              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Précédent</span>
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSubmitting}
+                              className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-amber-300" />
+                              <span>
+                                {isSubmitting
+                                  ? 'Transmission en cours...'
+                                  : isCgpmp
+                                  ? `Soumettre la Demande CGPMP (${cgpmpMembers.length + 1} membres) à la Validation ARMP`
+                                  : 'Finaliser mon inscription & Accéder à mon compte'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </form>
+          )}
         </div>
       </div>
     </div>

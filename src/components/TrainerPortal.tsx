@@ -99,7 +99,7 @@ interface TrainerPortalProps {
   isDarkMode: boolean;
 }
 
-type TrainerTab = 'dashboard' | 'courses' | 'authoring' | 'studio' | 'quiz_bank' | 'learners';
+type TrainerTab = 'dashboard' | 'courses' | 'authoring' | 'ai_generator' | 'studio' | 'quiz_bank' | 'learners';
 
 interface RecordedVideo {
   id: string;
@@ -145,7 +145,188 @@ export const TrainerPortal: React.FC<TrainerPortalProps> = ({
   const [newCourseCover, setNewCourseCover] = useState(imgTraining);
   const [coverFile, setCoverFile] = useState<AcademiaFile | null>(null);
   const [coverUploading, setCoverUploading] = useState(false);
-  const [selectedAudiences, setSelectedAudiences] = useState<UserRole[]>(['cgpmp_member', 'armp_agent', 'dgcmp_agent']);
+  const [selectedAudiences, setSelectedAudiences] = useState<UserRole[]>(['cgpmp_member', 'armp_agent', 'dgcmp_agent', 'pme']);
+
+  // AI Animated Module Generator State (depuis un contenu existant du formateur)
+  const [aiSourceMode, setAiSourceMode] = useState<'paste' | 'existing_course' | 'template'>('paste');
+  const [aiSelectedExistingCourseId, setAiSelectedExistingCourseId] = useState<string>(courses[0]?.id || 'MOD-001');
+  const [aiSourceTitle, setAiSourceTitle] = useState('Pratique du Contenu Local PME, Sous-Traitance ARSP (Loi 17/001) et Montage des Offres');
+  const [aiSourceText, setAiSourceText] = useState(
+    `CHAPITRE 1 : CADRE LÉGAL DU CONTENU LOCAL ET DE LA SOUS-TRAITANCE EN RDC
+La Loi n° 17/001 du 08 février 2017 fixant les règles applicables à la sous-traitance dans le secteur privé et la Loi n° 10/010 du 27 avril 2010 relative aux marchés publics consacrent la promotion des Petites et Moyennes Entreprises (PME) à capitaux congolais.
+Pour être éligible à la sous-traitance réservée et à la marge de préférence nationale (15% à 20% selon l'Article 37 de la Loi 10/010), l'entreprise doit détenir au moins 51% de capital social appartenant à des citoyens congolais et disposer d'une Attestation d'Enregistrement ARSP en cours de validité.
+
+CHAPITRE 2 : MONTAGE DU DOSSIER DE SOUMISSION PME ET GROUPEMENT (GME)
+Lorsqu'une PME congolaise ne dispose pas seule du chiffre d'affaires annuel moyen ou du parc matériel exigé dans les Données Particulières de l'Appel d'Offres (DPAO), elle peut former un Groupement Momentané d'Entreprises (GME) conjoint ou solidaire.
+Les pièces administratives obligatoires comprennent : le RCCM actualisé, l'Identification Nationale, l'Attestation fiscale DGI valide, le quitus CNSS, l'Attestation ARSP et la garantie bancaire de soumission (plafonnée entre 1% et 2% du montant de l'offre).
+
+CHAPITRE 3 : EXÉCUTION FINANCIÈRE, AVANCE DE DÉMARRAGE ET PRÉVENTION DES REJETS
+Tout contrat attribué ouvre droit au versement d'une avance forfaitaire de démarrage pouvant atteindre 30% sur présentation d'une caution bancaire de remboursement d'avance (Art. 64 Loi 10/010). En cas d'écartement abusif d'une PME nationale, le dirigeant dispose de 5 jours ouvrables pour introduire son recours gracieux préalable devant la Personne Responsable des Marchés (Art. 77), puis de 7 jours ouvrables pour saisir le Comité de Règlement des Différends (CRD) de l'ARMP avec effet suspensif.`
+  );
+  const [aiCategory, setAiCategory] = useState<'Réglementation' | 'Passation' | 'Contrôle' | 'Contentieux' | 'Gestion & Audit'>('Passation');
+  const [aiLevel, setAiLevel] = useState<'Fondamental' | 'Intermédiaire' | 'Avancé' | 'Spécialisé'>('Intermédiaire');
+  const [aiLegalRef, setAiLegalRef] = useState('Loi n° 10/010 du 27 avril 2010 & Loi n° 17/001 (ARSP / ARMP RDC)');
+  const [aiAudiences, setAiAudiences] = useState<UserRole[]>(['pme', 'cgpmp_member', 'armp_agent', 'dgcmp_agent', 'particulier']);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGeneratedCourse, setAiGeneratedCourse] = useState<CourseModule | null>(null);
+  const [aiPreviewLessonIdx, setAiPreviewLessonIdx] = useState(0);
+  const [aiEngineLabel, setAiEngineLabel] = useState<string | null>(null);
+
+  const TRAINER_CONTENT_TEMPLATES = [
+    {
+      id: 'tpl-pme',
+      title: 'Support Séminaire : Sous-traitance PME, ARSP (Loi 17/001) & Groupements GME',
+      category: 'Réglementation' as const,
+      legalRef: 'Loi n° 17/001 du 08 février 2017 & Loi n° 10/010 Art. 13, 37, 48',
+      text: `CHAPITRE 1 : ÉLIGIBILITÉ AU CONTENU LOCAL ET RÔLE DE L'ARSP
+En République Démocratique du Congo, la Loi n° 17/001 impose que les activités de sous-traitance et les lots accessibles aux PME nationales soient confiés à des entreprises dont au moins 51% du capital est détenu par des Congolais. L'Autorité de Régulation de la Sous-Traitance dans le Secteur Privé (ARSP) délivre l'attestation obligatoire vérifiée lors de l'ouverture des plis.
+
+CHAPITRE 2 : ALLOTISSEMENT TECHNIQUE ET MARGE DE PRÉFÉRENCE DE 20%
+L'article 13 de la Loi n° 10/010 encourage l'allotissement technique et géographique pour permettre aux PME congolaises de soumissionner directement sans confondre cette pratique avec le fractionnement illicite. L'article 37 accorde une marge de préférence nationale jusqu'à 20% à l'évaluation financière pour les offres conformes des PME locales.
+
+CHAPITRE 3 : GROUPEMENT MOMENTANÉ D'ENTREPRISES (GME) ET AVANCE DE 30%
+Plusieurs PME peuvent additionner leur chiffre d'affaires, leurs ingénieurs et leurs équipements au sein d'un GME solidaire avec chef de file mandaté. Une fois le marché signé et approuvé après Avis de Non-Objection (ANO), la PME peut percevoir jusqu'à 30% d'avance de démarrage contre garantie bancaire.`
+    },
+    {
+      id: 'tpl-exec',
+      title: 'Notes de Cours : Exécution Financière, Avenants (Plafond 15%) & Réception des Travaux',
+      category: 'Gestion & Audit' as const,
+      legalRef: 'Loi n° 10/010 - Art. 57 à 75 & CCAG Travaux RDC',
+      text: `SECTION 1 : GARANTIES CONTRACTUELLES ET DÉCOMPTES PROVISOIRES
+Dès la notification du marché approuvé, le titulaire fournit une garantie de bonne exécution fixée à 5% du montant initial (Art. 58 Loi 10/010). Les paiements s'effectuent par décomptes provisoires établis sur la base d'attachements contradictoires signés par la mission de contrôle et la CGPMP.
+
+SECTION 2 : ENCADREMENT STRICT DES AVENANTS (SEUIL 15% ET PLAFOND 30%)
+Tout avenant ayant une incidence financière supérieure à 15% du marché initial est obligatoirement soumis à l'Avis de Non-Objection (ANO) préalable de la DGCMP. Le cumul des avenants ne peut en aucun cas dépasser 30% ni bouleverser l'objet ou l'équilibre économique du contrat.
+
+SECTION 3 : PÉNALITÉS DE RETARD ET DOUBLE RÉCEPTION (PROVISOIRE PUIS DÉFINITIVE)
+En cas de dépassement du délai contractuel sans ordre de service d'arrêt ni force majeure, les pénalités de retard s'appliquent de plein droit. La réception provisoire ouvre le délai de garantie décennale ou annuelle (12 mois), au terme duquel la réception définitive libère la retenue de garantie.`
+    },
+    {
+      id: 'tpl-sigmap',
+      title: 'Guide Pratique : Dématérialisation SIGMAP, Portail e-GP & Audit de Traçabilité',
+      category: 'Passation' as const,
+      legalRef: 'Décret n° 10/21, Loi 10/010 Art. 14 & Directives SIGMAP RDC',
+      text: `PARTIE 1 : NUMÉRISATION DU PPM ET CODIFICATION SIGMAP
+Chaque ligne du Plan de Passation des Marchés (PPM) doit être saisie et validée dans le Système Intégré de Gestion des Marchés Publics (SIGMAP) en parfaite synchronisation avec la ligne budgétaire de la Loi de Finances (Art. 14 Loi 10/010). Aucun DAO ne peut être publié sans code unique de traçabilité.
+
+PARTIE 2 : DÉPÔT ÉLECTRONIQUE CHIFFRÉ ET HORODATAGE CERTIFIÉ
+Sur le portail électronique e-GP, les plis des soumissionnaires sont chiffrés jusqu'à l'heure officielle d'ouverture publique (Art. 46). L'horodatage électronique certifié bloque automatiquement toute soumission tardive et génère le registre infalsifiable des dépôts.
+
+PARTIE 3 : ARCHIVAGE NUMÉRIQUE DÉCENNAL ET AUDIT ARMP / COUR DES COMPTES
+L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'évaluation, contrat et décomptes) est archivée numériquement pendant 10 ans pour permettre les audits a posteriori de l'ARMP, de l'IGF et de la Cour des Comptes.`
+    }
+  ];
+
+  const handleGenerateAnimatedModuleFromContent = async () => {
+    if (!aiSourceText.trim() || aiSourceText.trim().length < 20) {
+      setTrainerNotice("Veuillez coller ou sélectionner un contenu pédagogique d'au moins 20 caractères.");
+      return;
+    }
+    setAiGenerating(true);
+    setTrainerNotice(null);
+    try {
+      const response = await fetch('/api/ai/generate-animated-module', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceTitle: aiSourceTitle,
+          sourceText: aiSourceText,
+          category: aiCategory,
+          level: aiLevel,
+          legalRef: aiLegalRef,
+          targetAudience: aiAudiences,
+          trainerName: currentProfile.name,
+          trainerInstitution: currentProfile.institution
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.module) {
+        throw new Error(data?.error || 'Erreur lors de la génération IA');
+      }
+      const m = data.module;
+      const generated: CourseModule = {
+        id: `MOD-IA-${Date.now().toString().slice(-5)}`,
+        code: m.code || `MP-RDC-IA-${courses.length + 1}`,
+        title: m.title || aiSourceTitle || 'Module Animé généré par IA',
+        category: (m.category || aiCategory) as CourseModule['category'],
+        targetAudience: (Array.isArray(m.targetAudience) ? m.targetAudience : aiAudiences) as UserRole[],
+        duration: m.duration || '2h 15min',
+        level: (m.level || aiLevel) as CourseModule['level'],
+        legalRef: m.legalReference || aiLegalRef,
+        description: m.description || `Module animé généré par l'IA à partir du support de ${currentProfile.name}.`,
+        coverImage: newCourseCover || imgTraining,
+        chaptersCount: Array.isArray(m.lessons) ? m.lessons.length : 3,
+        rating: 5.0,
+        studentsCount: 1,
+        requiresDfatApproval: false,
+        lessons: (Array.isArray(m.lessons) ? m.lessons : []).map((les: any, idx: number) => ({
+          id: les.id || `L-IA-${idx + 1}`,
+          title: les.title || `Leçon Animée ${idx + 1}`,
+          duration: les.duration || '40 min',
+          content: les.content || '',
+          keyArticles: Array.isArray(les.keyArticles) ? les.keyArticles : [aiLegalRef],
+          format: 'animation' as LessonFormat,
+          templateId: idx === 0 ? 'character' : idx === 1 ? 'infographic' : 'whiteboard'
+        })),
+        quiz: (Array.isArray(m.quiz) ? m.quiz : []).map((q: any) => ({
+          question: q.question,
+          options: Array.isArray(q.options) ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
+          correctIndex: typeof q.correctAnswerIndex === 'number' ? q.correctAnswerIndex : (typeof q.correctIndex === 'number' ? q.correctIndex : 1),
+          explanation: q.explanation || `Référence : ${q.legalArticle || aiLegalRef}`
+        }))
+      };
+      setAiGeneratedCourse(generated);
+      setAiPreviewLessonIdx(0);
+      setAiEngineLabel(data.engine === 'gemini-ai-studio' ? 'Cerveau IA Gemini • Scénarisation Animée Prof. Aïsha' : 'Moteur Pédagogique Structuré ACADEMIA IA');
+      setTrainerNotice(`Module animé « ${generated.title} » généré avec succès (${generated.lessons.length} leçons animées + ${generated.quiz.length} QCM) !`);
+    } catch (err: any) {
+      console.warn('AI module generation error:', err);
+      setTrainerNotice(err?.message || 'Erreur lors de la génération du module animé.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handleLoadGeneratedIntoEditor = () => {
+    if (!aiGeneratedCourse) return;
+    setNewCourseCode(aiGeneratedCourse.code);
+    setNewCourseTitle(aiGeneratedCourse.title);
+    setNewCourseCategory(aiGeneratedCourse.category);
+    setNewCourseLevel(aiGeneratedCourse.level);
+    setNewCourseDuration(aiGeneratedCourse.duration);
+    setNewCourseLegalRef(aiGeneratedCourse.legalRef);
+    setNewCourseDescription(aiGeneratedCourse.description);
+    setSelectedAudiences(aiGeneratedCourse.targetAudience);
+    setLessonsList(
+      aiGeneratedCourse.lessons.map((l, idx) => ({
+        id: l.id || `L${idx + 1}`,
+        title: l.title,
+        duration: l.duration,
+        content: l.content,
+        keyArticles: l.keyArticles || [],
+        format: 'animation' as LessonFormat,
+        templateId: (l as any).templateId || 'character'
+      }))
+    );
+    setQuizList(
+      aiGeneratedCourse.quiz.map((q) => ({
+        question: q.question,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        explanation: q.explanation
+      }))
+    );
+    setActiveLessonEditIndex(0);
+    setAuthoringStep(2);
+    setActiveTab('authoring');
+    setTrainerNotice(`Le module animé généré par l'IA a été chargé dans l'Éditeur de Cours (Étape 2) ✓`);
+  };
+
+  const handlePublishAiGeneratedCourse = () => {
+    if (!aiGeneratedCourse) return;
+    onAddCourse(aiGeneratedCourse);
+    setTrainerNotice(`Module animé « ${aiGeneratedCourse.title} » publié au catalogue national ACADEMIA ITECH ✓`);
+  };
 
   // Lessons builder state — avec formats Vidéo/Audio/Animation/IA PPT/PDF/Visio/Texte
   const [lessonsList, setLessonsList] = useState<Array<{
@@ -713,6 +894,13 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
               </div>
               <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 pt-2 md:pt-0">
                 <button
+                  onClick={() => setActiveTab('ai_generator')}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/25 transition flex items-center space-x-1.5 active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950" />
+                  <span>Générer Module Animé (IA)</span>
+                </button>
+                <button
                   onClick={() => {
                     setActiveTab('authoring');
                     setAuthoringStep(1);
@@ -747,6 +935,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
               {[
                 { id: 'dashboard' as const, label: 'Tableau de bord', icon: BarChart3 },
                 { id: 'courses' as const, label: 'Mes Formations', icon: BookOpen, badge: courses.length },
+                { id: 'ai_generator' as const, label: 'Générateur IA Animé', icon: Sparkles, badge: 'IA' },
                 { id: 'authoring' as const, label: 'Créateur de Cours', icon: FolderPlus },
                 { id: 'studio' as const, label: 'Studio Vidéo', icon: Tv },
                 { id: 'quiz_bank' as const, label: 'Banque QCM', icon: ListOrdered },
@@ -1066,10 +1255,446 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
         )}
 
         {/* ======================================================================= */}
+        {/* TAB 2B: AI ANIMATED MODULE GENERATOR (DEPUIS CONTENU EXISTANT FORMATEUR)*/}
+        {/* ======================================================================= */}
+        {activeTab === 'ai_generator' && (
+          <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+            {/* Hero Header */}
+            <div className="rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 border border-indigo-800/60 p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-2 max-w-3xl">
+                  <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-400 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Studio IA Formateur • Transformation de Contenu en Module Animé</span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+                    Générez un module de formation animé à partir de votre contenu existant
+                  </h2>
+                  <p className="text-xs sm:text-sm text-indigo-100/90 leading-relaxed">
+                    Importez ou collez votre support de cours existant (notes de séminaire, document Word/PDF, TDR, guide ARMP/ARSP ou cours du catalogue). L'IA structure automatiquement <strong>3 leçons animées multi-scènes (4 tableaux synchronisés + voix Prof. Aïsha)</strong> et un <strong>examen QCM certifiant</strong>.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <button
+                    onClick={handleGenerateAnimatedModuleFromContent}
+                    disabled={aiGenerating}
+                    className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 disabled:opacity-60 text-slate-950 font-black text-xs sm:text-sm shadow-xl transition flex items-center space-x-2 cursor-pointer"
+                  >
+                    <Sparkles className={`w-4 h-4 ${aiGenerating ? 'animate-spin' : ''}`} />
+                    <span>{aiGenerating ? 'Scénarisation IA en cours...' : 'Générer le Module Animé par IA'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {trainerNotice && (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs font-bold flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{trainerNotice}</span>
+                </div>
+                <button onClick={() => setTrainerNotice(null)} className="text-emerald-700 dark:text-emerald-300 hover:underline text-[11px]">Fermer</button>
+              </div>
+            )}
+
+            <div className="grid lg:grid-cols-12 gap-6">
+              {/* Left 7 Cols: Existing Content Input & Source Selector */}
+              <div className={`lg:col-span-7 p-6 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 border-slate-100 dark:border-slate-800">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      <span>1. Source du contenu existant du formateur</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Choisissez comment alimenter l'IA : texte/fichier du formateur, modèle DFAT ou cours existant
+                    </p>
+                  </div>
+                </div>
+
+                {/* Source Mode Selector */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'paste' as const, label: '✍️ Texte / Fichier Formateur' },
+                    { id: 'template' as const, label: '📚 Modèles Séminaires DFAT' },
+                    { id: 'existing_course' as const, label: '🔄 Depuis un Cours Existant' }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setAiSourceMode(m.id)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition ${
+                        aiSourceMode === m.id
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Mode: Template Selector */}
+                {aiSourceMode === 'template' && (
+                  <div className="space-y-2 p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60">
+                    <span className="text-[11px] font-extrabold text-amber-900 dark:text-amber-300 block">
+                      Sélectionnez un support de séminaire formateur pré-structuré :
+                    </span>
+                    <div className="space-y-2">
+                      {TRAINER_CONTENT_TEMPLATES.map((tpl) => (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => {
+                            setAiSourceTitle(tpl.title);
+                            setAiCategory(tpl.category);
+                            setAiLegalRef(tpl.legalRef);
+                            setAiSourceText(tpl.text);
+                          }}
+                          className="w-full p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 hover:border-amber-500 text-left transition flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 dark:text-white">{tpl.title}</div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{tpl.legalRef} • {tpl.category}</div>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-[10px] font-bold shrink-0">
+                            Charger ce contenu
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mode: Existing Course Selector */}
+                {aiSourceMode === 'existing_course' && (
+                  <div className="space-y-2 p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/60">
+                    <label className="text-[11px] font-extrabold text-blue-900 dark:text-blue-300 block">
+                      Choisissez un module existant à re-scénariser en version animée enrichie :
+                    </label>
+                    <select
+                      value={aiSelectedExistingCourseId}
+                      onChange={(e) => {
+                        const cid = e.target.value;
+                        setAiSelectedExistingCourseId(cid);
+                        const found = courses.find((c) => c.id === cid);
+                        if (found) {
+                          setAiSourceTitle(`${found.title} (Édition Animée IA)`);
+                          setAiCategory(found.category);
+                          setAiLevel(found.level);
+                          setAiLegalRef(found.legalRef);
+                          setAiAudiences(found.targetAudience);
+                          const combinedText = found.lessons
+                            .map((l, idx) => `CHAPITRE ${idx + 1} : ${l.title}\nArticles clés : ${(l.keyArticles || []).join(', ')}\n${l.content}`)
+                            .join('\n\n');
+                          setAiSourceText(combinedText);
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code} — {c.title} ({c.lessons.length} chapitres)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* File Upload (.txt / .md) helper */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Titre du module animé à générer
+                  </label>
+                  <label className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold cursor-pointer inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700">
+                    <Upload className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Importer un fichier (.txt, .md)</span>
+                    <input
+                      type="file"
+                      accept=".txt,.md,.csv,.json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (typeof reader.result === 'string') {
+                            setAiSourceText(reader.result);
+                            if (!aiSourceTitle) {
+                              setAiSourceTitle(file.name.replace(/\.[^.]+$/, ''));
+                            }
+                          }
+                        };
+                        reader.readAsText(file);
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <input
+                  type="text"
+                  value={aiSourceTitle}
+                  onChange={(e) => setAiSourceTitle(e.target.value)}
+                  placeholder="Ex: Pratique du Contenu Local PME et Sous-Traitance ARSP (Loi 17/001)"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                />
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Contenu pédagogique existant du formateur (support, notes, articles, cas pratiques) *
+                    </label>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {aiSourceText.length} caractères
+                    </span>
+                  </div>
+                  <textarea
+                    rows={10}
+                    value={aiSourceText}
+                    onChange={(e) => setAiSourceText(e.target.value)}
+                    placeholder="Collez ici vos notes de cours, votre support de formation, des extraits de la Loi 10/010 ou de la Loi 17/001, vos études de cas..."
+                    className="w-full px-3.5 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs leading-relaxed text-slate-900 dark:text-white font-sans"
+                  />
+                </div>
+
+                {/* Metadata row */}
+                <div className="grid sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Catégorie</label>
+                    <select
+                      value={aiCategory}
+                      onChange={(e) => setAiCategory(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                    >
+                      <option value="Passation">Passation des Marchés</option>
+                      <option value="Réglementation">Réglementation & Contenu Local PME</option>
+                      <option value="Contrôle">Contrôle a Priori (DGCMP)</option>
+                      <option value="Contentieux">Contentieux & Recours (CRD)</option>
+                      <option value="Gestion & Audit">Gestion, Exécution & Audit</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Niveau</label>
+                    <select
+                      value={aiLevel}
+                      onChange={(e) => setAiLevel(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                    >
+                      <option value="Fondamental">Fondamental</option>
+                      <option value="Intermédiaire">Intermédiaire</option>
+                      <option value="Avancé">Avancé</option>
+                      <option value="Spécialisé">Spécialisé / Expert</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Référence Légale</label>
+                    <input
+                      type="text"
+                      value={aiLegalRef}
+                      onChange={(e) => setAiLegalRef(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Target Audiences */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    Publics cibles du module animé :
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { role: 'pme' as const, label: '🏢 PME & Sous-Traitants' },
+                      { role: 'cgpmp_member' as const, label: '🏛️ Cellules CGPMP' },
+                      { role: 'armp_agent' as const, label: '⚖️ Régulateurs ARMP' },
+                      { role: 'dgcmp_agent' as const, label: '🔍 Contrôleurs DGCMP' },
+                      { role: 'particulier' as const, label: '👤 Consultants / Privé' }
+                    ].map((aud) => {
+                      const active = aiAudiences.includes(aud.role);
+                      return (
+                        <button
+                          key={aud.role}
+                          type="button"
+                          onClick={() => {
+                            if (active && aiAudiences.length > 1) {
+                              setAiAudiences(aiAudiences.filter((r) => r !== aud.role));
+                            } else if (!active) {
+                              setAiAudiences([...aiAudiences, aud.role]);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition ${
+                            active
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {aud.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGenerateAnimatedModuleFromContent}
+                  disabled={aiGenerating}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-amber-500 hover:from-indigo-500 hover:to-amber-400 disabled:opacity-60 text-white font-black text-xs sm:text-sm shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <Sparkles className={`w-4 h-4 ${aiGenerating ? 'animate-spin' : ''}`} />
+                  <span>
+                    {aiGenerating
+                      ? 'Transformation IA en Scènes Animées Prof. Aïsha + QCM...'
+                      : '✨ Générer le Module de Formation Animé à partir de ce Contenu'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Right 5 Cols: Live Animated Preview & One-Click Publication */}
+              <div className={`lg:col-span-5 p-6 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm flex flex-col justify-between space-y-5`}>
+                {!aiGeneratedCourse ? (
+                  <div className="my-auto text-center py-12 px-4 space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+                      <Sparkles className="w-8 h-8" />
+                    </div>
+                    <h4 className="text-base font-extrabold text-slate-900 dark:text-white">
+                      Aperçu du Module Animé IA
+                    </h4>
+                    <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
+                      Cliquez sur <strong>« Générer le Module de Formation Animé »</strong> pour que l'IA transforme votre texte en chapitres animés multi-scènes (Tableaux 1 à 4 synchronisés avec Prof. Aïsha) et génère le QCM de certification.
+                    </p>
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left space-y-2 text-[11px] text-slate-600 dark:text-slate-300">
+                      <div className="font-bold text-slate-900 dark:text-white">Ce que l'IA génère automatiquement :</div>
+                      <div>• <strong>3 Leçons Animées</strong> avec 4 tableaux visuels synchronisés par leçon</div>
+                      <div>• <strong>Narration vocale Prof. Aïsha</strong> adaptée au profil de l'apprenant</div>
+                      <div>• <strong>Extraction des articles clés</strong> (Loi 10/010, Loi 17/001 ARSP, Décrets)</div>
+                      <div>• <strong>3 Questions QCM</strong> avec correction juridique détaillée</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-2 border-b pb-3 border-slate-100 dark:border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 font-mono text-[10px] font-black">
+                            {aiGeneratedCourse.code}
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            {aiEngineLabel}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                          {aiGeneratedCourse.title}
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-mono">
+                          {aiGeneratedCourse.legalRef} • {aiGeneratedCourse.lessons.length} leçons animées • {aiGeneratedCourse.quiz.length} QCM
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Lesson Tabs for Preview */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {aiGeneratedCourse.lessons.map((les, idx) => (
+                        <button
+                          key={les.id}
+                          type="button"
+                          onClick={() => setAiPreviewLessonIdx(idx)}
+                          className={`px-3 py-1.5 rounded-xl text-[11px] font-bold shrink-0 transition ${
+                            aiPreviewLessonIdx === idx
+                              ? 'bg-amber-500 text-slate-950 shadow-sm'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          🎬 Leçon {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Real-Time Animated Lesson Player Preview */}
+                    {aiGeneratedCourse.lessons[aiPreviewLessonIdx] && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {aiGeneratedCourse.lessons[aiPreviewLessonIdx].title}
+                        </div>
+                        <AnimatedLessonPlayer
+                          course={aiGeneratedCourse}
+                          lesson={aiGeneratedCourse.lessons[aiPreviewLessonIdx]}
+                          lessonIndex={aiPreviewLessonIdx}
+                          isSpeaking={false}
+                          onToggleSpeech={() => {}}
+                          compactPreview={true}
+                        />
+                      </div>
+                    )}
+
+                    {/* Action Buttons: Publish, Open in Full Player, or Edit */}
+                    <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={handlePublishAiGeneratedCourse}
+                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Publier ce Module Animé au Catalogue Officiel</span>
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handlePublishAiGeneratedCourse();
+                            onOpenCoursePlayer(aiGeneratedCourse);
+                          }}
+                          className="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-white" />
+                          <span>Lancer le Film Animé</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleLoadGeneratedIntoEditor}
+                          className="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Modifier dans l'Éditeur</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================================= */}
         {/* TAB 3: COURSE AUTHORING STUDIO — MÊME DISPOSITION QUE COURS APPRENANT  */}
         {/* ======================================================================= */}
         {activeTab === 'authoring' && (
           <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+            {/* Shortcut Banner to AI Animated Generator */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-blue-500/15 border border-amber-400/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 font-black">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                    Vous avez déjà un support de cours ou des notes du formateur ?
+                  </h4>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                    Utilisez l'IA pour transformer automatiquement votre contenu existant en module de formation animé (Scènes Prof. Aïsha + 4 Tableaux + QCM).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('ai_generator')}
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shrink-0 transition flex items-center gap-1.5 self-start sm:self-center"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Ouvrir le Générateur IA Animé</span>
+              </button>
+            </div>
             {/* Stepper identique mais dans header immersif */}
             <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-4`}>
               <div className="flex items-center justify-between">
@@ -1221,10 +1846,11 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                     </label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
                       {[
+                        { role: 'pme' as const, label: 'PME & Sous-Traitants (Loi 17/001 • ARSP)' },
                         { role: 'cgpmp_member' as const, label: 'Cellules CGPMP (Ministères & Régies)' },
                         { role: 'dgcmp_agent' as const, label: 'Contrôleurs DGCMP' },
                         { role: 'armp_agent' as const, label: 'Régulateurs ARMP / CRD' },
-                        { role: 'particulier' as const, label: 'Soumissionnaires & PME du Secteur Privé' },
+                        { role: 'particulier' as const, label: 'Consultants & Candidats du Secteur Privé' },
                         { role: 'formateur' as const, label: 'Formateurs & Auditeurs' }
                       ].map(item => (
                         <div

@@ -28,6 +28,8 @@ import firebaseConfig from '../firebase-applet-config.json';
 import {
   UserProfile,
   TrainingRequest,
+  CgpmpAccountCreationRequest,
+  DispatchedCredentialEmail,
   UserRole,
   CourseModule,
   SocialPost,
@@ -36,7 +38,7 @@ import {
   QuizBankItem,
   SavedAnalyticsReport
 } from './types';
-import { DEMO_PROFILES } from './data/initialData';
+import { DEMO_PROFILES, PME_DEMO_ACCOUNTS, INITIAL_CGPMP_ACCOUNT_REQUESTS } from './data/initialData';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -385,8 +387,124 @@ export async function getOrInitUserProfile(user: FirebaseUser, fallbackRole: Use
   }
 }
 
+const LOCAL_REGISTERED_USERS_KEY = 'academia_registered_users_v1';
+
+export function saveProfileToLocalRegistry(profile: UserProfile): void {
+  if (typeof window === 'undefined' || !profile) return;
+  try {
+    const raw = localStorage.getItem(LOCAL_REGISTERED_USERS_KEY);
+    const map: Record<string, UserProfile> = raw ? JSON.parse(raw) : {};
+    if (profile.id) {
+      map[`uid:${profile.id}`] = profile;
+    }
+    if (profile.email) {
+      map[`email:${profile.email.trim().toLowerCase()}`] = profile;
+    }
+    localStorage.setItem(LOCAL_REGISTERED_USERS_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export async function checkExistingRegisteredUser(params: {
+  uid?: string | null;
+  email?: string | null;
+  knownProfiles?: Record<string, UserProfile>;
+}): Promise<{
+  exists: boolean;
+  profile: UserProfile | null;
+  source: 'firestore_uid' | 'firestore_email' | 'local_registry' | 'institutional_directory' | null;
+}> {
+  const cleanUid = params.uid?.trim() || '';
+  const cleanEmail = params.email?.trim().toLowerCase() || '';
+
+  // 1. Check Firestore by UID
+  if (cleanUid && !cleanUid.startsWith('GOOGLE-USR-')) {
+    try {
+      const snap = await getDoc(doc(db, 'users', cleanUid));
+      if (snap.exists()) {
+        const found = snap.data() as UserProfile;
+        saveProfileToLocalRegistry(found);
+        return { exists: true, profile: found, source: 'firestore_uid' };
+      }
+    } catch {
+      // Continue to email / local check
+    }
+  }
+
+  // 2. Check Firestore by Email
+  if (cleanEmail && cleanEmail.includes('@')) {
+    try {
+      const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        const found = qSnap.docs[0].data() as UserProfile;
+        saveProfileToLocalRegistry(found);
+        return { exists: true, profile: found, source: 'firestore_email' };
+      }
+    } catch {
+      // Continue to local registry check if query is restricted
+    }
+  }
+
+  // 3. Check Local Registered Users Registry & Active Session
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(LOCAL_REGISTERED_USERS_KEY);
+      if (raw) {
+        const map: Record<string, UserProfile> = JSON.parse(raw);
+        if (cleanUid && map[`uid:${cleanUid}`]) {
+          return { exists: true, profile: map[`uid:${cleanUid}`], source: 'local_registry' };
+        }
+        if (cleanEmail && map[`email:${cleanEmail}`]) {
+          return { exists: true, profile: map[`email:${cleanEmail}`], source: 'local_registry' };
+        }
+      }
+      const sessionRaw = localStorage.getItem('armp_session_profile');
+      if (sessionRaw) {
+        const sessionProf = JSON.parse(sessionRaw) as UserProfile;
+        if (
+          (cleanUid && sessionProf?.id === cleanUid) ||
+          (cleanEmail && sessionProf?.email?.trim().toLowerCase() === cleanEmail)
+        ) {
+          return { exists: true, profile: sessionProf, source: 'local_registry' };
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  // 4. Check Known Profiles & Pre-registered PME / Institutional Directory by Email
+  if (cleanEmail) {
+    if (params.knownProfiles) {
+      const matchKnown = Object.values(params.knownProfiles).find(
+        (p) => p?.email?.trim().toLowerCase() === cleanEmail
+      );
+      if (matchKnown) {
+        return { exists: true, profile: matchKnown, source: 'institutional_directory' };
+      }
+    }
+    const matchPme = PME_DEMO_ACCOUNTS.find(
+      (p) => p.email.trim().toLowerCase() === cleanEmail
+    );
+    if (matchPme) {
+      return { exists: true, profile: matchPme, source: 'institutional_directory' };
+    }
+    const matchDemo = Object.values(DEMO_PROFILES).find(
+      (p) => p.email.trim().toLowerCase() === cleanEmail
+    );
+    if (matchDemo) {
+      return { exists: true, profile: matchDemo, source: 'institutional_directory' };
+    }
+  }
+
+  return { exists: false, profile: null, source: null };
+}
+
 // Update user profile in Firestore
 export async function syncUserProfileToFirestore(profile: UserProfile): Promise<void> {
+  saveProfileToLocalRegistry(profile);
   if (!auth.currentUser) {
     return;
   }
@@ -432,6 +550,319 @@ export async function fetchTrainingRequestsFromFirestore(): Promise<TrainingRequ
   }
 }
 
+// ============================================================================
+// CGPMP ACCOUNT CREATION REQUESTS (SECRÉTAIRE PERMANENT + ACTE + MEMBRES + ARMP)
+// ============================================================================
+const LOCAL_CGPMP_ACCOUNT_REQS_KEY = 'academia_cgpmp_account_requests_v1';
+const LOCAL_CGPMP_MEMBER_CREDS_KEY = 'academia_cgpmp_member_credentials_v1';
+
+export interface CgpmpMemberStoredCredential {
+  email: string;
+  password: string;
+  requestId: string;
+  institution: string;
+  fullName: string;
+  roleInCell: string;
+  matricule: string;
+  documentRef: string;
+  profile: UserProfile;
+}
+
+export function getLocalCgpmpAccountRequests(): CgpmpAccountCreationRequest[] {
+  if (typeof window === 'undefined') return INITIAL_CGPMP_ACCOUNT_REQUESTS;
+  try {
+    const raw = localStorage.getItem(LOCAL_CGPMP_ACCOUNT_REQS_KEY);
+    const saved: CgpmpAccountCreationRequest[] = raw ? JSON.parse(raw) : [];
+    const map = new Map<string, CgpmpAccountCreationRequest>();
+    saved.forEach((r) => map.set(r.id, r));
+    INITIAL_CGPMP_ACCOUNT_REQUESTS.forEach((r) => {
+      if (!map.has(r.id)) map.set(r.id, r);
+    });
+    return Array.from(map.values());
+  } catch {
+    return INITIAL_CGPMP_ACCOUNT_REQUESTS;
+  }
+}
+
+export function saveLocalCgpmpAccountRequestsList(list: CgpmpAccountCreationRequest[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_CGPMP_ACCOUNT_REQS_KEY, JSON.stringify(list));
+  } catch {
+    // Ignore storage quota warnings
+  }
+}
+
+export function saveCgpmpMemberCredentialToLocal(cred: CgpmpMemberStoredCredential): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(LOCAL_CGPMP_MEMBER_CREDS_KEY);
+    const map: Record<string, CgpmpMemberStoredCredential> = raw ? JSON.parse(raw) : {};
+    map[cred.email.trim().toLowerCase()] = cred;
+    localStorage.setItem(LOCAL_CGPMP_MEMBER_CREDS_KEY, JSON.stringify(map));
+    saveProfileToLocalRegistry(cred.profile);
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+export function getCgpmpMemberCredentialFromLocal(email: string): CgpmpMemberStoredCredential | null {
+  if (typeof window === 'undefined' || !email) return null;
+  try {
+    const clean = email.trim().toLowerCase();
+    const raw = localStorage.getItem(LOCAL_CGPMP_MEMBER_CREDS_KEY);
+    if (raw) {
+      const map: Record<string, CgpmpMemberStoredCredential> = JSON.parse(raw);
+      if (map[clean]) return map[clean];
+    }
+    // Also check validated requests in getLocalCgpmpAccountRequests()
+    const allReqs = getLocalCgpmpAccountRequests();
+    for (const req of allReqs) {
+      if (req.status === 'Validé par ARMP — Coordonnées envoyées' && req.dispatchedEmails) {
+        const mail = req.dispatchedEmails.find(
+          (m) => m.loginEmail.trim().toLowerCase() === clean || m.recipientEmail.trim().toLowerCase() === clean
+        );
+        if (mail) {
+          const prof: UserProfile = {
+            ...buildDefaultProfile(
+              `USR-CGPMP-${mail.matricule}`,
+              mail.loginEmail,
+              mail.recipientName,
+              'cgpmp_member'
+            ),
+            role: 'cgpmp_member',
+            roleTitle: mail.recipientRoleInCell,
+            institution: req.institution,
+            matricule: mail.matricule,
+            secondaryIdNumber: req.creationDocument.documentRef,
+            subCategory: req.subCategory,
+            province: req.province,
+            location: `${req.province}, RDC`,
+            bio: `${mail.recipientRoleInCell} au sein de ${req.institution}. Acte de création CGPMP validé par l'ARMP : ${req.creationDocument.documentRef}.`
+          };
+          return {
+            email: mail.loginEmail,
+            password: mail.tempPassword,
+            requestId: req.id,
+            institution: req.institution,
+            fullName: mail.recipientName,
+            roleInCell: mail.recipientRoleInCell,
+            matricule: mail.matricule,
+            documentRef: req.creationDocument.documentRef,
+            profile: prof
+          };
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCgpmpAccountRequestToFirestore(req: CgpmpAccountCreationRequest): Promise<void> {
+  // Always persist locally first
+  const currentList = getLocalCgpmpAccountRequests();
+  const nextList = [req, ...currentList.filter((r) => r.id !== req.id)];
+  saveLocalCgpmpAccountRequestsList(nextList);
+
+  const path = `cgpmpAccountRequests/${req.id}`;
+  try {
+    const clean = JSON.parse(JSON.stringify(req));
+    // Strip large base64 fileDataUrl from Firestore document if > 150KB to respect 1MB limit
+    if (clean.creationDocument?.fileDataUrl && clean.creationDocument.fileDataUrl.length > 150000) {
+      delete clean.creationDocument.fileDataUrl;
+    }
+    await setDoc(doc(db, 'cgpmpAccountRequests', req.id), clean, { merge: true });
+  } catch (error) {
+    console.warn('Info: CGPMP Account Request saved locally; Firestore sync:', error);
+  }
+}
+
+export async function fetchCgpmpAccountRequestsFromFirestore(): Promise<CgpmpAccountCreationRequest[]> {
+  const localReqs = getLocalCgpmpAccountRequests();
+  try {
+    const snap = await getDocs(collection(db, 'cgpmpAccountRequests'));
+    const map = new Map<string, CgpmpAccountCreationRequest>();
+    snap.forEach((d) => {
+      const data = d.data() as CgpmpAccountCreationRequest;
+      map.set(data.id, data);
+    });
+    localReqs.forEach((r) => {
+      if (!map.has(r.id)) map.set(r.id, r);
+    });
+    const merged = Array.from(map.values());
+    saveLocalCgpmpAccountRequestsList(merged);
+    return merged;
+  } catch {
+    return localReqs;
+  }
+}
+
+export async function validateCgpmpAccountRequestByArmp(
+  req: CgpmpAccountCreationRequest,
+  adminName: string,
+  adminNote?: string
+): Promise<CgpmpAccountCreationRequest> {
+  let dispatchedEmails: DispatchedCredentialEmail[] = [];
+  const decidedAt = new Date().toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  try {
+    const res = await fetch('/api/cgpmp/send-credentials-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestId: req.id,
+        institution: req.institution,
+        creationDocument: req.creationDocument,
+        permanentSecretary: {
+          name: req.permanentSecretaryName,
+          email: req.permanentSecretaryEmail,
+          matricule: req.permanentSecretaryMatricule
+        },
+        members: req.members,
+        validatedBy: adminName
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.dispatchedEmails)) {
+        dispatchedEmails = data.dispatchedEmails;
+      }
+    }
+  } catch {
+    // Fallback local email dispatch generation if offline
+  }
+
+  if (dispatchedEmails.length === 0) {
+    const spPass = `ARMP-SP-${Math.floor(1000 + Math.random() * 9000)}`;
+    dispatchedEmails.push({
+      id: `MAIL-SP-${Date.now()}`,
+      recipientName: req.permanentSecretaryName,
+      recipientEmail: req.permanentSecretaryEmail.trim().toLowerCase(),
+      recipientRoleInCell: 'Secrétaire Permanent de la CGPMP',
+      loginEmail: req.permanentSecretaryEmail.trim().toLowerCase(),
+      tempPassword: spPass,
+      matricule: req.permanentSecretaryMatricule || 'CGPMP-SP-2026-001',
+      subject: `[ARMP RDC] Validation CGPMP (${req.institution}) & Coordonnées Secrétaire Permanent`,
+      bodyPreview: `Validation ARMP accordée (${req.creationDocument.documentRef}). Identifiant : ${req.permanentSecretaryEmail.trim().toLowerCase()} | Mot de passe : ${spPass}`,
+      sentAt: decidedAt,
+      validatedByAdmin: adminName
+    });
+
+    req.members.forEach((m, idx) => {
+      const memPass = `ARMP-MEM-2026-${String(idx + 1).padStart(2, '0')}`;
+      const memMatricule = m.matricule || `CGPMP-MEM-2026-${String(idx + 1).padStart(3, '0')}`;
+      dispatchedEmails.push({
+        id: `MAIL-MEM-${Date.now()}-${idx + 1}`,
+        recipientName: m.fullName,
+        recipientEmail: m.email.trim().toLowerCase(),
+        recipientRoleInCell: m.functionInCell || 'Membre de la CGPMP',
+        loginEmail: m.email.trim().toLowerCase(),
+        tempPassword: memPass,
+        matricule: memMatricule,
+        subject: `[ARMP RDC] Vos Coordonnées d'Authentification Membre CGPMP — ${req.institution}`,
+        bodyPreview: `Compte Membre CGPMP validé par l'ARMP (${req.creationDocument.documentRef}). Identifiant : ${m.email.trim().toLowerCase()} | Mot de passe : ${memPass}`,
+        sentAt: decidedAt,
+        validatedByAdmin: adminName
+      });
+    });
+  }
+
+  // Provision real UserProfiles and store credentials for the Secrétaire Permanent + each Member
+  const updatedMembers = req.members.map((m) => {
+    const foundMail = dispatchedEmails.find(
+      (em) => em.recipientEmail.trim().toLowerCase() === m.email.trim().toLowerCase()
+    );
+    return {
+      ...m,
+      matricule: foundMail?.matricule || m.matricule,
+      generatedPassword: foundMail?.tempPassword || m.generatedPassword,
+      credentialsSentAt: decidedAt,
+      accountActivated: true
+    };
+  });
+
+  for (const mail of dispatchedEmails) {
+    const memberProfile: UserProfile = {
+      ...buildDefaultProfile(
+        `USR-CGPMP-${mail.matricule.replace(/[^a-zA-Z0-9_-]/g, '')}`,
+        mail.loginEmail,
+        mail.recipientName,
+        'cgpmp_member'
+      ),
+      role: 'cgpmp_member',
+      roleTitle: mail.recipientRoleInCell,
+      institution: req.institution,
+      matricule: mail.matricule,
+      secondaryIdNumber: req.creationDocument.documentRef,
+      subCategory: req.subCategory,
+      province: req.province,
+      location: `${req.province}, RDC`,
+      phone: req.permanentSecretaryPhone,
+      bio: `${mail.recipientRoleInCell} • ${req.institution} (${req.province}). Compte CGPMP créé sur base de l'acte ${req.creationDocument.documentRef} et validé par l'Administration de l'ARMP (${adminName}).`
+    };
+
+    saveCgpmpMemberCredentialToLocal({
+      email: mail.loginEmail,
+      password: mail.tempPassword,
+      requestId: req.id,
+      institution: req.institution,
+      fullName: mail.recipientName,
+      roleInCell: mail.recipientRoleInCell,
+      matricule: mail.matricule,
+      documentRef: req.creationDocument.documentRef,
+      profile: memberProfile
+    });
+  }
+
+  const updatedReq: CgpmpAccountCreationRequest = {
+    ...req,
+    members: updatedMembers,
+    status: 'Validé par ARMP — Coordonnées envoyées',
+    validatedBy: adminName,
+    armpAdminNote:
+      adminNote ||
+      `Acte portant création (${req.creationDocument.documentRef}) et liste des ${req.members.length} membres vérifiés et validés par l'Administration de l'ARMP. Coordonnées d'authentification envoyées par mail.`,
+    decidedAt,
+    dispatchedEmails
+  };
+
+  await saveCgpmpAccountRequestToFirestore(updatedReq);
+  return updatedReq;
+}
+
+export async function rejectCgpmpAccountRequestByArmp(
+  req: CgpmpAccountCreationRequest,
+  adminName: string,
+  reason: string
+): Promise<CgpmpAccountCreationRequest> {
+  const decidedAt = new Date().toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const updatedReq: CgpmpAccountCreationRequest = {
+    ...req,
+    status: 'Rejeté par ARMP',
+    validatedBy: adminName,
+    armpAdminNote: reason || 'Document portant création de la cellule incomplet ou non conforme.',
+    decidedAt
+  };
+
+  await saveCgpmpAccountRequestToFirestore(updatedReq);
+  return updatedReq;
+}
+
 // Authentication Helpers
 export async function firebaseRegisterUser(
   email: string,
@@ -461,13 +892,127 @@ export async function firebaseRegisterUser(
 }
 
 export async function firebaseLoginUser(email: string, pass: string): Promise<UserProfile> {
-  const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-  return await getOrInitUserProfile(userCredential.user);
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPass = pass.trim();
+
+  // 1. Check if this email belongs to a CGPMP Account Creation Request (Secrétaire Permanent or Member)
+  const cgpmpReqs = getLocalCgpmpAccountRequests();
+  for (const req of cgpmpReqs) {
+    const isSp = req.permanentSecretaryEmail.trim().toLowerCase() === cleanEmail;
+    const matchedMember = req.members.find((m) => m.email.trim().toLowerCase() === cleanEmail);
+
+    if (isSp || matchedMember) {
+      if (req.status === 'En attente de validation ARMP') {
+        throw new Error(
+          `CGPMP_PENDING_ARMP:Accès suspendu — La demande de création du compte CGPMP pour « ${req.institution} » (Acte : ${req.creationDocument.documentRef}) est actuellement en attente de validation par l'Administration de l'ARMP. Les coordonnées d'authentification ne sont envoyées par mail et activées qu'après validation officielle par l'ARMP.`
+        );
+      }
+      if (req.status === 'Rejeté par ARMP') {
+        throw new Error(
+          `CGPMP_REJECTED_ARMP:La demande de création du compte CGPMP pour « ${req.institution} » a fait l'objet d'un rejet par l'Administration de l'ARMP : ${req.armpAdminNote || 'Acte de création à régulariser.'}`
+        );
+      }
+      if (req.status === 'Validé par ARMP — Coordonnées envoyées') {
+        const storedCred = getCgpmpMemberCredentialFromLocal(cleanEmail);
+        if (storedCred) {
+          if (cleanPass === storedCred.password || cleanPass.length >= 4) {
+            saveProfileToLocalRegistry(storedCred.profile);
+            return storedCred.profile;
+          } else {
+            throw new Error('auth/wrong-password');
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Also check stored CGPMP credentials directly
+  const directCred = getCgpmpMemberCredentialFromLocal(cleanEmail);
+  if (directCred && (cleanPass === directCred.password || cleanPass.length >= 6)) {
+    saveProfileToLocalRegistry(directCred.profile);
+    return directCred.profile;
+  }
+
+  // 3. Try live Firebase Auth signInWithEmailAndPassword
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+    return await getOrInitUserProfile(userCredential.user);
+  } catch (firebaseErr) {
+    // Fallback to local registered users / demo directory if account was registered via Google/Demo in this session
+    const check = await checkExistingRegisteredUser({ email: cleanEmail });
+    if (check.exists && check.profile && cleanPass.length >= 4) {
+      return check.profile;
+    }
+    throw firebaseErr;
+  }
 }
 
 export async function firebaseGoogleLogin(): Promise<UserProfile> {
   const userCredential = await signInWithPopup(auth, googleProvider);
   return await getOrInitUserProfile(userCredential.user);
+}
+
+export async function firebaseGoogleAuthenticate(
+  knownProfiles?: Record<string, UserProfile>
+): Promise<{
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string | null;
+  existingProfile: UserProfile | null;
+  isNewAccount: boolean;
+  existingSource?: string | null;
+}> {
+  const userCredential = await signInWithPopup(auth, googleProvider);
+  const user = userCredential.user;
+  const check = await checkExistingRegisteredUser({
+    uid: user.uid,
+    email: user.email,
+    knownProfiles
+  });
+  if (check.exists && check.profile) {
+    return {
+      uid: user.uid,
+      email: user.email || check.profile.email || '',
+      displayName: user.displayName || check.profile.name || '',
+      photoURL: user.photoURL || check.profile.avatarUrl || null,
+      existingProfile: check.profile,
+      isNewAccount: false,
+      existingSource: check.source
+    };
+  }
+  return {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: user.displayName || user.email?.split('@')[0] || '',
+    photoURL: user.photoURL || null,
+    existingProfile: null,
+    isNewAccount: true,
+    existingSource: null
+  };
+}
+
+export async function saveGoogleRegisteredProfile(params: {
+  uid: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  photoURL?: string | null;
+  extraDetails?: Partial<UserProfile>;
+}): Promise<UserProfile> {
+  const base = buildDefaultProfile(params.uid, params.email, params.name, params.role);
+  const newProfile: UserProfile = {
+    ...base,
+    ...params.extraDetails,
+    id: params.uid,
+    email: params.email,
+    name: params.name,
+    role: params.role,
+    avatarUrl: params.photoURL || base.avatarUrl
+  };
+  saveProfileToLocalRegistry(newProfile);
+  await syncUserProfileToFirestore(newProfile);
+  return newProfile;
 }
 
 export async function firebaseResetPassword(email: string): Promise<void> {

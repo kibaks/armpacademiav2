@@ -7,8 +7,18 @@
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 120 },
+        "nom": { "type": "string", "maxLength": 80 },
+        "postnom": { "type": "string", "maxLength": 80 },
+        "prenom": { "type": "string", "maxLength": 80 },
+        "sexe": { "type": "string", "enum": ["M", "F"] },
+        "civilite": { "type": "string", "maxLength": 30 },
+        "dateNaissance": { "type": "string", "maxLength": 30 },
+        "lieuNaissance": { "type": "string", "maxLength": 80 },
+        "nationalite": { "type": "string", "maxLength": 80 },
+        "etatCivil": { "type": "string", "maxLength": 50 },
+        "pieceIdentite": { "type": "string", "maxLength": 80 },
         "email": { "type": "string", "maxLength": 120 },
-        "role": { "type": "string", "enum": ["cgpmp_member", "armp_agent", "dgcmp_agent", "particulier", "dfat_admin", "formateur"] },
+        "role": { "type": "string", "enum": ["cgpmp_member", "armp_agent", "dgcmp_agent", "pme", "particulier", "dfat_admin", "formateur"] },
         "roleTitle": { "type": "string", "maxLength": 120 },
         "institution": { "type": "string", "maxLength": 150 },
         "avatarUrl": { "type": "string", "maxLength": 500 },
@@ -160,6 +170,24 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["userId", "messages"]
+    },
+    "CgpmpAccountCreationRequest": {
+      "title": "CgpmpAccountCreationRequest",
+      "description": "Demande de création de compte CGPMP par le Secrétaire Permanent avec acte portant création de la cellule et liste des membres soumise à validation ARMP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "institution": { "type": "string", "maxLength": 150 },
+        "subCategory": { "type": "string", "maxLength": 120 },
+        "province": { "type": "string", "maxLength": 80 },
+        "permanentSecretaryName": { "type": "string", "maxLength": 120 },
+        "permanentSecretaryEmail": { "type": "string", "maxLength": 120 },
+        "permanentSecretaryPhone": { "type": "string", "maxLength": 30 },
+        "permanentSecretaryMatricule": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "string", "maxLength": 80 }
+      },
+      "required": ["id", "institution", "permanentSecretaryName", "permanentSecretaryEmail", "status"]
     }
   },
   "firestore": {
@@ -170,6 +198,10 @@
     "/trainingRequests/{requestId}": {
       "schema": "TrainingRequest",
       "description": "Demandes officielles de formation CGPMP"
+    },
+    "/cgpmpAccountRequests/{requestId}": {
+      "schema": "CgpmpAccountCreationRequest",
+      "description": "Demandes de création de compte CGPMP avec document de création et liste des membres"
     },
     "/courses/{courseId}": {
       "schema": "CourseModule",

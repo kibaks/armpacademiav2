@@ -30,9 +30,11 @@ import {
   MessageSquare,
   Image as ImageIcon,
   TrendingUp,
-  Target
+  Target,
+  Play,
+  Clock
 } from 'lucide-react';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile, UserRole, CourseModule } from '../types';
 import { COURSES_DATA } from '../data/coursesData';
 import { computeUserLearningStats } from '../utils/learningStats';
 import { ArmpLogo } from './ArmpLogo';
@@ -53,6 +55,9 @@ interface HeaderProps {
   setIsOfflineMode: (val: boolean | ((prev: boolean) => boolean)) => void;
   onOpenTuteur?: () => void;
   onOpenPlacementQuiz?: () => void;
+  totalCourses?: number;
+  courses?: CourseModule[];
+  onOpenCourse?: (course: CourseModule) => void;
   onNavigateProfileTab?: (tab: 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications') => void;
 }
 
@@ -72,6 +77,9 @@ export const Header: React.FC<HeaderProps> = ({
   setIsOfflineMode,
   onOpenTuteur,
   onOpenPlacementQuiz,
+  totalCourses: totalCoursesProp,
+  courses: coursesProp,
+  onOpenCourse,
   onNavigateProfileTab
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -82,20 +90,26 @@ export const Header: React.FC<HeaderProps> = ({
       case 'cgpmp_member': return <Building2 className="w-3.5 h-3.5" />;
       case 'armp_agent': return <ShieldCheck className="w-3.5 h-3.5" />;
       case 'dgcmp_agent': return <Eye className="w-3.5 h-3.5" />;
+      case 'pme': return <Building2 className="w-3.5 h-3.5 text-teal-500" />;
       case 'dfat_admin': return <Crown className="w-3.5 h-3.5" />;
       case 'formateur': return <GraduationCap className="w-3.5 h-3.5" />;
       default: return <Building2 className="w-3.5 h-3.5" />;
     }
   };
 
+  const activeCoursesList = coursesProp && coursesProp.length > 0 ? coursesProp : COURSES_DATA;
   const learningStats = React.useMemo(
-    () => computeUserLearningStats(currentProfile, COURSES_DATA),
-    [currentProfile]
+    () => computeUserLearningStats(currentProfile, activeCoursesList),
+    [currentProfile, activeCoursesList]
   );
   const avgScoreDisplay = learningStats.averageScore;
   const overallProgress = learningStats.overallProgress;
   const completedCoursesCount = learningStats.completedCoursesCount;
-  const totalCourses = learningStats.totalCourses;
+  const totalCourses = totalCoursesProp ?? learningStats.totalCourses;
+  const lastCourse = learningStats.lastLearningCourse;
+  const lastCourseProgress = learningStats.lastCourseProgress;
+  const lastCourseChapterGraph = learningStats.lastCourseChapterGraph;
+  const recentReadEntries = learningStats.recentReadEntries;
 
   return (
     <header className={`sticky top-0 z-40 border-b transition-colors ${
@@ -157,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <BookOpen className={`w-4 h-4 ${activeTab === 'catalogue' || activeTab === 'cours' ? 'text-white' : isDarkMode ? 'text-slate-400' : 'text-slate-700'}`} />
               <span>Catalogue</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${activeTab === 'catalogue' || activeTab === 'cours' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-800'}`}>6</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${activeTab === 'catalogue' || activeTab === 'cours' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-800'}`}>{totalCourses}</span>
             </button>
 
             {/* Demander visible en déconnecté ou si rôle ≠ formateur ; Espace Formateur uniquement si connecté + formateur */}
@@ -261,11 +275,11 @@ export const Header: React.FC<HeaderProps> = ({
                           </div>
                           <ChevronRight className="w-4 h-4 text-slate-400" />
                         </button>
-                        {/* Niveau d'évolution — ProgressBar dans le dropdown */}
-                        <div className="mx-1 my-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
-                          <div className="flex items-center justify-between mb-2">
+                        {/* Niveau d'évolution — ProgressBar + Graphique du cours lu + Dernière lecture & Récentes lectures */}
+                        <div className="mx-1 my-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2.5">
+                          <div className="flex items-center justify-between">
                             <span className="text-[11px] font-black flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
-                              <TrendingUp className="w-3.5 h-3.5 text-blue-600" /> Évolution moyenne ({completedCoursesCount}/{totalCourses})
+                              <TrendingUp className="w-3.5 h-3.5 text-blue-600" /> Progression & Lecture ({completedCoursesCount}/{totalCourses})
                             </span>
                             <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-sm">
                               {overallProgress}%
@@ -283,7 +297,111 @@ export const Header: React.FC<HeaderProps> = ({
                               style={{ width: `${Math.min(100, Math.max(0, overallProgress))}%` }}
                             />
                           </div>
-                          <div className="flex items-center justify-between mt-2 text-[10px] font-bold">
+
+                          {/* Dernière lecture + Graphique par chapitre du cours lu */}
+                          {lastCourse && (
+                            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-200/80 dark:border-blue-800/70 space-y-2">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400 flex items-center gap-1">
+                                  <BookOpen className="w-3 h-3" /> Dernière lecture
+                                </span>
+                                <span className="text-[9px] font-mono font-bold text-slate-400 flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5" /> {learningStats.lastCourseReadAtLabel}
+                                </span>
+                              </div>
+
+                              <div className="text-[11px] font-extrabold text-slate-900 dark:text-white leading-tight line-clamp-1">
+                                {lastCourse.code} — {lastCourse.title}
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                {learningStats.lastCourseNextLessonLabel}
+                              </div>
+
+                              {/* Mini Graphique des chapitres du cours lu */}
+                              {lastCourseChapterGraph.length > 0 && (
+                                <div className="pt-1 space-y-1">
+                                  <div className="flex items-center justify-between text-[9px] font-bold text-slate-500">
+                                    <span>Graphique du cours lu (chapitres)</span>
+                                    <span className="text-blue-600 dark:text-blue-400 font-mono">{lastCourseProgress}%</span>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-1 items-end h-10 px-1.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
+                                    {lastCourseChapterGraph.map((ch) => (
+                                      <div key={ch.index} className="flex flex-col items-center gap-0.5 h-full justify-end">
+                                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-xs h-5 flex items-end overflow-hidden">
+                                          <div
+                                            className={`w-full rounded-xs transition-all ${
+                                              ch.isCompleted
+                                                ? 'bg-emerald-500'
+                                                : ch.isCurrent
+                                                ? 'bg-blue-600'
+                                                : 'bg-slate-300 dark:bg-slate-600'
+                                            }`}
+                                            style={{ height: `${Math.max(20, ch.progressPct)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-[8px] font-mono font-bold text-slate-600 dark:text-slate-300">
+                                          {ch.shortLabel}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {onOpenCourse && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsProfileMenuOpen(false);
+                                    onOpenCourse(lastCourse);
+                                  }}
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center justify-center gap-1.5 transition shadow-xs"
+                                >
+                                  <Play className="w-3 h-3 fill-white" />
+                                  <span>Reprendre la lecture ({lastCourseProgress}%)</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Récentes lectures */}
+                          {recentReadEntries.length > 1 && (
+                            <div className="space-y-1 pt-0.5">
+                              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block px-0.5">
+                                Récentes lectures ({recentReadEntries.length})
+                              </span>
+                              <div className="space-y-1 max-h-28 overflow-y-auto pr-0.5">
+                                {recentReadEntries.slice(0, 3).map((entry) => (
+                                  <button
+                                    key={entry.courseId}
+                                    type="button"
+                                    onClick={() => {
+                                      setIsProfileMenuOpen(false);
+                                      if (onOpenCourse) onOpenCourse(entry.course);
+                                    }}
+                                    className="w-full p-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-blue-50/70 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 text-left transition flex items-center justify-between gap-2"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                                        {entry.code} • {entry.title}
+                                      </div>
+                                      <div className="h-1 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-1">
+                                        <div
+                                          className={`h-full rounded-full ${entry.progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                          style={{ width: `${entry.progressPct}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <span className="text-[9px] font-mono font-bold text-blue-600 dark:text-blue-400 shrink-0">
+                                      {entry.progressPct}%
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between pt-1 text-[10px] font-bold">
                             <span className="px-1.5 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
                               {currentProfile.level}
                             </span>
@@ -373,11 +491,18 @@ export const Header: React.FC<HeaderProps> = ({
                             <span className="truncate">DGCMP</span>
                           </button>
                           <button
+                            onClick={() => { onSelectRole('pme'); setIsProfileMenuOpen(false); }}
+                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'pme' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-teal-50'}`}
+                          >
+                            <Building2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                            <span className="truncate">🏢 PME (Loi 17/001)</span>
+                          </button>
+                          <button
                             onClick={() => { onSelectRole('particulier'); setIsProfileMenuOpen(false); }}
-                            className={`col-span-2 px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'particulier' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50'}`}
+                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'particulier' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50'}`}
                           >
                             <User className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span className="truncate">Secteur Privé / Soumissionnaire</span>
+                            <span className="truncate">Consultant / Privé</span>
                           </button>
                         </div>
                       </div>
@@ -408,7 +533,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button onClick={() => { setActiveTab('catalogue'); setIsMobileMenuOpen(false); }} className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between ${activeTab === 'catalogue' || activeTab === 'cours' ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-[#0C3B7C] text-white') : (isDarkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-900 hover:bg-slate-100')}`}>
             <div className="flex items-center space-x-2.5"><BookOpen className="w-4 h-4" /><span>Catalogue des formations</span></div>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold font-mono ${activeTab === 'catalogue' || activeTab === 'cours' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-900'}`}>6</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold font-mono ${activeTab === 'catalogue' || activeTab === 'cours' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-900'}`}>{totalCourses}</span>
           </button>
           {(!isAuthenticated || currentProfile.role !== 'formateur') && (
             <button onClick={() => { setActiveTab('demander'); setIsMobileMenuOpen(false); }} className={`w-full p-3 rounded-xl text-xs font-bold flex items-center space-x-2.5 ${activeTab === 'demander' || activeTab === 'workflow' ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-[#0C3B7C] text-white') : (isDarkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-900 hover:bg-slate-100')}`}>

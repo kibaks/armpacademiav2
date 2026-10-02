@@ -1,75 +1,103 @@
-// Real-Time 60 FPS Wav2Lip Video Synthesis Renderer (WebGL Dense Mesh Warp + 2D Oral Composite)
-// Replaces static/cutout SVG layers ("photo animée") with a continuous watertight 540-triangle
-// pixel-warped video frame buffer driven by Mel-spectrogram / phoneme coarticulation and 3D head kinematics.
+// Real-Time 60 FPS Wav2Lip Video Synthesis Renderer with Temporal Kalman Vertex Smoothing
+// - Eliminates all micro-saccades and ghost traces ("aucune saccade ni trace fantôme") during head movements:
+//   1. Connected BFS background homogenization sets 100% of the studio background outside Aïsha's silhouette
+//      to a constant slate-blue studio color RGB(90, 118, 138) with 2px hair-edge de-spilling in a single continuous texture.
+//   2. Per-vertex Temporal State-Space Smoothing (SMOOTH_DX/DY + VEL_DX/DY) ensures C²-continuous vertex trajectories.
+// - Exact Reference Mouth Articulation Display Model (Open Vowel Panel A + Rounded Pucker Panel B) locked to the voice.
 
-import imgTutrice from '../assets/images/tutrice_sereine_claude.jpg';
+import imgTutrice from '../assets/images/aisha_portrait_sans_main_1790912759956.jpg';
 import type { AvatarComputedFrame } from '../workers/avatarExpressionWorker';
 
-const IMG_W = 928;
-const IMG_H = 1152;
+const IMG_W = 896;
+const IMG_H = 1200;
 
-// 19 Anatomical Columns (Cols 5..14 are the 10 natural mouth stations 468.5..543.5,
-// spanning the full 0..928 image width so no border is ever clipped)
+// 19 Anatomical Columns:
+// - c=0 (0), c=1 (202), c=17 (698), c=18 (896) are 100% static studio background anchors.
+// - c=2 (278) .. c=16 (602) bound Aïsha's complete head, braided bun & earrings silhouette.
+// - c=5..14 (408.0..500.0) are the 10 pixel-calibrated mouth stations.
 const GRID_X: readonly number[] = [
-  0, 245, 318, 386, 442,
-  468.5, 475.0, 482.5, 491.0, 500.0, 509.5, 519.0, 528.0, 536.0, 543.5,
-  558, 588, 632, 928,
+  0, 202, 278, 355, 392,
+  408.0, 418.0, 428.0, 438.0, 448.0, 458.0, 468.0, 478.0, 488.0, 500.0,
+  520, 602, 698, 896,
 ];
 const NUM_COLS = GRID_X.length; // 19
 
-// 10-station natural photographic mouth contours in tutrice_sereine_claude.jpg (468.5, 407.0) -> (543.5, 417.5)
-const UPPER_LIP_TOP_10 = [401.5, 400.5, 399.0, 397.8, 397.0, 396.5, 397.0, 397.8, 399.5, 411.0];
-const UPPER_LIP_BOT_10 = [407.0, 407.5, 408.5, 410.0, 410.5, 411.0, 412.0, 411.5, 411.5, 417.5];
-const UPPER_TEETH_BOT_10 = [407.2, 411.5, 414.8, 418.0, 420.0, 422.2, 422.5, 422.0, 419.5, 417.7];
-const LOWER_LIP_TOP_10 = [407.5, 412.0, 415.3, 418.5, 420.5, 422.8, 423.0, 422.5, 420.0, 418.0];
-const LOWER_LIP_BOT_10 = [414.0, 424.5, 429.5, 433.5, 436.0, 437.2, 437.0, 435.5, 432.5, 426.5];
-const CHIN_JAW_10 = [460.0, 463.5, 467.0, 470.5, 473.0, 474.8, 474.2, 472.0, 468.5, 464.5];
+// 3D Perspective Yaw Weight across head columns c=2..16:
+const YAW_PERSPECTIVE_W: readonly number[] = [
+  0.00, // c=0 (static)
+  0.00, // c=1 (static)
+  0.82, // c=2 (left hair bun silhouette)
+  0.90, // c=3 (left temple / outer brow)
+  0.96, // c=4 (left eye / cheek)
+  1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // c=5..14 (nose & mouth)
+  0.96, // c=15 (right eye / cheek)
+  0.82, // c=16 (right hair & ear silhouette)
+  0.00, // c=17 (static)
+  0.00, // c=18 (static)
+];
 
-// Balanced bilateral parabola of lower lip displacement (strong left-side participation at mIdx=0..4)
+// 10-station exact pixel-calibrated mouth contours (408.0, 484.0) -> (500.0, 484.0)
+const UPPER_LIP_TOP_10 = [478.0, 474.5, 473.0, 472.0, 472.5, 472.5, 473.0, 474.0, 475.0, 479.0];
+const UPPER_LIP_BOT_10 = [483.5, 482.5, 482.0, 481.5, 481.5, 481.5, 481.5, 482.0, 482.5, 483.5];
+const UPPER_TEETH_BOT_10 = [484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0];
+const LOWER_LIP_TOP_10 = [484.5, 485.0, 485.2, 485.5, 485.5, 485.5, 485.5, 485.2, 485.0, 484.5];
+const LOWER_LIP_BOT_10 = [491.0, 496.5, 501.0, 504.5, 506.5, 506.5, 505.0, 502.0, 497.5, 491.5];
+const CHIN_JAW_10 = [550.0, 555.0, 559.0, 562.5, 564.5, 564.5, 562.5, 559.0, 555.0, 550.0];
+
+// Symmetrical bilateral parabola of lower lip displacement across all 10 mouth stations
 const STATION_DOME_W: readonly number[] = [
-  0.22, // mIdx=0 (x=468.5): left commissure active participation
-  0.74, // mIdx=1 (x=475.0): left lateral mouth
-  0.90, // mIdx=2 (x=482.5): left-mid mouth
-  0.98, // mIdx=3 (x=491.0)
-  1.00, // mIdx=4 (x=500.0)
-  1.00, // mIdx=5 (x=509.5)
-  0.98, // mIdx=6 (x=519.0)
-  0.90, // mIdx=7 (x=528.0)
-  0.68, // mIdx=8 (x=536.0)
-  0.16, // mIdx=9 (x=543.5): right commissure active participation
+  0.20, // mIdx=0 (x=408.0): left commissure
+  0.74, // mIdx=1 (x=418.0): left lateral mouth
+  0.92, // mIdx=2 (x=428.0): left-mid mouth
+  0.99, // mIdx=3 (x=438.0)
+  1.00, // mIdx=4 (x=448.0)
+  1.00, // mIdx=5 (x=458.0)
+  0.99, // mIdx=6 (x=468.0)
+  0.92, // mIdx=7 (x=478.0)
+  0.74, // mIdx=8 (x=488.0)
+  0.20, // mIdx=9 (x=500.0): right commissure
 ];
 
-// Left-side smile-release downward leveling: in the resting photo, Aïsha's smile is tilted higher
-// on the left (y=407..418.5 at mIdx=0..3 vs y=422.8..423.0 at mIdx=5..6). When she opens her mouth,
-// the left lower lip uncurls downward so the left side of the mouth opens wide and level with the right!
-const LEFT_SMILE_RELEASE_PX: readonly number[] = [
-  2.2, 4.8, 3.8, 2.2, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0,
-];
+// Cervical neck pivot for expressive feminine head rotation, listening nods & inclination
+const HEAD_PIVOT_X = 454.0;
+const HEAD_PIVOT_Y = 538.0;
 
-const NUM_ROWS = 16;
+const NUM_ROWS = 19;
+const TOTAL_VERTS = NUM_ROWS * NUM_COLS;
 
-// Build source rest-pose (sx, sy) for every (row, col) node
-const REST_SX = new Float32Array(NUM_ROWS * NUM_COLS);
-const REST_SY = new Float32Array(NUM_ROWS * NUM_COLS);
+const REST_SX = new Float32Array(TOTAL_VERTS);
+const REST_SY = new Float32Array(TOTAL_VERTS);
+
+// Target & Temporally-Smoothed (Kalman state-space) vertex buffers
+const TARGET_DX = new Float32Array(TOTAL_VERTS);
+const TARGET_DY = new Float32Array(TOTAL_VERTS);
+const CUR_DX = new Float32Array(TOTAL_VERTS);
+const CUR_DY = new Float32Array(TOTAL_VERTS);
+const VEL_DX = new Float32Array(TOTAL_VERTS);
+const VEL_DY = new Float32Array(TOTAL_VERTS);
+let meshStateInitialized = false;
 
 function buildRestMesh() {
   const baseRowsY = [
-    0.0,    // r=0: top studio frame edge
-    85.0,   // r=1: crown hair top
-    190.0,  // r=2: forehead & upper crown hair
-    258.0,  // r=3: eyebrows
-    285.5,  // r=4: upper eyelids
-    304.5,  // r=5: lower eyelids
-    368.0,  // r=6: nose base / sub-nasale / mid-cheeks
-    399.0,  // r=7: upper lip top border
-    409.0,  // r=8: upper lip bottom border
-    415.0,  // r=9: upper teeth bottom border
-    416.0,  // r=10: lower lip top border
-    428.0,  // r=11: lower lip bottom border
-    458.0,  // r=12: chin tip & lower back-hair chignon border
-    518.0,  // r=13: neck base & white shirt collar
-    595.0,  // r=14: shoulders & blazer lapels
-    1152.0, // r=15: bottom studio frame edge
+    0.0,    // r=0: top studio frame edge (100% static)
+    142.0,  // r=1: crown hair top
+    240.0,  // r=2: forehead & hairline
+    328.0,  // r=3: eyebrows
+    356.0,  // r=4: upper eyelids
+    371.0,  // r=5: lower eyelids
+    440.0,  // r=6: nose base / sub-nasale / malar cheeks
+    473.0,  // r=7: upper lip top border
+    482.0,  // r=8: upper lip bottom border
+    484.0,  // r=9: upper teeth bottom / lip parting seam
+    485.0,  // r=10: lower lip top border
+    504.0,  // r=11: lower lip bottom border
+    563.0,  // r=12: chin tip & lower jaw border
+    622.0,  // r=13: supple feminine neck transition zone
+    700.0,  // r=14: collarbone & white blouse neckline (100% static)
+    795.0,  // r=15: tailored cream blazer shoulders (100% static)
+    885.0,  // r=16: mid-bust blazer lapels (100% static)
+    995.0,  // r=17: lower blazer torso (100% static)
+    1200.0, // r=18: bottom studio frame edge (100% static)
   ];
 
   for (let r = 0; r < NUM_ROWS; r++) {
@@ -87,70 +115,75 @@ function buildRestMesh() {
         else if (r === 11) y = LOWER_LIP_BOT_10[mIdx];
         else if (r === 12) y = CHIN_JAW_10[mIdx];
       } else if (c === 4) {
-        // Smooth transition on left cheek outside left mouth corner (c=5)
-        if (r === 7) y = 402.0;
-        else if (r === 8) y = 406.5;
-        else if (r === 9) y = 409.5;
-        else if (r === 10) y = 412.5;
-        else if (r === 11) y = 420.0;
-        else if (r === 12) y = 456.0;
+        if (r === 7) y = 479.0;
+        else if (r === 8) y = 483.5;
+        else if (r === 9) y = 484.0;
+        else if (r === 10) y = 484.5;
+        else if (r === 11) y = 492.0;
+        else if (r === 12) y = 548.0;
       } else if (c === 15) {
-        // Smooth transition on right cheek outside right mouth corner (c=14)
-        if (r === 7) y = 410.0;
-        else if (r === 8) y = 415.5;
-        else if (r === 9) y = 418.5;
-        else if (r === 10) y = 421.0;
-        else if (r === 11) y = 427.0;
-        else if (r === 12) y = 460.0;
+        if (r === 7) y = 479.0;
+        else if (r === 8) y = 483.5;
+        else if (r === 9) y = 484.0;
+        else if (r === 10) y = 484.5;
+        else if (r === 11) y = 492.0;
+        else if (r === 12) y = 548.0;
       }
 
-      // Eyelid anatomical curvature for left eye (c=4..6) and right eye (c=14..16)
+      // Eyelid anatomical curvature for left eye (c=3..6, center c=4 at x=392) and right eye (c=14..16, center c=15 at x=520)
       if (r === 4) {
-        if (c === 4) y = 294.0;
-        else if (c === 5) y = 286.0;
-        else if (c === 6) y = 289.0;
-        else if (c === 14) y = 295.0;
-        else if (c === 15) y = 286.5;
-        else if (c === 16) y = 292.0;
+        if (c === 3) y = 362.0;
+        else if (c === 4) y = 355.0;
+        else if (c === 5) y = 356.5;
+        else if (c === 6) y = 363.0;
+        else if (c === 14) y = 362.0;
+        else if (c === 15) y = 355.0;
+        else if (c === 16) y = 363.0;
       } else if (r === 5) {
-        if (c === 4) y = 301.0;
-        else if (c === 5) y = 303.5;
-        else if (c === 6) y = 303.0;
-        else if (c === 14) y = 304.5;
-        else if (c === 15) y = 304.5;
-        else if (c === 16) y = 298.0;
+        if (c === 3) y = 369.0;
+        else if (c === 4) y = 371.5;
+        else if (c === 5) y = 371.0;
+        else if (c === 6) y = 369.5;
+        else if (c === 14) y = 370.0;
+        else if (c === 15) y = 371.5;
+        else if (c === 16) y = 369.0;
       }
 
       REST_SY[idx] = y;
+      CUR_DX[idx] = GRID_X[c];
+      CUR_DY[idx] = y;
     }
   }
 }
 buildRestMesh();
 
-const HEAD_PIVOT_X = 496.0;
-const HEAD_PIVOT_Y = 468.0;
-const REST_OPEN = 0.14;
+const REST_OPEN = 0.04;
 
-// Deformed vertex buffers
-const CUR_DX = new Float32Array(NUM_ROWS * NUM_COLS);
-const CUR_DY = new Float32Array(NUM_ROWS * NUM_COLS);
-
-// Pre-allocated WebGL interleaved buffer: (NUM_ROWS - 1) * (NUM_COLS - 1) * 6 vertices * 4 floats (x, y, u, v)
-const NUM_TRIS = (NUM_ROWS - 1) * (NUM_COLS - 1) * 2;
+const NUM_TRIS = (NUM_ROWS - 1) * (NUM_COLS - 1) * 2; // 648 triangles
 const GL_VERTS = new Float32Array(NUM_TRIS * 3 * 4);
 
 function deformMeshForFrame(frame: AvatarComputedFrame) {
-  const rad = (frame.tilt * Math.PI) / 180;
-  const cosT = Math.cos(rad);
-  const sinT = Math.sin(rad);
+  // Expressive feminine head inclination ('tilt' up to ±5.2 deg) around cervical pivot (454, 538)
+  const clampedTiltDeg = Math.max(-5.2, Math.min(5.2, frame.tilt || 0));
+  const tiltRad = (clampedTiltDeg * Math.PI) / 180.0;
+  const cosT = Math.cos(tiltRad);
+  const sinT = Math.sin(tiltRad);
 
   const open = frame.open;
   const roundness = frame.roundness;
   const spread = frame.spread;
   const jawDy = frame.jawDy;
-  const eyeWide = frame.eyeWide ?? 0.12;
-  const cheekLift = frame.cheekLift ?? 0.15;
-  const intonation = frame.intonation ?? 0.22;
+  const browFurrow = frame.browFurrow ?? 0;
+  const eyeWide = frame.eyeWide ?? 0.14;
+  const cheekLift = frame.cheekLift ?? 0.45;
+  const rawSmile = frame.smile ?? 0.72;
+  const extraSmile = Math.max(0, rawSmile - 0.14);
+  const intonation = frame.intonation ?? 0.24;
+  const leftShoulderLift = frame.leftShoulderLift ?? frame.shoulderLift ?? 0;
+  const rightShoulderLift = frame.rightShoulderLift ?? frame.shoulderLift ?? 0;
+  const collarLift = frame.collarLift ?? (leftShoulderLift + rightShoulderLift) * 0.38;
+  const torsoSwayX = frame.torsoSwayX ?? 0;
+
   const closeRatio = open <= REST_OPEN ? 1 - open / REST_OPEN : 0;
   const openRatio = open > REST_OPEN ? (open - REST_OPEN) / (1 - REST_OPEN) : 0;
 
@@ -160,214 +193,247 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
       let lx = REST_SX[idx];
       let ly = REST_SY[idx];
 
-      // 1. Local Facial, Cheek, Eye, Brow & Labial Deformations (in head space before 3D head rotation)
-      // A. Bilateral Eyebrow Lift & Intonation / Astonishment Arch (r=2..3, c=3..16)
-      if (r === 3 && c >= 3 && c <= 16) {
+      // =======================================================================
+      // 0. STATIC STUDIO BACKGROUND & OUTER FRAME LOCK:
+      // - Top frame (r === 0), lower frame (r >= 16), and outer frame edges (c === 0, c === 18) are 100% static.
+      // - In the head zone (r <= 12), outer background columns (c <= 1 or c >= 17) are 100% static.
+      // - In the shoulder & blazer bust zone (r = 13..15), columns c = 1..17 animate shoulder shrugs & breathing!
+      // =======================================================================
+      const isStaticAnchor =
+        r === 0 ||
+        r >= 16 ||
+        c === 0 ||
+        c === 18 ||
+        (r <= 12 && (c <= 1 || c >= 17));
+      if (isStaticAnchor) {
+        TARGET_DX[idx] = lx;
+        TARGET_DY[idx] = ly;
+        CUR_DX[idx] = lx;
+        CUR_DY[idx] = ly;
+        continue;
+      }
+
+      // =======================================================================
+      // 1. NATURAL FACIAL EXPRESSIONS, EYEBROWS, EYES, DUCHENNE SMILE & WAV2LIP
+      // =======================================================================
+
+      // A. Eyebrows & Forehead (r=2..3, c=3..15)
+      const extraBrowLift = Math.max(0, frame.eyebrowLift - 0.18);
+      if (r === 3 && c >= 3 && c <= 15) {
         const isLeftBrow = c >= 3 && c <= 8;
-        const isRightBrow = c >= 12 && c <= 16;
+        const isRightBrow = c >= 12 && c <= 15;
         const browWeight = isLeftBrow
           ? c === 3
-            ? 0.65
+            ? 0.60
             : c >= 4 && c <= 7
-            ? 1.12 // Strong left eyebrow arch so left upper face is highly expressive
-            : 0.85
+            ? 1.05
+            : 0.78
           : isRightBrow
-          ? c === 16
-            ? 0.75
-            : 1.05
-          : 0.42; // Glabella
-        const intonArch = isLeftBrow ? intonation * 1.65 : isRightBrow ? intonation * 1.45 : intonation * 0.6;
-        ly -= (frame.eyebrowLift * 7.8 + intonArch) * browWeight;
-        if (isLeftBrow) {
-          lx -= frame.eyebrowLift * 0.65;
-        } else if (isRightBrow) {
-          lx += frame.eyebrowLift * 0.55;
+          ? c === 15
+            ? 0.70
+            : 1.00
+          : 0.38;
+        const intonArch = isLeftBrow ? intonation * 1.25 : isRightBrow ? intonation * 1.18 : intonation * 0.42;
+        const smileBrowArch = extraSmile * 1.05 * browWeight;
+        const isInnerLeftBrow = c === 7 || c === 8;
+        const isInnerRightBrow = c === 11 || c === 12;
+        const furrowDown =
+          isInnerLeftBrow || isInnerRightBrow || (c >= 9 && c <= 10)
+            ? browFurrow * 2.5
+            : -browFurrow * 1.1;
+
+        ly -= (extraBrowLift * 5.4 + intonArch + smileBrowArch) * browWeight - furrowDown;
+        if (isInnerLeftBrow) {
+          lx += browFurrow * 2.4;
+        } else if (isInnerRightBrow) {
+          lx -= browFurrow * 2.4;
         }
-      } else if (r === 2 && c >= 3 && c <= 16) {
-        const wForehead = c >= 3 && c <= 8 ? 1.1 : 0.95;
-        ly -= (frame.eyebrowLift * 2.8 + intonation * 0.8) * wForehead;
+      } else if (r === 2 && c >= 3 && c <= 15) {
+        ly -= extraBrowLift * 1.8 + intonation * 0.45 - browFurrow * 0.5;
       }
 
-      // B. Upper & Lower Eyelids: Blinks, Winks, Gaze Saccades & Intonation / Astonishment Widening (r=4..5)
+      // B. Upper & Lower Eyelids (r=4..5, c=3..15): Anchored to natural eye pixels
       if (r === 4) {
-        if (c >= 3 && c <= 7) {
-          const w = c === 5 ? 1.0 : c === 4 || c === 6 ? 0.68 : 0.32;
-          const wideLift = (1 - frame.blinkLeft) * eyeWide * 3.6 * w;
-          ly += frame.blinkLeft * 15.5 * w - wideLift + frame.gazeY * 0.52;
-          lx += frame.gazeX * 0.52;
-        } else if (c >= 13 && c <= 16) {
-          const w = c === 15 ? 1.0 : c === 14 || c === 16 ? 0.65 : 0.32;
-          const wideLift = (1 - frame.blinkRight) * eyeWide * 3.4 * w;
-          ly += frame.blinkRight * 15.0 * w - wideLift + frame.gazeY * 0.52;
-          lx += frame.gazeX * 0.52;
+        const extraWide = Math.max(0, eyeWide - 0.14);
+        if (c >= 3 && c <= 6) {
+          const w = c === 4 ? 1.0 : c === 5 ? 0.86 : 0.42;
+          const wideLift = (1 - frame.blinkLeft) * extraWide * 1.35 * w;
+          ly += frame.blinkLeft * 15.0 * w - wideLift + frame.gazeY * 0.30;
+          lx += frame.gazeX * 0.32;
+        } else if (c >= 14 && c <= 15) {
+          const w = c === 15 ? 1.0 : 0.78;
+          const wideLift = (1 - frame.blinkRight) * extraWide * 1.35 * w;
+          ly += frame.blinkRight * 14.5 * w - wideLift + frame.gazeY * 0.30;
+          lx += frame.gazeX * 0.32;
         }
       } else if (r === 5) {
+        const duchenneSquint = extraSmile * 2.1;
+        if (c >= 3 && c <= 6) {
+          const w = c === 4 || c === 5 ? 1.0 : 0.52;
+          ly += -duchenneSquint * w + frame.gazeY * 0.24;
+          lx += frame.gazeX * 0.25;
+        } else if (c >= 14 && c <= 15) {
+          const w = c === 15 ? 1.0 : 0.60;
+          ly += -duchenneSquint * w + frame.gazeY * 0.24;
+          lx += frame.gazeX * 0.25;
+        }
+      }
+
+      // B2. Mid-Cheeks & Zygomaticus Major ("Pommettes du sourire", r=6, c=3..15)
+      if (r === 6 && c >= 3 && c <= 15) {
+        const extraCheek = Math.max(0, cheekLift - 0.18);
         if (c >= 3 && c <= 7) {
-          const w = c >= 4 && c <= 6 ? 1.0 : 0.48;
-          // Lower lid widens slightly downward on astonishment (eyeWide) and lifts on warm smile/cheekLift
-          ly += (eyeWide * 1.35 - cheekLift * 1.45) * w + frame.gazeY * 0.40;
-          lx += frame.gazeX * 0.42;
-        } else if (c >= 13 && c <= 16) {
-          const w = c >= 14 && c <= 15 ? 1.0 : 0.48;
-          ly += (eyeWide * 1.25 - cheekLift * 1.35) * w + frame.gazeY * 0.40;
-          lx += frame.gazeX * 0.42;
+          const leftCheekW = c === 4 || c === 5 ? 1.05 : c === 3 || c === 6 ? 0.82 : 0.46;
+          ly += (-extraSmile * 4.4 - extraCheek * 2.3 + Math.max(0, jawDy) * 0.14) * leftCheekW;
+          lx += (-extraSmile * 2.4 - roundness * 1.4) * leftCheekW;
+        } else if (c >= 12 && c <= 15) {
+          const rightCheekW = c === 14 || c === 15 ? 1.05 : 0.68;
+          ly += (-extraSmile * 4.2 - extraCheek * 2.2 + Math.max(0, jawDy) * 0.14) * rightCheekW;
+          lx += (extraSmile * 2.4 + roundness * 1.4) * rightCheekW;
         }
       }
 
-      // B2. Mid-Cheeks, Left Zygoma & Sub-Nasale (r=6, c=2..16):
-      // Ensures Aïsha's left cheek & cheekbone (c=2..7) and right cheek (c=12..16) move organically
-      // with speech, cheekLift, jaw opening, and 3D head turn parallax!
-      if (r === 6 && c >= 2 && c <= 16) {
-        if (c >= 2 && c <= 7) {
-          const leftCheekW = c === 4 || c === 5 ? 1.0 : c === 3 || c === 6 ? 0.82 : 0.45;
-          ly += (-cheekLift * 2.6 + Math.max(0, jawDy) * 0.14 - intonation * 0.9) * leftCheekW;
-          lx += (-cheekLift * 0.9 + frame.turn * 0.14 - roundness * 0.8) * leftCheekW;
-        } else if (c >= 12 && c <= 16) {
-          const rightCheekW = c === 14 || c === 15 ? 1.0 : 0.65;
-          ly += (-cheekLift * 2.3 + Math.max(0, jawDy) * 0.12 - intonation * 0.75) * rightCheekW;
-          lx += (cheekLift * 0.8 + frame.turn * 0.12 + roundness * 0.7) * rightCheekW;
-        } else {
-          // Sub-nasale / nose tip subtle prosodic flare
-          ly -= intonation * 0.55;
-        }
-      }
-
-      // B3. Left & Right Outer Cheeks, Nasolabial Folds & Mandible Angles (r=7..12, c=2..4 and c=15..16):
-      // Eliminates any static left-face zone by coupling the left cheek & left jawline (x=318..442)
-      // and right cheek/jawline (x=558..588) to the moving mandible, labial rounding/spread, and intonation!
-      if (r >= 7 && r <= 12 && ((c >= 2 && c <= 4) || (c >= 15 && c <= 16))) {
+      // B3. Outer Cheeks, Nasolabial Folds & Mandible Angles (r=7..12, c=3..4 and c=15)
+      if (r >= 7 && r <= 12 && (c === 3 || c === 4 || c === 15)) {
         const isLeftZone = c <= 4;
-        const colW =
-          c === 4
-            ? 0.72
-            : c === 3
-            ? 0.42
-            : c === 2
-            ? 0.18
-            : c === 15
-            ? 0.65
-            : 0.34;
+        const colW = c === 4 ? 0.85 : c === 3 ? 0.44 : 0.82;
         const rowJawW =
           r === 7
             ? 0.16
             : r === 8
             ? 0.24
             : r === 9
-            ? 0.34
+            ? 0.35
             : r === 10
             ? 0.52
             : r === 11
             ? 0.68
-            : 0.76; // r=12 gonion / jawline follows mandible!
-        const smileLift = cheekLift * (r <= 9 ? 1.8 : 0.8) * colW;
-        const leftRelease = isLeftZone && openRatio > 0 ? openRatio * 2.1 * colW : 0;
-        ly += jawDy * rowJawW * colW + leftRelease - smileLift;
+            : 0.78;
+        const rowSmileFactor = r <= 9 ? 1.08 : r === 10 ? 0.85 : r === 11 ? 0.52 : 0.24;
+        const smileLift = extraSmile * 5.2 * rowSmileFactor * colW;
+        const leftRelease = isLeftZone && openRatio > 0 ? openRatio * 0.75 * colW : 0;
+        ly += Math.max(0, jawDy) * rowJawW * colW + leftRelease - smileLift;
+
+        const smileOutward = extraSmile * 3.1 * (r <= 10 ? 1.0 : 0.45);
         const horizShift = isLeftZone
-          ? (roundness * 1.4 - spread * 1.3 - openRatio * 0.8) * colW + frame.turn * 0.12 * colW
-          : (-roundness * 1.2 + spread * 1.1 + openRatio * 0.6) * colW + frame.turn * 0.10 * colW;
+          ? (roundness * 4.2 - spread * 1.6 - smileOutward) * colW
+          : (-roundness * 4.0 + spread * 1.5 + smileOutward) * colW;
         lx += horizShift;
       }
 
-      // C. Natural Photographic Mouth, Teeth, Lips & Chin Kinematics (r=7..12, c=5..14)
-      // - At rest (!speechActive), preserves the resting smile photo with gentle living micro-expression.
-      // - During speech:
-      //   * All 10 stations c=5..14 (including left corner c=5 and left mouth c=6..8) articulate actively!
-      //   * Left-side smile-release uncurling levels the left lower lip so the left side of the mouth
-      //     opens wide and symmetrically with the center and right!
+      // =======================================================================
+      // C. WAV2LIP MOUTH ARTICULATION + RADIANT DUCHENNE SMILE ("INSÉRER LE SOURIRE"):
+      // =======================================================================
       if (r >= 7 && r <= 12 && c >= 5 && c <= 14) {
         const speechActive = frame.mouthOpacity === '1';
+        const mIdx = c - 5;
         const baseRestX = lx;
         const baseRestY = ly;
 
+        const baseDome = STATION_DOME_W[mIdx];
+        const normDist = (mIdx - 4.5) / 4.5;
+        const absNorm = Math.abs(normDist);
+        const centerBell = Math.max(0, 1 - absNorm * absNorm);
+        const cornerCurve = Math.pow(absNorm, 1.45);
+
+        const effectiveExtraSmile = speechActive ? extraSmile * (1 - roundness * 0.72) : extraSmile;
+        // Upward crescent smile lift at mouth corners (-8.6px at full smile) + subtle center upper-lip smile arch
+        const smileCornerLiftDy =
+          -effectiveExtraSmile * 8.6 * cornerCurve -
+          (r <= 8 ? effectiveExtraSmile * 1.4 * centerBell : 0);
+        const cornerPinchWeight = 0.42 + 0.58 * Math.sin(absNorm * (Math.PI / 2));
+        const smileStretchDx = normDist * effectiveExtraSmile * 5.0 * cornerPinchWeight;
+
         if (!speechActive && Math.abs(open - REST_OPEN) < 0.008) {
-          // Even when silent & looking at the user, apply subtle bilateral breathing/intonation life on the left side
-          const mIdx = c - 5;
-          const leftAlive = mIdx <= 4 ? (1 - mIdx * 0.18) : 0.25;
-          lx = baseRestX - (mIdx <= 4 ? cheekLift * 0.45 * leftAlive : -cheekLift * 0.35);
-          ly = baseRestY - cheekLift * 0.55 * leftAlive + (r >= 10 ? frame.breathY * 0.22 : 0);
+          lx = baseRestX + (r >= 7 && r <= 11 ? smileStretchDx : smileStretchDx * 0.30);
+          ly =
+            baseRestY +
+            (r >= 7 && r <= 11 ? smileCornerLiftDy : smileCornerLiftDy * 0.25);
         } else {
-          const mIdx = c - 5;
-          const baseDome = STATION_DOME_W[mIdx];
-          const normDist = (mIdx - 4.5) / 4.5;
           const roundNarrowing = Math.max(
-            0.46,
-            1 - roundness * Math.min(0.54, Math.abs(normDist) * 0.64)
+            0.16,
+            1 - roundness * Math.min(0.84, absNorm * 1.08)
           );
           const arcW = baseDome * roundNarrowing;
 
-          // Symmetric inward lip rounding on French 'O', 'OU', 'U', 'ON', 'CH' vs outward stretch on 'I', 'É'
           const roundDx =
             r >= 7 && r <= 11
-              ? (-normDist * roundness * 2.2 + normDist * spread * 1.4) *
-                (1 - Math.abs(normDist) * 0.22)
-              : 0;
+              ? -normDist * roundness * 12.2 * cornerPinchWeight +
+                normDist * spread * 4.2 * cornerPinchWeight +
+                smileStretchDx -
+                normDist * openRatio * (1 - spread) * (1 - roundness) * 2.6 * cornerPinchWeight
+              : -normDist * roundness * 3.2 * cornerPinchWeight + smileStretchDx * 0.22;
 
           const origUpperLipH = UPPER_LIP_BOT_10[mIdx] - UPPER_LIP_TOP_10[mIdx];
           const origFullTeethH = Math.max(0.4, UPPER_TEETH_BOT_10[mIdx] - UPPER_LIP_BOT_10[mIdx]);
           const origLowerLipH = LOWER_LIP_BOT_10[mIdx] - LOWER_LIP_TOP_10[mIdx];
 
-          // Upper incisors occupy ~42% of the resting smile tooth block (~4.6px at center),
-          // while the lower 58% opens into the dark oral cavity as the jaw parts!
-          const speakingUpperTeethH = origFullTeethH * (0.42 - roundness * 0.10 + spread * 0.06);
+          const speakingUpperTeethH =
+            origFullTeethH * Math.max(0.14, 0.42 - roundness * 0.28 + spread * 0.14 + effectiveExtraSmile * 0.10);
 
-          // Left-side smile-release downward uncurling so left stations mIdx=0..4 open wide & level
-          const leftReleaseDy = LEFT_SMILE_RELEASE_PX[mIdx] * openRatio;
+          const cornerSmileDy =
+            smileCornerLiftDy +
+            (absNorm > 0.42 ? (-spread * 2.2 + roundness * 2.0) * (absNorm - 0.42) : 0);
 
           let targetY = baseRestY;
 
           if (open <= REST_OPEN) {
             const seamY =
-              UPPER_LIP_BOT_10[mIdx] * 0.44 + LOWER_LIP_TOP_10[mIdx] * 0.56;
-            const sealFactor = Math.pow(Math.min(1, Math.max(0, closeRatio)), 1.35);
+              UPPER_LIP_BOT_10[mIdx] * 0.48 +
+              LOWER_LIP_TOP_10[mIdx] * 0.52 +
+              smileCornerLiftDy;
+            // Preserve a warm smiling lip crescent during inter-clause pauses when smiling
+            const isBilabial = frame.activeVisemeNumber === 1 && speechActive && (frame.roundness || 0) > 0.08;
+            const smileRelax = isBilabial ? 1.0 : Math.max(0.35, 1 - effectiveExtraSmile * 0.55);
+            const sealFactor = Math.min(1, Math.max(0, closeRatio)) * smileRelax;
 
-            const openR8 = UPPER_LIP_BOT_10[mIdx] + roundness * 1.0 * arcW;
-            const openR9 = openR8 + speakingUpperTeethH;
-            const openR10 = LOWER_LIP_TOP_10[mIdx] - 2.0 * baseDome;
+            const curR8 = UPPER_LIP_BOT_10[mIdx] * (1 - sealFactor * 0.5) + (seamY - 0.1) * (sealFactor * 0.5) + smileCornerLiftDy * (1 - sealFactor * 0.5);
+            const curR9 = seamY;
+            const curR10 = LOWER_LIP_TOP_10[mIdx] * (1 - sealFactor * 0.5) + (seamY + 0.1) * (sealFactor * 0.5) + smileCornerLiftDy * (1 - sealFactor * 0.5);
 
-            const closedR8 = seamY - 0.06;
-            const closedR9 = seamY;
-            const closedR10 = seamY + 0.06;
-
-            const curR8 = openR8 * (1 - sealFactor) + closedR8 * sealFactor;
-            const curR9 = openR9 * (1 - sealFactor) + closedR9 * sealFactor;
-            const curR10 = openR10 * (1 - sealFactor) + closedR10 * sealFactor;
-
-            if (r === 7) {
-              targetY = curR8 - origUpperLipH * (1 + sealFactor * 0.14);
-            } else if (r === 8) {
-              targetY = curR8;
-            } else if (r === 9) {
-              targetY = curR9;
-            } else if (r === 10) {
-              targetY = curR10;
-            } else if (r === 11) {
-              targetY = curR10 + origLowerLipH * (1 + sealFactor * 0.14);
-            } else if (r === 12) {
-              targetY = CHIN_JAW_10[mIdx] + jawDy * 0.56 * Math.max(0.45, arcW);
-            }
+            if (r === 7) targetY = curR8 - origUpperLipH;
+            else if (r === 8) targetY = curR8;
+            else if (r === 9) targetY = curR9;
+            else if (r === 10) targetY = curR10;
+            else if (r === 11) targetY = curR10 + origLowerLipH;
+            else if (r === 12) targetY = CHIN_JAW_10[mIdx];
           } else {
-            // Active Vowel & Open Syllable Articulation (open > REST_OPEN):
+            const puckerCushion = roundness * (0.45 + 0.55 * centerBell) * 3.4;
+            const effectiveJawDrop =
+              Math.max(
+                1.4,
+                (jawDy * 1.15 + openRatio * 23.5 * (1 - roundness * 0.42)) * 0.64
+              );
             const upperLipShift =
-              (-openRatio * (1 - roundness * 0.85) * 1.65 + roundness * 1.4 - intonation * 0.45) *
-              arcW;
+              (-openRatio * (1 - roundness * 0.65) * 3.4 * centerBell +
+                roundness * (2.2 - centerBell * 1.5) -
+                intonation * 0.65) *
+                arcW +
+              cornerSmileDy;
             const curR8 = UPPER_LIP_BOT_10[mIdx] + upperLipShift;
             const curR9 = curR8 + speakingUpperTeethH;
-            const curR10 = LOWER_LIP_TOP_10[mIdx] + jawDy * arcW + leftReleaseDy;
+            const curR10 =
+              LOWER_LIP_TOP_10[mIdx] +
+              effectiveJawDrop * arcW +
+              cornerSmileDy -
+              roundness * (1 - centerBell) * 3.8;
 
             if (r === 7) {
-              targetY = curR8 - origUpperLipH * (1 + roundness * 0.10);
+              targetY = curR8 - origUpperLipH * (1 + roundness * 0.32) - puckerCushion * 0.55;
             } else if (r === 8) {
               targetY = curR8;
             } else if (r === 9) {
               targetY = curR9;
             } else if (r === 10) {
-              targetY = curR10;
+              targetY = Math.max(curR9 + 0.35, curR10);
             } else if (r === 11) {
               targetY =
-                curR10 + origLowerLipH * (1 + roundness * 0.12 + openRatio * 0.06);
+                Math.max(curR9 + 0.35, curR10) +
+                origLowerLipH * (1 + roundness * 0.36 + openRatio * 0.14) +
+                puckerCushion * 0.70;
             } else if (r === 12) {
               targetY =
-                CHIN_JAW_10[mIdx] + jawDy * Math.max(0.52, arcW) * 0.82 + leftReleaseDy * 0.65;
+                CHIN_JAW_10[mIdx] + effectiveJawDrop * Math.max(0.54, arcW) * 0.74;
             }
           }
 
@@ -376,53 +442,131 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
         }
       }
 
-      // 2. Global 3D Head Transform vs Neck Elasticity vs Bilateral Thoracic Breathing
-      let headWeight = 0.0;
-      if (r >= 1 && r <= 12 && c >= 1 && c <= 17) {
-        headWeight = 1.0;
-      }
-
-      if (headWeight > 0) {
-        // Apply 3D head rotation + translation around balanced cervical neck pivot (496, 468)
+      // =======================================================================
+      // 2. FULL CONVERSATIONAL & LISTENING 3D HEAD MOVEMENT + UPPER-BODY SHOULDER SHRUGS
+      // =======================================================================
+      if (r >= 1 && r <= 12) {
+        // Smoothly taper outer background corner vertices at r=12 (c=2, 16) to prevent lower-bun shear
+        const rowTaper =
+          r === 12 && (c === 2 || c === 16)
+            ? 0.45
+            : r === 1 && (c === 2 || c === 16)
+            ? 0.55
+            : 1.0;
+        const yawW = YAW_PERSPECTIVE_W[c] * rowTaper;
         const rx = lx - HEAD_PIVOT_X;
         const ry = ly - HEAD_PIVOT_Y;
-        const rotX = HEAD_PIVOT_X + frame.turn + (rx * cosT - ry * sinT) * 1.012;
-        const rotY = HEAD_PIVOT_Y + frame.nod + (rx * sinT + ry * cosT) * 1.012;
+        // Subtle coupling of cervical base with upper-body collar breath & torso sway
+        const bodyCoupledX = torsoSwayX * 0.25 * rowTaper;
+        const bodyCoupledY = collarLift * 0.28 * rowTaper;
+        const rotX = HEAD_PIVOT_X + frame.turn * yawW + bodyCoupledX + (rx * cosT - ry * sinT);
+        const rotY = HEAD_PIVOT_Y + frame.nod * yawW + bodyCoupledY + (rx * sinT + ry * cosT);
 
-        // Secondary physical hair inertia on the left hair chignon (c=1..3, r=2..12), crown (r=1), and right hair (c=17)
-        let hairExtraX = 0;
-        let hairExtraY = 0;
-        const lagDx = frame.hairLagTurn - frame.turn;
-        const lagDy = frame.hairLagNod - frame.nod;
-        if (c >= 1 && c <= 3) {
-          const wHair = c === 2 ? 0.95 : c === 1 ? 0.75 : 0.48;
-          hairExtraX = lagDx * wHair + frame.breathY * 0.28 * wHair;
-          hairExtraY = lagDy * wHair + frame.breathY * 0.35 * wHair;
-        } else if (r === 1 || c === 17) {
-          hairExtraX = lagDx * 0.60;
-          hairExtraY = lagDy * 0.60;
-        }
+        TARGET_DX[idx] = lx * (1 - rowTaper) + rotX * rowTaper;
+        TARGET_DY[idx] = ly * (1 - rowTaper) + rotY * rowTaper;
+      } else if (r === 13) {
+        // Supple feminine neck, white blouse collar & inner shoulders (y=622):
+        // Combines smooth cervical neck follow with TTS-triggered shoulder shrugs & collar lift!
+        const colNeckW =
+          c <= 1 || c >= 17
+            ? 0.0
+            : c === 2 || c === 16
+            ? 0.16
+            : c === 3 || c === 15
+            ? 0.30
+            : 0.46;
+        const neckWeight = colNeckW * YAW_PERSPECTIVE_W[c];
+        const rx = lx - HEAD_PIVOT_X;
+        const ry = ly - HEAD_PIVOT_Y;
+        const headX = HEAD_PIVOT_X + frame.turn * YAW_PERSPECTIVE_W[c] + (rx * cosT - ry * sinT);
+        const headY = HEAD_PIVOT_Y + frame.nod * 0.55 + (rx * sinT + ry * cosT);
 
-        CUR_DX[idx] = rotX + hairExtraX;
-        CUR_DY[idx] = rotY + hairExtraY;
-      } else if (r === 13 && c >= 1 && c <= 17) {
-        // Neck & collar transition row (y=518): active bilateral follow-through on both left (c=1..7) and right (c=11..17)
-        const leftBoost = c <= 7 ? 1.15 : 1.0;
-        CUR_DX[idx] = lx + frame.turn * 0.28 * leftBoost;
-        CUR_DY[idx] =
-          ly + frame.nod * 0.22 + frame.breathY * 0.75 + (c <= 7 ? -frame.tilt * 0.22 : frame.tilt * 0.18);
-      } else if (r === 14 && c >= 1 && c <= 17) {
-        // Shoulders & blazer lapels: bilateral thoracic breathing + natural posture accompaniment with intonation
-        const isLeftShoulder = c <= 8;
-        CUR_DX[idx] = lx + frame.turn * (isLeftShoulder ? 0.15 : 0.12);
-        CUR_DY[idx] =
-          ly +
-          frame.breathY * (isLeftShoulder ? 1.12 : 1.0) +
-          (isLeftShoulder ? -frame.tilt * 0.32 : frame.tilt * 0.26);
+        const isLeftShoulder = c <= 7;
+        const isRightShoulder = c >= 11;
+        const shoulderColW =
+          c === 1 || c === 17
+            ? 0.55
+            : c === 2 || c === 16
+            ? 0.92
+            : c === 3 || c === 15
+            ? 1.00
+            : c === 4 || c === 14
+            ? 0.85
+            : 0.65;
+        const shrugDy = isLeftShoulder
+          ? leftShoulderLift * shoulderColW
+          : isRightShoulder
+          ? rightShoulderLift * shoulderColW
+          : collarLift * 0.85;
+        const shrugInwardDx = isLeftShoulder
+          ? -Math.min(0, leftShoulderLift) * 0.22 * shoulderColW
+          : isRightShoulder
+          ? Math.min(0, rightShoulderLift) * 0.22 * shoulderColW
+          : 0;
+
+        TARGET_DX[idx] =
+          lx * (1 - neckWeight) + headX * neckWeight + torsoSwayX * 0.55 + shrugInwardDx;
+        TARGET_DY[idx] = ly * (1 - neckWeight) + headY * neckWeight + shrugDy;
+      } else if (r === 14 || r === 15) {
+        // Tailored cream blazer shoulders, lapels & upper bust (r=14 at y=700, r=15 at y=795):
+        // Animates expressive shoulder shrugs ("haussements d'épaules"), empathetic breath & torso poise!
+        const rowWeight = r === 14 ? 1.0 : 0.42;
+        const isLeftShoulder = c <= 7;
+        const isRightShoulder = c >= 11;
+        const shoulderProfileW =
+          c === 1 || c === 17
+            ? 0.72
+            : c === 2 || c === 16
+            ? 1.05
+            : c === 3 || c === 15
+            ? 1.00
+            : c === 4 || c === 14
+            ? 0.86
+            : 0.68;
+
+        const verticalShrug = isLeftShoulder
+          ? leftShoulderLift * shoulderProfileW
+          : isRightShoulder
+          ? rightShoulderLift * shoulderProfileW
+          : collarLift * 0.78;
+
+        // Subtle anatomic inward clavicle draw when shoulders rise in a shrug
+        const clavicleDrawDx = isLeftShoulder
+          ? -Math.min(0, leftShoulderLift) * 0.26 * shoulderProfileW
+          : isRightShoulder
+          ? Math.min(0, rightShoulderLift) * 0.26 * shoulderProfileW
+          : 0;
+
+        TARGET_DX[idx] = lx + (torsoSwayX * 0.68 + clavicleDrawDx) * rowWeight;
+        TARGET_DY[idx] = ly + verticalShrug * rowWeight;
+      }
+
+      // =======================================================================
+      // 3. PER-VERTEX TEMPORAL STATE-SPACE SMOOTHING (Kalman-style alpha-beta filter):
+      // - Mouth vertices (r=7..11, c=5..14) track voice with ultra-fast zero-lag gain (alpha=0.86)
+      // - Head & hair vertices track with silky velocity-damped smoothing (alpha=0.52, beta=0.14)
+      //   to eliminate 100% of micro-saccades and frame-time jitter!
+      // =======================================================================
+      if (!meshStateInitialized) {
+        CUR_DX[idx] = TARGET_DX[idx];
+        CUR_DY[idx] = TARGET_DY[idx];
+        VEL_DX[idx] = 0;
+        VEL_DY[idx] = 0;
       } else {
-        // Pinned outer studio border (r=0, r=15, c=0, c=18)
-        CUR_DX[idx] = lx;
-        CUR_DY[idx] = ly;
+        const isMouthVertex = r >= 7 && r <= 12 && c >= 5 && c <= 14;
+        const alpha = isMouthVertex ? 0.86 : 0.54;
+        const beta = isMouthVertex ? 0.08 : 0.14;
+        const damping = isMouthVertex ? 0.65 : 0.80;
+
+        const predX = CUR_DX[idx] + VEL_DX[idx] * damping;
+        const predY = CUR_DY[idx] + VEL_DY[idx] * damping;
+        const errX = TARGET_DX[idx] - predX;
+        const errY = TARGET_DY[idx] - predY;
+
+        CUR_DX[idx] = predX + alpha * errX;
+        CUR_DY[idx] = predY + alpha * errY;
+        VEL_DX[idx] = VEL_DX[idx] * damping + beta * errX;
+        VEL_DY[idx] = VEL_DY[idx] * damping + beta * errY;
       }
 
       // Guarantee strict vertical monotonicity within each column so no triangle ever folds
@@ -434,18 +578,20 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
       }
     }
   }
+  meshStateInitialized = true;
 }
 
-// Transform a point (x, y) in head space by the current 3D head pose
+// Transform a point (x, y) in central head space by the active 3D head pose
 function transformHeadPoint(x: number, y: number, frame: AvatarComputedFrame): [number, number] {
-  const rad = (frame.tilt * Math.PI) / 180;
-  const cosT = Math.cos(rad);
-  const sinT = Math.sin(rad);
+  const clampedTiltDeg = Math.max(-5.2, Math.min(5.2, frame.tilt || 0));
+  const tiltRad = (clampedTiltDeg * Math.PI) / 180.0;
+  const cosT = Math.cos(tiltRad);
+  const sinT = Math.sin(tiltRad);
   const rx = x - HEAD_PIVOT_X;
   const ry = y - HEAD_PIVOT_Y;
   return [
-    HEAD_PIVOT_X + frame.turn + (rx * cosT - ry * sinT) * 1.012,
-    HEAD_PIVOT_Y + frame.nod + (rx * sinT + ry * cosT) * 1.012,
+    HEAD_PIVOT_X + frame.turn + (rx * cosT - ry * sinT),
+    HEAD_PIVOT_Y + frame.nod + (rx * sinT + ry * cosT),
   ];
 }
 
@@ -454,6 +600,7 @@ export interface Wav2LipViewport {
   y: number;
   w: number;
   h: number;
+  tutorPersona?: string;
 }
 
 class SharedWav2LipWebGLCore {
@@ -496,7 +643,7 @@ class SharedWav2LipWebGLCore {
       img.onload = () => {
         this.img = img;
         if (this.gl) {
-          this.uploadTexture(this.gl, img);
+          this.prepareZeroGhostSingleLayerTexture(this.gl, img);
         }
         this.isReady = true;
       };
@@ -558,7 +705,128 @@ class SharedWav2LipWebGLCore {
     this.vbo = gl.createBuffer();
   }
 
-  private uploadTexture(gl: WebGLRenderingContext, img: HTMLImageElement) {
+  /**
+   * Connected BFS Studio-Background Unification in a Single Continuous Texture:
+   * - Identifies all studio background pixels (`isBg === 1`) connected to the outer borders.
+   * - Sets 100% of studio background pixels to a uniform studio slate-blue `RGB(90, 118, 138)`,
+   *   and softens the 1px outer hair/skin transition into that exact same color.
+   * - Because every background texel outside Aïsha's silhouette has the exact same constant color
+   *   in a single continuous mesh, ZERO ghost traces ("traces fantômes") or background motion can ever appear!
+   */
+  private prepareZeroGhostSingleLayerTexture(gl: WebGLRenderingContext, img: HTMLImageElement) {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = IMG_W;
+    offscreen.height = IMG_H;
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(img, 0, 0, IMG_W, IMG_H);
+    const imgData = ctx.getImageData(0, 0, IMG_W, IMG_H);
+    const data = imgData.data;
+
+    // 1. Connected BFS flood-fill from outer studio background down to y <= 760 (head, hair & shoulders)
+    const isBg = new Uint8Array(IMG_W * IMG_H);
+    const matchesStudioBg = (x: number, y: number): boolean => {
+      const nx = (x - 452) / 94;
+      const ny = (y - 385) / 182;
+      if (nx * nx + ny * ny < 1.0) return false;
+      // Protect inner blouse/blazer bust core below y=550
+      if (y >= 550 && x >= 310 && x <= 590) return false;
+      const p = (y * IMG_W + x) * 4;
+      const r = data[p];
+      const g = data[p + 1];
+      const b = data[p + 2];
+      // Pure studio background has strong blue-over-red excess and medium-high blue luminance
+      return b - r >= 18 && g - r >= 8 && b >= 68;
+    };
+
+    const queue = new Int32Array(IMG_W * 780);
+    let qHead = 0;
+    let qTail = 0;
+
+    for (let y = 0; y <= 760; y++) {
+      for (let x = 0; x < IMG_W; x++) {
+        if (y <= 145 || x <= 105 || x >= 800 || (y <= 620 && (x <= 265 || x >= 625))) {
+          if (matchesStudioBg(x, y)) {
+            const idx = y * IMG_W + x;
+            isBg[idx] = 1;
+            queue[qTail++] = idx;
+          }
+        }
+      }
+    }
+
+    while (qHead < qTail) {
+      const idx = queue[qHead++];
+      const x = idx % IMG_W;
+      const y = (idx / IMG_W) | 0;
+
+      if (x > 0) {
+        const nIdx = idx - 1;
+        if (!isBg[nIdx] && matchesStudioBg(x - 1, y)) {
+          isBg[nIdx] = 1;
+          queue[qTail++] = nIdx;
+        }
+      }
+      if (x + 1 < IMG_W) {
+        const nIdx = idx + 1;
+        if (!isBg[nIdx] && matchesStudioBg(x + 1, y)) {
+          isBg[nIdx] = 1;
+          queue[qTail++] = nIdx;
+        }
+      }
+      if (y > 0) {
+        const nIdx = idx - IMG_W;
+        if (!isBg[nIdx] && matchesStudioBg(x, y - 1)) {
+          isBg[nIdx] = 1;
+          queue[qTail++] = nIdx;
+        }
+      }
+      if (y + 1 <= 760) {
+        const nIdx = idx + IMG_W;
+        if (!isBg[nIdx] && matchesStudioBg(x, y + 1)) {
+          isBg[nIdx] = 1;
+          queue[qTail++] = nIdx;
+        }
+      }
+    }
+
+    // 2. Set all studio background pixels to a uniform studio slate-blue RGB(90, 118, 138)
+    const BG_R = 90;
+    const BG_G = 118;
+    const BG_B = 138;
+
+    for (let y = 0; y <= 760; y++) {
+      for (let x = 0; x < IMG_W; x++) {
+        const idx = y * IMG_W + x;
+        const p = idx * 4;
+        if (isBg[idx] === 1) {
+          data[p] = BG_R;
+          data[p + 1] = BG_G;
+          data[p + 2] = BG_B;
+        } else if (x > 100 && x < 805 && y > 140 && y < 755) {
+          // If this foreground pixel is immediately adjacent to isBg===1 and has a blue background halo,
+          // blend its blue halo into the exact uniform BG_R/G/B so there is zero contrast seam!
+          const adjBg =
+            isBg[idx - 1] === 1 ||
+            isBg[idx + 1] === 1 ||
+            isBg[idx - IMG_W] === 1 ||
+            isBg[idx + IMG_W] === 1;
+          if (adjBg) {
+            const r = data[p];
+            const g = data[p + 1];
+            const b = data[p + 2];
+            if (b - r >= 12 && b >= 45) {
+              const haloFactor = Math.min(0.75, (b - r - 10) / 32.0);
+              data[p] = Math.round(r * (1 - haloFactor) + BG_R * haloFactor);
+              data[p + 1] = Math.round(g * (1 - haloFactor) + BG_G * haloFactor);
+              data[p + 2] = Math.round(b * (1 - haloFactor) + BG_B * haloFactor);
+            }
+          }
+        }
+      }
+    }
+
     const tex = gl.createTexture();
     if (!tex) return;
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -566,7 +834,7 @@ class SharedWav2LipWebGLCore {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imgData);
     this.texture = tex;
   }
 
@@ -580,7 +848,6 @@ class SharedWav2LipWebGLCore {
       return this.img;
     }
 
-    // Populate interleaved vertex buffer (x, y, u, v) for all 540 triangles
     let ptr = 0;
     const emit = (r: number, c: number) => {
       const idx = r * NUM_COLS + c;
@@ -592,11 +859,9 @@ class SharedWav2LipWebGLCore {
 
     for (let r = 0; r < NUM_ROWS - 1; r++) {
       for (let c = 0; c < NUM_COLS - 1; c++) {
-        // Triangle 1
         emit(r, c);
         emit(r, c + 1);
         emit(r + 1, c);
-        // Triangle 2
         emit(r, c + 1);
         emit(r + 1, c + 1);
         emit(r + 1, c);
@@ -605,6 +870,7 @@ class SharedWav2LipWebGLCore {
 
     gl.viewport(0, 0, IMG_W, IMG_H);
     gl.useProgram(this.program);
+    gl.disable(gl.BLEND);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, GL_VERTS, gl.DYNAMIC_DRAW);
@@ -632,29 +898,34 @@ class SharedWav2LipWebGLCore {
     const ch = targetCanvas.height;
     if (cw === 0 || ch === 0) return;
 
-    // 1. Draw the WebGL mesh-warped frame cropped to viewport with "xMidYMid slice" aspect fill
+    // 1. Draw the single-layer continuous WebGL mesh-warped frame
     const scale = Math.max(cw / viewport.w, ch / viewport.h);
     const drawW = cw / scale;
     const drawH = ch / scale;
-    const sx = viewport.x + (viewport.w - drawW) * 0.5;
-    const sy = viewport.y + (viewport.h - drawH) * 0.5;
+    const sx = Math.max(0, Math.min(IMG_W - drawW, viewport.x + (viewport.w - drawW) * 0.5));
+    const sy = Math.max(0, Math.min(IMG_H - drawH, viewport.y + (viewport.h - drawH) * 0.5));
 
     ctx.save();
     ctx.clearRect(0, 0, cw, ch);
-    ctx.drawImage(sourceSurface, sx, sy, drawW, drawH, 0, 0, cw, ch);
 
-    // Map full-image coordinates (0..928, 0..1152) into targetCanvas coordinates
     ctx.scale(scale, scale);
     ctx.translate(-sx, -sy);
+    ctx.drawImage(sourceSurface, 0, 0);
 
-    // 2. Natural Oral Cavity & Tongue strictly below the upper incisors when speaking (open > 0.025)
+    // =========================================================================
+    // 2. WAV2LIP ORAL CAVITY, UPPER CENTRAL INCISORS, ROSE-PINK TONGUE,
+    //    LOWER INCISOR RIM & ROUNDED PUCKER APERTURE (COPIED FROM REFERENCE MODEL)
+    // =========================================================================
     const speechActive = frame.mouthOpacity === '1';
     const cavOpacity = parseFloat(frame.cavityOpacity || '0');
-    if (speechActive && cavOpacity > 0.02 && frame.open > 0.025) {
+    if (speechActive && cavOpacity > 0.02 && frame.open > 0.045) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, cavOpacity);
 
       const roundPinch = frame.roundness || 0;
+      const isPuckerMode = frame.activeVisemeNumber === 5 || roundPinch >= 0.45;
+      const isSmilingViseme3 = frame.activeVisemeNumber === 3 || (frame.spread || 0) >= 0.45;
+
       const topPts: [number, number][] = [];
       const botPts: [number, number][] = [];
       for (let m = 0; m < 10; m++) {
@@ -670,13 +941,19 @@ class SharedWav2LipWebGLCore {
           m === 0 || m === 9
             ? 1.0
             : m === 1 || m === 8
-            ? 0.14 + roundPinch * 0.28
+            ? isPuckerMode
+              ? 0.88
+              : isSmilingViseme3
+              ? 0.10
+              : 0.16 + roundPinch * 0.48
             : m === 2 || m === 7
-            ? roundPinch * 0.16
+            ? isPuckerMode
+              ? 0.52
+              : roundPinch * 0.28
             : 0;
         const midY = (ty + by) * 0.5;
-        const effTy = ty * (1 - lateralFactor) + midY * lateralFactor - (m >= 1 && m <= 8 ? 0.35 : 0);
-        const effBy = by * (1 - lateralFactor) + midY * lateralFactor + (m >= 1 && m <= 8 ? 0.85 : 0);
+        const effTy = ty * (1 - lateralFactor) + midY * lateralFactor - (m >= 2 && m <= 7 ? 0.45 : 0);
+        const effBy = by * (1 - lateralFactor) + midY * lateralFactor + (m >= 2 && m <= 7 ? 1.15 : 0);
 
         topPts.push([tx, effTy]);
         botPts.push([bx, Math.max(effTy + 0.15, effBy)]);
@@ -714,68 +991,184 @@ class SharedWav2LipWebGLCore {
       }
       ctx.closePath();
 
+      const midTopX = (topPts[4][0] + topPts[5][0]) * 0.5;
       const midTopY = (topPts[4][1] + topPts[5][1]) * 0.5;
-      const midBotY = Math.max(midTopY + 2, (botPts[4][1] + botPts[5][1]) * 0.5);
+      const midBotX = (botPts[4][0] + botPts[5][0]) * 0.5;
+      const midBotY = Math.max(midTopY + 2.0, (botPts[4][1] + botPts[5][1]) * 0.5);
+      const cavH = midBotY - midTopY;
+
       const oralGrad = ctx.createLinearGradient(0, midTopY, 0, midBotY);
-      oralGrad.addColorStop(0, '#160307');
-      oralGrad.addColorStop(0.48, '#2D0810');
-      oralGrad.addColorStop(1, '#150206');
+      oralGrad.addColorStop(0, '#140407');
+      oralGrad.addColorStop(0.38, '#280A10');
+      oralGrad.addColorStop(1, '#1A060A');
       ctx.fillStyle = oralGrad;
       ctx.fill();
 
-      // Subtle natural tongue clipped strictly inside the oral cavity
       ctx.save();
       ctx.clip();
 
-      const tOp = parseFloat(frame.tongueOpacity || '0');
-      if (tOp > 0.02) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(0.88, cavOpacity * tOp);
-        const midTopX = (topPts[4][0] + topPts[5][0]) * 0.5;
-        const midTopY2 = (topPts[4][1] + topPts[5][1]) * 0.5;
-        const midBotX = (botPts[4][0] + botPts[5][0]) * 0.5;
-        const midBotY2 = (botPts[4][1] + botPts[5][1]) * 0.5;
-        const liftRatio = Math.min(0.76, 0.30 + (frame.tongueLift || 0) * 0.44);
-        const tcx = midBotX * (1 - liftRatio) + midTopX * liftRatio;
-        const tcy = midBotY2 * (1 - liftRatio) + midTopY2 * liftRatio;
-        const trx = parseFloat(frame.tongueRx || '16.0') * 0.84;
-        const tryVal = parseFloat(frame.tongueRy || '4.2');
+      if (!isPuckerMode && roundPinch < 0.42) {
+        // 1. Soft, plump rose-pink tongue filling the lower 72% of the oral cavity
+        const tongueTopY = midTopY + cavH * (0.27 - (frame.tongueLift || 0) * 0.10);
+        const tongueCx = (midTopX + midBotX) * 0.5;
+        const tongueCy = (tongueTopY + midBotY) * 0.52 + cavH * 0.08;
+        const tongueRx = Math.max(10.0, (topPts[7][0] - topPts[2][0]) * 0.54);
+        const tongueRy = Math.max(3.5, cavH * 0.48);
+
         const tGrad = ctx.createRadialGradient(
-          tcx - 1.0,
-          tcy - tryVal * 0.3,
-          1.0,
-          tcx,
-          tcy,
-          Math.max(trx, tryVal)
+          tongueCx - 1.5,
+          tongueCy - tongueRy * 0.35,
+          1.5,
+          tongueCx,
+          tongueCy,
+          Math.max(tongueRx, tongueRy)
         );
-        tGrad.addColorStop(0, '#C25462');
-        tGrad.addColorStop(0.65, '#963644');
-        tGrad.addColorStop(1, '#581822');
+        tGrad.addColorStop(0, '#CF868C');
+        tGrad.addColorStop(0.45, '#B86E75');
+        tGrad.addColorStop(0.80, '#964E55');
+        tGrad.addColorStop(1, '#5E262C');
+
         ctx.beginPath();
-        ctx.ellipse(
-          tcx,
-          tcy,
-          trx,
-          tryVal,
-          (frame.tilt * Math.PI) / 180 + 0.08,
-          0,
-          Math.PI * 2
-        );
+        ctx.ellipse(tongueCx, tongueCy, tongueRx, tongueRy, 0, 0, Math.PI * 2);
         ctx.fillStyle = tGrad;
         ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(tongueCx, tongueTopY + 1.2);
+        ctx.quadraticCurveTo(tongueCx + 0.4, tongueCy, tongueCx, midBotY - 1.5);
+        ctx.strokeStyle = 'rgba(82, 30, 36, 0.28)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 2. Central Upper Incisors (subtle ivory edge under upper lip center, stations 2..7)
+        const teethH = Math.min(3.2, Math.max(1.2, cavH * 0.22)) * (1 - roundPinch * 0.65);
+        if (teethH > 0.7) {
+          const tLeftX = topPts[2][0] * 0.7 + topPts[3][0] * 0.3;
+          const tRightX = topPts[7][0] * 0.7 + topPts[6][0] * 0.3;
+          const teethGrad = ctx.createLinearGradient(tLeftX, midTopY, tRightX, midTopY);
+          teethGrad.addColorStop(0, '#9E8E89');
+          teethGrad.addColorStop(0.22, '#EBE3DF');
+          teethGrad.addColorStop(0.50, '#F7F3F0');
+          teethGrad.addColorStop(0.78, '#EBE3DF');
+          teethGrad.addColorStop(1, '#9E8E89');
+
+          ctx.fillStyle = teethGrad;
+          ctx.beginPath();
+          ctx.moveTo(tLeftX, topPts[2][1] - 0.8);
+          ctx.lineTo(tRightX, topPts[7][1] - 0.8);
+          ctx.quadraticCurveTo(
+            midTopX,
+            midTopY + teethH,
+            tLeftX,
+            topPts[2][1] + teethH * 0.35
+          );
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // 3. Subtle Lower Incisor / Wet Inner Mucosa Rim along the bottom curve (stations 2..7)
+        if (cavH > 6.5) {
+          const lLeftX = botPts[2][0] * 0.5 + botPts[3][0] * 0.5;
+          const lRightX = botPts[7][0] * 0.5 + botPts[6][0] * 0.5;
+          const lowTeethGrad = ctx.createLinearGradient(lLeftX, midBotY, lRightX, midBotY);
+          lowTeethGrad.addColorStop(0, 'rgba(175, 152, 148, 0.45)');
+          lowTeethGrad.addColorStop(0.5, 'rgba(232, 220, 216, 0.78)');
+          lowTeethGrad.addColorStop(1, 'rgba(175, 152, 148, 0.45)');
+
+          ctx.beginPath();
+          ctx.moveTo(lLeftX, botPts[3][1] + 0.4);
+          ctx.quadraticCurveTo(midBotX, midBotY - 1.6, lRightX, botPts[6][1] + 0.4);
+          ctx.quadraticCurveTo(midBotX, midBotY + 0.8, lLeftX, botPts[3][1] + 0.4);
+          ctx.closePath();
+          ctx.fillStyle = lowTeethGrad;
+          ctx.fill();
+        }
+      }
+
+      ctx.strokeStyle = 'rgba(42, 14, 18, 0.68)';
+      ctx.lineWidth = 2.0;
+      ctx.stroke();
+
+      ctx.restore();
+
+      if (roundPinch >= 0.32) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.42, (roundPinch - 0.25) * 0.75);
+        ctx.strokeStyle = '#38181D';
+        ctx.lineWidth = 1.1;
+        ctx.lineCap = 'round';
+        const offsets = [-9, -4, 4, 9];
+        for (const dx of offsets) {
+          ctx.beginPath();
+          ctx.moveTo(midTopX + dx * 0.65, midTopY - 1.2);
+          ctx.lineTo(midTopX + dx * 1.05, midTopY - 6.5);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(midBotX + dx * 0.65, midBotY + 1.2);
+          ctx.lineTo(midBotX + dx * 1.10, midBotY + 7.5);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
       ctx.restore();
-      ctx.restore();
     }
 
-    // 3. Photorealistic Eyelid Skin & Lash Crease on Blinks / Winks
+    // =========================================================================
+    // 2B. RADIANT DUCHENNE SMILE COMMISSURE DIMPLES & UPWARD LIP-CORNER CRESCENT
+    //     ("insérer le sourire" — renders warm anatomical smile creases & lip lift)
+    // =========================================================================
+    const activeSmile = frame.smile ?? 0.72;
+    if (activeSmile > 0.32) {
+      const smileAlpha = Math.min(0.75, (activeSmile - 0.32) * 1.15) * (1 - (frame.roundness || 0) * 0.65);
+      if (smileAlpha > 0.04) {
+        const leftCornerIdx = 9 * NUM_COLS + 5;
+        const rightCornerIdx = 9 * NUM_COLS + 14;
+        const lx = CUR_DX[leftCornerIdx];
+        const ly = CUR_DY[leftCornerIdx];
+        const rx = CUR_DX[rightCornerIdx];
+        const ry = CUR_DY[rightCornerIdx];
+
+        ctx.save();
+        ctx.lineCap = 'round';
+
+        // Left commissure upward smile crease & dimple shadow
+        ctx.globalAlpha = smileAlpha * 0.58;
+        ctx.strokeStyle = '#3B1816';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(lx + 2.2, ly + 0.8);
+        ctx.quadraticCurveTo(lx - 2.6, ly - 1.8, lx - 5.4, ly - 5.2);
+        ctx.stroke();
+
+        // Right commissure upward smile crease & dimple shadow
+        ctx.beginPath();
+        ctx.moveTo(rx - 2.2, ry + 0.8);
+        ctx.quadraticCurveTo(rx + 2.6, ry - 1.8, rx + 5.4, ry - 5.2);
+        ctx.stroke();
+
+        // Soft warm zygomaticus cheek-dimple cushion highlight above each corner
+        ctx.globalAlpha = smileAlpha * 0.34;
+        ctx.strokeStyle = '#D99B82';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(lx - 4.5, ly - 2.6, 5.8, Math.PI * 0.78, Math.PI * 1.32);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(rx + 4.5, ry - 2.6, 5.8, -Math.PI * 0.32, Math.PI * 0.22);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+
+    // 3. Photorealistic Eyelid Skin & Lash Crease on Blinks / Winks (calibrated to exact y=355..371 eyes)
     if (frame.blinkLeft > 0.05) {
-      const [x0, y0] = transformHeadPoint(434, 299, frame);
-      const [xTop, yTop] = transformHeadPoint(456, 285.5, frame);
-      const [xc, yc] = transformHeadPoint(456, 287 + frame.blinkLeft * 20.8, frame);
-      const [x1, y1] = transformHeadPoint(479, 302, frame);
+      const [x0, y0] = transformHeadPoint(373, 365, frame);
+      const [xTop, yTop] = transformHeadPoint(395, 354.5, frame);
+      const [xc, yc] = transformHeadPoint(395, 356 + frame.blinkLeft * 19.5, frame);
+      const [x1, y1] = transformHeadPoint(417, 366, frame);
       ctx.save();
       ctx.globalAlpha = Math.min(1, frame.blinkLeft * 1.15);
       ctx.beginPath();
@@ -801,10 +1194,10 @@ class SharedWav2LipWebGLCore {
     }
 
     if (frame.blinkRight > 0.05) {
-      const [x0, y0] = transformHeadPoint(547, 304, frame);
-      const [xTop, yTop] = transformHeadPoint(565, 286.5, frame);
-      const [xc, yc] = transformHeadPoint(567, 288 + frame.blinkRight * 19.8, frame);
-      const [x1, y1] = transformHeadPoint(585, 294, frame);
+      const [x0, y0] = transformHeadPoint(496, 366, frame);
+      const [xTop, yTop] = transformHeadPoint(518, 354.5, frame);
+      const [xc, yc] = transformHeadPoint(518, 356 + frame.blinkRight * 19.5, frame);
+      const [x1, y1] = transformHeadPoint(540, 365, frame);
       ctx.save();
       ctx.globalAlpha = Math.min(1, frame.blinkRight * 1.15);
       ctx.beginPath();

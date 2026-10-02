@@ -1,4 +1,4 @@
-import { UserProfile, TrainingRequest } from '../types';
+import { UserProfile, TrainingRequest, CgpmpAccountCreationRequest } from '../types';
 import imgMentor from '../assets/images/mentor_juriste_africain_1789983212035.jpg';
 import imgCoverSeminar from '../assets/images/marches_publics_seminar_1789983166275.jpg';
 import imgCoverFormation from '../assets/images/formation_numerique_1789983181347.jpg';
@@ -113,6 +113,55 @@ export const DEFAULT_PROFILES: Record<string, UserProfile> = {
     emailNotifications: true,
     smsNotifications: true,
     tutorReminders: false,
+    language: 'Français (RDC)',
+    timezone: 'Afrique/Kinshasa (GMT+1)'
+  },
+  pme: {
+    id: 'USR-PME-07',
+    name: 'Mme Grâce Mbuyi Tshiamala',
+    email: 'grace.mbuyi@congobatitech-pme.cd',
+    phone: '+243 81 940 3210',
+    whatsapp: '+243 81 940 3210',
+    whatsappLinked: true,
+    whatsappNotifications: true,
+    forumNotifications: true,
+    pushNotifications: true,
+    matricule: 'PME-ARSP-2026-412',
+    bio: 'Directrice Générale de PME congolaise agréée ARSP & ANADEC, spécialisée dans les marchés publics allotis, la sous-traitance (Loi 17/001) et les infrastructures provinciales.',
+    coverBio: 'PME & Contenu Local RDC • Allotissement, Sous-traitance (Loi 17/001) & Compétitivité des PME nationales.',
+    role: 'pme',
+    roleTitle: 'Dirigeante PME & Sous-Traitante Agréée (Loi 17/001)',
+    institution: 'CONGO BÂTI-TECH SARL (PME Agréée ARSP / COPEMECO)',
+    avatarUrl: imgMentor,
+    coverUrl: imgCoverFormation,
+    location: 'Kinshasa & Lubumbashi, RDC',
+    website: 'https://congobatitech-pme.cd',
+    joinDate: 'Janvier 2024',
+    passwordLastChanged: 'Il y a 5 jours',
+    level: 'Intermédiaire',
+    placementScore: 82,
+    completedModulesCount: 3,
+    certificationsCount: 2,
+    offlineDownloads: ['MOD-001', 'MOD-002', 'MOD-007', 'MOD-008'],
+    completedCourseIds: ['MOD-001', 'MOD-007', 'MOD-008'],
+    courseProgress: {
+      'MOD-001': 100,
+      'MOD-002': 65,
+      'MOD-007': 100,
+      'MOD-008': 100
+    },
+    quizScoresByCourse: {
+      'MOD-001': 84,
+      'MOD-007': 92,
+      'MOD-008': 88
+    },
+    twoFactorEnabled: true,
+    privacyCertificates: 'public',
+    showInDirectory: true,
+    shareWithHierarchy: true,
+    emailNotifications: true,
+    smsNotifications: true,
+    tutorReminders: true,
     language: 'Français (RDC)',
     timezone: 'Afrique/Kinshasa (GMT+1)'
   },
@@ -295,32 +344,267 @@ export const INITIAL_CGPMP_REQUESTS: TrainingRequest[] = [
 ];
 
 export const INSTITUTIONAL_ANALYTICS = {
-  totalLearners: 2840,
-  activeInstitutions: 47,
-  certifiedAgents: 1485,
-  globalPassRate: 88.6,
-  hoursDelivered: 19450,
+  totalLearners: 3260,
+  activeInstitutions: 64,
+  certifiedAgents: 1740,
+  globalPassRate: 88.9,
+  hoursDelivered: 22850,
   breakdownByInstitution: [
     { name: 'Cellules CGPMP (Ministères & Établissements)', learners: 1420, passRate: 86.4, completed: 850 },
+    { name: 'PME Congolaises & Sous-Traitants (Loi 17/001)', learners: 620, passRate: 84.5, completed: 410 },
     { name: 'Agents DGCMP (Contrôle a priori)', learners: 490, passRate: 94.2, completed: 390 },
     { name: 'Agents & Auditeurs ARMP (Régulation/CRD)', learners: 380, passRate: 95.8, completed: 310 },
-    { name: 'Secteur Privé & Particuliers', learners: 550, passRate: 79.2, completed: 280 }
+    { name: 'Consultants & Particuliers Indépendants', learners: 350, passRate: 79.2, completed: 210 }
   ],
   monthlyEnrollment: [
     { month: 'Mai', inscriptions: 180, certifications: 110 },
     { month: 'Juin', inscriptions: 240, certifications: 160 },
     { month: 'Juil', inscriptions: 310, certifications: 215 },
     { month: 'Août', inscriptions: 420, certifications: 340 },
-    { month: 'Sept', inscriptions: 580, certifications: 460 }
+    { month: 'Sept', inscriptions: 680, certifications: 530 }
   ],
   competencyAxes: [
     { axis: 'Cadre Légal & Principes Loi 10/010', score: 91 },
     { axis: 'Montage PPM & Pièces DAO Type', score: 83 },
+    { axis: 'Sous-Traitance PME & Contenu Local (Loi 17/001)', score: 88 },
     { axis: 'Contrôle a Priori DGCMP & Seuils', score: 87 },
     { axis: 'Instruction Recours & Arrêts CRD/ARMP', score: 79 },
     { axis: 'Éthique, Prévention Corruption & Audit', score: 94 }
   ]
 };
 
+export const PME_DEMO_ACCOUNTS: UserProfile[] = [
+  DEFAULT_PROFILES.pme,
+  {
+    ...DEFAULT_PROFILES.pme,
+    id: 'USR-PME-BTP-01',
+    name: 'Ing. Patrick Kabongo Lukusa',
+    email: 'p.kabongo@katanga-geniecivil.cd',
+    matricule: 'PME-BTP-LUB-2026-108',
+    role: 'pme',
+    roleTitle: 'Gérant PME BTP & Travaux Routiers',
+    institution: 'KATANGA GÉNIE CIVIL & INFRASTRUCTURES SARL (Lubumbashi)',
+    location: 'Lubumbashi • Haut-Katanga, RDC',
+    level: 'Avancé',
+    placementScore: 89,
+    completedModulesCount: 4,
+    certificationsCount: 3,
+    completedCourseIds: ['MOD-001', 'MOD-002', 'MOD-007', 'MOD-010'],
+    courseProgress: {
+      'MOD-001': 100,
+      'MOD-002': 100,
+      'MOD-007': 100,
+      'MOD-008': 75,
+      'MOD-010': 100
+    },
+    quizScoresByCourse: {
+      'MOD-001': 88,
+      'MOD-002': 86,
+      'MOD-007': 94,
+      'MOD-010': 90
+    },
+    bio: 'Entrepreneur BTP spécialisé dans la réhabilitation des routes de desserte agricole, écoles et ouvrages d’art en groupement PME (GME).'
+  },
+  {
+    ...DEFAULT_PROFILES.pme,
+    id: 'USR-PME-MED-02',
+    name: 'Mme Clarisse Nsimba Kiala',
+    email: 'c.nsimba@kongo-medequip.cd',
+    matricule: 'PME-FOURN-MAT-2026-219',
+    role: 'pme',
+    roleTitle: 'Directrice PME Fournitures & Équipements Médicaux',
+    institution: 'KONGO MED-EQUIP & LOGISTIQUE SARL (Matadi & Kinshasa)',
+    location: 'Matadi • Kongo-Central, RDC',
+    level: 'Intermédiaire',
+    placementScore: 79,
+    completedModulesCount: 2,
+    certificationsCount: 2,
+    completedCourseIds: ['MOD-001', 'MOD-008'],
+    courseProgress: {
+      'MOD-001': 100,
+      'MOD-007': 50,
+      'MOD-008': 100
+    },
+    quizScoresByCourse: {
+      'MOD-001': 80,
+      'MOD-008': 85
+    },
+    bio: 'Fournisseur agréé d’équipements hospitaliers, kits solaires et mobiliers scolaires pour les marchés publics provinciaux.'
+  },
+  {
+    ...DEFAULT_PROFILES.pme,
+    id: 'USR-PME-TECH-03',
+    name: 'M. Cédric Bahati Mirindi',
+    email: 'c.bahati@kivu-digital-conseil.cd',
+    matricule: 'PME-PI-GOM-2026-305',
+    role: 'pme',
+    roleTitle: 'Associé Gérant PME Prestations Intellectuelles & IT',
+    institution: 'KIVU DIGITAL & INGÉNIERIE CONSEIL SARL (Goma & Bukavu)',
+    location: 'Goma • Nord-Kivu, RDC',
+    level: 'Avancé',
+    placementScore: 91,
+    completedModulesCount: 4,
+    certificationsCount: 3,
+    completedCourseIds: ['MOD-001', 'MOD-007', 'MOD-009', 'MOD-011'],
+    courseProgress: {
+      'MOD-001': 100,
+      'MOD-007': 100,
+      'MOD-009': 100,
+      'MOD-011': 100
+    },
+    quizScoresByCourse: {
+      'MOD-001': 90,
+      'MOD-007': 92,
+      'MOD-009': 95,
+      'MOD-011': 89
+    },
+    bio: 'Cabinet congolais d’études techniques, d’audit informatique et de digitalisation accompagnant les autorités contractantes sur SIGMAP.'
+  }
+];
+
 export const DEMO_PROFILES = DEFAULT_PROFILES;
 export const INITIAL_TRAINING_REQUESTS = INITIAL_CGPMP_REQUESTS;
+
+export const INITIAL_CGPMP_ACCOUNT_REQUESTS: CgpmpAccountCreationRequest[] = [
+  {
+    id: 'CGPMP-ACC-2026-104',
+    institution: 'Ministère des Infrastructures et Travaux Publics (ITPR)',
+    subCategory: 'Ministère du Gouvernement Central (Kinshasa)',
+    province: 'Kinshasa (Ville-Province)',
+    permanentSecretaryName: 'Ing. Jean-Paul Mukendi',
+    permanentSecretaryEmail: 'jp.mukendi@infrastructures.gouv.cd',
+    permanentSecretaryPhone: '+243 81 234 5678',
+    permanentSecretaryMatricule: 'CGPMP-RDC-0412',
+    creationDocument: {
+      documentRef: 'ARR-CAB-MIN/ITPR/2026/019',
+      documentType: 'Arrêté Ministériel',
+      signedDate: '2026-02-14',
+      signatoryAuthority: 'Ministre d’État, Ministre des Infrastructures et Travaux Publics',
+      fileName: 'Arrete_Ministeriel_019_Creation_CGPMP_ITPR_2026.pdf',
+      fileSizeLabel: '1.42 Mo',
+      fileMimeType: 'application/pdf',
+      uploadedAt: 'Il y a 1 jour',
+      verificationHash: 'SHA256-ARMP-8F4E29A1C7'
+    },
+    members: [
+      {
+        id: 'MEM-ITPR-01',
+        fullName: 'Ir. Célestin Kabuya Mutombo',
+        email: 'c.kabuya@infrastructures.gouv.cd',
+        functionInCell: 'Président de la Commission de Passation (CPM)',
+        phone: '+243 81 450 1122',
+        matricule: 'CGPMP-ITPR-2026-011'
+      },
+      {
+        id: 'MEM-ITPR-02',
+        fullName: 'Me Mireille Ngalula Tshimanga',
+        email: 'm.ngalula@infrastructures.gouv.cd',
+        functionInCell: 'Experte en Passation des Marchés & DAO',
+        phone: '+243 82 310 4455',
+        matricule: 'CGPMP-ITPR-2026-012'
+      },
+      {
+        id: 'MEM-ITPR-03',
+        fullName: 'M. Serge Mbuyi Kalonji',
+        email: 's.mbuyi@infrastructures.gouv.cd',
+        functionInCell: 'Expert Technique & Analyse des Offres',
+        phone: '+243 89 770 8899',
+        matricule: 'CGPMP-ITPR-2026-013'
+      }
+    ],
+    status: 'En attente de validation ARMP',
+    createdAt: 'Il y a 1 jour'
+  },
+  {
+    id: 'CGPMP-ACC-2026-098',
+    institution: 'Ministère du Budget — Secrétariat Général',
+    subCategory: 'Ministère du Gouvernement Central (Kinshasa)',
+    province: 'Kinshasa (Ville-Province)',
+    permanentSecretaryName: 'M. Fidèle Kabasele Lukoji',
+    permanentSecretaryEmail: 'f.kabasele@budget.gouv.cd',
+    permanentSecretaryPhone: '+243 81 880 2345',
+    permanentSecretaryMatricule: 'CGPMP-BUD-2026-001',
+    creationDocument: {
+      documentRef: 'ARR-CAB-MIN/BUDGET/2026/007',
+      documentType: 'Arrêté Ministériel',
+      signedDate: '2026-01-20',
+      signatoryAuthority: 'Ministre d’État, Ministre du Budget',
+      fileName: 'Arrete_Creation_Cellule_CGPMP_Ministere_Budget_007.pdf',
+      fileSizeLabel: '1.85 Mo',
+      fileMimeType: 'application/pdf',
+      uploadedAt: 'Il y a 4 jours',
+      verificationHash: 'SHA256-ARMP-3B9D74E0A2'
+    },
+    members: [
+      {
+        id: 'MEM-BUD-01',
+        fullName: 'Mme Solange Mwanza Kasongo',
+        email: 's.mwanza@budget.gouv.cd',
+        functionInCell: 'Présidente de la Commission de Passation (CPM)',
+        phone: '+243 81 555 2101',
+        matricule: 'CGPMP-BUD-2026-002',
+        generatedPassword: 'ARMP-CGPMP-2026-BUD1',
+        credentialsSentAt: 'Il y a 3 jours',
+        accountActivated: true
+      },
+      {
+        id: 'MEM-BUD-02',
+        fullName: 'M. Fabrice Ilunga Wa Ilunga',
+        email: 'f.ilunga@budget.gouv.cd',
+        functionInCell: 'Expert en Planification PPM & Suivi Budgétaire',
+        phone: '+243 82 666 3202',
+        matricule: 'CGPMP-BUD-2026-003',
+        generatedPassword: 'ARMP-CGPMP-2026-BUD2',
+        credentialsSentAt: 'Il y a 3 jours',
+        accountActivated: true
+      }
+    ],
+    status: 'Validé par ARMP — Coordonnées envoyées',
+    validatedBy: 'Pr. Antoine Kasongo Muteba (Direction DFAT / ARMP)',
+    armpAdminNote: 'Acte de création ARR-CAB-MIN/BUDGET/2026/007 vérifié et conforme au Décret n° 10/32. Comptes du Secrétaire Permanent et des membres activés et coordonnées transmises par mail.',
+    createdAt: 'Il y a 4 jours',
+    decidedAt: 'Il y a 3 jours',
+    dispatchedEmails: [
+      {
+        id: 'MAIL-CGPMP-BUD-SP',
+        recipientName: 'M. Fidèle Kabasele Lukoji',
+        recipientEmail: 'f.kabasele@budget.gouv.cd',
+        recipientRoleInCell: 'Secrétaire Permanent de la CGPMP',
+        loginEmail: 'f.kabasele@budget.gouv.cd',
+        tempPassword: 'ARMP-CGPMP-2026-SP01',
+        matricule: 'CGPMP-BUD-2026-001',
+        subject: '[ARMP RDC] Validation de votre Cellule CGPMP & Coordonnées d’Authentification (Secrétaire Permanent)',
+        bodyPreview: 'Suite à la validation de l’Arrêté n° ARR-CAB-MIN/BUDGET/2026/007 par l’Administration de l’ARMP, votre compte Secrétaire Permanent CGPMP est activé. Identifiant : f.kabasele@budget.gouv.cd | Mot de passe : ARMP-CGPMP-2026-SP01',
+        sentAt: 'Il y a 3 jours',
+        validatedByAdmin: 'Pr. Antoine Kasongo Muteba (DFAT / ARMP)'
+      },
+      {
+        id: 'MAIL-CGPMP-BUD-M1',
+        recipientName: 'Mme Solange Mwanza Kasongo',
+        recipientEmail: 's.mwanza@budget.gouv.cd',
+        recipientRoleInCell: 'Présidente de la Commission de Passation (CPM)',
+        loginEmail: 's.mwanza@budget.gouv.cd',
+        tempPassword: 'ARMP-CGPMP-2026-BUD1',
+        matricule: 'CGPMP-BUD-2026-002',
+        subject: '[ARMP RDC] Vos Coordonnées d’Authentification Membre CGPMP — Ministère du Budget',
+        bodyPreview: 'Vous avez été inscrit(e) par le Secrétaire Permanent M. Fidèle Kabasele Lukoji sur la liste officielle de la CGPMP validée par l’ARMP. Identifiant : s.mwanza@budget.gouv.cd | Mot de passe : ARMP-CGPMP-2026-BUD1',
+        sentAt: 'Il y a 3 jours',
+        validatedByAdmin: 'Pr. Antoine Kasongo Muteba (DFAT / ARMP)'
+      },
+      {
+        id: 'MAIL-CGPMP-BUD-M2',
+        recipientName: 'M. Fabrice Ilunga Wa Ilunga',
+        recipientEmail: 'f.ilunga@budget.gouv.cd',
+        recipientRoleInCell: 'Expert en Planification PPM & Suivi Budgétaire',
+        loginEmail: 'f.ilunga@budget.gouv.cd',
+        tempPassword: 'ARMP-CGPMP-2026-BUD2',
+        matricule: 'CGPMP-BUD-2026-003',
+        subject: '[ARMP RDC] Vos Coordonnées d’Authentification Membre CGPMP — Ministère du Budget',
+        bodyPreview: 'Vous avez été inscrit(e) par le Secrétaire Permanent M. Fidèle Kabasele Lukoji sur la liste officielle de la CGPMP validée par l’ARMP. Identifiant : f.ilunga@budget.gouv.cd | Mot de passe : ARMP-CGPMP-2026-BUD2',
+        sentAt: 'Il y a 3 jours',
+        validatedByAdmin: 'Pr. Antoine Kasongo Muteba (DFAT / ARMP)'
+      }
+    ]
+  }
+];
+

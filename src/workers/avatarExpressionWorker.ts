@@ -8,9 +8,21 @@
 // 3. Anticipatory Coarticulation (+48ms lookahead) & Frame-Rate-Independent Biomechanical Damping.
 // 4. 100% Natural Photographic Inlay (zero synthetic lip lines or painted teeth overlays).
 
+import { avatarKalmanSmoother } from '../utils/kalmanMotionFilter';
+import {
+  type MicroGestureId,
+  type TtsEmotionalTag,
+  extractTtsEmotionalTags,
+  reanchorEmotionalTagsToBoundaries,
+  evaluateMicroGestureTimeline,
+} from '../utils/microGestureLibrary';
+
+export type { MicroGestureId, TtsEmotionalTag };
+
 export type WorkerViseme = 'closed' | 'open' | 'wide' | 'round' | 'narrow';
 
 export type AvatarEmotion =
+  | 'smiling'
   | 'enthusiastic'
   | 'empathetic'
   | 'solemn'
@@ -24,12 +36,21 @@ export type AvatarEmotion =
 export type HeadGestureType =
   | 'refusal'      // Hochet latéral gauche-droite (« Non », interdiction, nullité, rejet, fractionnement)
   | 'acceptance'   // Hochement vertical haut-bas (« Oui », validation, conformité, accord, bravo)
-  | 'questioning'  // Inclinaison interrogative de la tête + léger haussement (question, doute, réflexion)
-  | 'astonishment' // Mouvement vif d'étonnement / intonation exclamative (recul léger + haussement des sourcils + ouverture expressive)
-  | 'empathy'      // Inclinaison chaleureuse et apaisante (écoute, réconfort, accompagnement)
-  | 'greeting'     // Révérence courtoise de préséance & ouverture (bonjour, bienvenue, honneur)
-  | 'emphasis'     // Appui vertical décisif de la tête (article de loi, principe clé, énumération)
+  | 'questioning'  // Inclinaison interrogative de la tête + froncement réflexif + main au menton
+  | 'astonishment' // Mouvement vif d'étonnement / alerte (yeux grands ouverts + sourcils arqués + bouche en O + mains au buste)
+  | 'empathy'      // Inclinaison chaleureuse et apaisante (sourire complice + mains vers le cœur/épaule)
+  | 'greeting'     // Révérence courtoise de préséance & ouverture (main droite ouverte paume vers le haut)
+  | 'emphasis'     // Appui vertical décisif de la tête + main pédagogique ouverte
   | 'neutral';     // Cadence conversationnelle fluide
+
+// 6 Expressive Facial & Body-Language Postures inspired by Reference Sheet 1 (planche_expressions_visage_langage_corporel.png)
+export type BodyLanguagePostureId =
+  | 'welcome_open_palm'      // Panel 1 (Top-Left): Sourire rayonnant + main droite ouverte paume vers le haut
+  | 'chin_reflection'        // Panel 2 (Top-Center): Sourcils froncés en réflexion + tête inclinée + main sous le menton
+  | 'astonished_chest_hands' // Panel 3 (Top-Right): Yeux grands ouverts + bouche en O + deux mains levées sur le haut du buste
+  | 'serene_clasped'         // Panel 4 (Bottom-Left): Regard posé et attentif + lèvres douces + mains jointes devant soi
+  | 'teaching_gesture'       // Panel 5 (Bottom-Center): Regard direct + sourire confiant + main ouverte d'explication
+  | 'heart_encouragement';   // Panel 6 (Bottom-Right): Tête trois-quarts + sourire complice + mains jointes près de l'épaule/cœur
 
 export interface WorkerWordBoundary {
   text: string;
@@ -92,16 +113,41 @@ export interface AvatarComputedFrame {
   hairLagTurn: number;
   hairLagNod: number;
   eyebrowLift: number;
+  browFurrow: number;
   eyeWide: number;
   cheekLift: number;
+  smile: number;
   intonation: number;
   blinkLeft: number;
   blinkRight: number;
   gazeX: number;
   gazeY: number;
   breathY: number;
+  shoulderLift: number;
+  leftShoulderLift: number;
+  rightShoulderLift: number;
+  collarLift: number;
+  torsoSwayX: number;
+  activeMicroGestureTag: MicroGestureId | null;
+  activeMicroGestureLabel: string;
+  leftHandDx: number;
+  leftHandDy: number;
+  rightHandDx: number;
+  rightHandDy: number;
   cavTopYs: number[];
   cavBotYs: number[];
+  // 6 Phonetic Mouth Visemes (Reference Sheet 2: planche_articulation_bouche_parole.png)
+  activeVisemeNumber: 1 | 2 | 3 | 4 | 5 | 6;
+  activeVisemeLabel: string;
+  // 6 Facial & Body-Language Postures (Reference Sheet 1: planche_expressions_visage_langage_corporel.png)
+  bodyLanguagePosture: BodyLanguagePostureId;
+  bodyLanguageLabel: string;
+  pWelcome: number;
+  pReflection: number;
+  pAstonished: number;
+  pSerene: number;
+  pTeaching: number;
+  pEncouragement: number;
 }
 
 interface WorkerPoseState {
@@ -124,8 +170,10 @@ interface WorkerPoseState {
   hairLagTurn: number;
   hairLagNod: number;
   eyebrowLift: number;
+  browFurrow: number;
   eyeWide: number;
   cheekLift: number;
+  smile: number;
   intonation: number;
   wRefusal: number;
   wAcceptance: number;
@@ -134,20 +182,33 @@ interface WorkerPoseState {
   wEmpathy: number;
   wGreeting: number;
   wEmphasis: number;
+  pWelcome: number;
+  pReflection: number;
+  pAstonished: number;
+  pSerene: number;
+  pTeaching: number;
+  pEncouragement: number;
   shoulderX: number;
   shoulderY: number;
+  leftShoulderY: number;
+  rightShoulderY: number;
+  collarY: number;
+  leftHandDx: number;
+  leftHandDy: number;
+  rightHandDx: number;
+  rightHandDy: number;
   blinkLeft: number;
   blinkRight: number;
 }
 
 const pose: WorkerPoseState = {
   lastNowMs: 0,
-  rawOpen: 0.14,
-  open: 0.14,
+  rawOpen: 0.04,
+  open: 0.04,
   openVel: 0,
   smoothRms: 0,
   roundness: 0,
-  spread: 0.15,
+  spread: 0.22,
   upperLipLift: 0,
   widthFactor: 1,
   tongueLift: 0,
@@ -159,10 +220,12 @@ const pose: WorkerPoseState = {
   turn: 0,
   hairLagTurn: 0,
   hairLagNod: 0,
-  eyebrowLift: 0.18,
-  eyeWide: 0.12,
-  cheekLift: 0.15,
-  intonation: 0.22,
+  eyebrowLift: 0.22,
+  browFurrow: 0,
+  eyeWide: 0.14,
+  cheekLift: 0.32,
+  smile: 0.46,
+  intonation: 0.24,
   wRefusal: 0,
   wAcceptance: 0,
   wQuestion: 0,
@@ -170,32 +233,43 @@ const pose: WorkerPoseState = {
   wEmpathy: 0,
   wGreeting: 0,
   wEmphasis: 0,
+  pWelcome: 0,
+  pReflection: 0,
+  pAstonished: 0,
+  pSerene: 1,
+  pTeaching: 0,
+  pEncouragement: 0,
   shoulderX: 0,
   shoulderY: 0,
+  leftShoulderY: 0,
+  rightShoulderY: 0,
+  collarY: 0,
+  leftHandDx: 0,
+  leftHandDy: 0,
+  rightHandDx: 0,
+  rightHandDy: 0,
   blinkLeft: 0,
   blinkRight: 0,
 };
 
-// 10-station pixel-calibrated coordinates of Aïsha's natural photographic mouth in tutrice_sereine_claude.jpg
-// from true left commissure (468.5, 407.0) to true right commissure (543.5, 417.5):
-// - UPPER_LIP_BOT_Y: bottom edge of the upper lip vermilion (where upper teeth begin)
-// - UPPER_TEETH_BOT_Y: bottom edge of the upper incisors (up to y=422.5 at center)
-// - LOWER_LIP_TOP_Y: top edge of the lower lip vermilion (strictly below the upper teeth)
-const MOUTH_X = [468.5, 475.0, 482.5, 491.0, 500.0, 509.5, 519.0, 528.0, 536.0, 543.5];
-const UPPER_LIP_BOT_Y = [407.0, 407.5, 408.5, 410.0, 410.5, 411.0, 412.0, 411.5, 411.5, 417.5];
-const UPPER_TEETH_BOT_Y = [407.2, 411.5, 414.8, 418.0, 420.0, 422.2, 422.5, 422.0, 419.5, 417.7];
-const LOWER_LIP_TOP_Y = [407.5, 412.0, 415.3, 418.5, 420.5, 422.8, 423.0, 422.5, 420.0, 418.0];
+// 10-station pixel-calibrated coordinates of Aïsha's natural photographic mouth in aisha_portrait_sans_main_1790912759956.jpg
+// from left commissure (408.0, 484.0) to right commissure (500.0, 484.0)
+const MOUTH_X = [408.0, 418.0, 428.0, 438.0, 448.0, 458.0, 468.0, 478.0, 488.0, 500.0];
+const UPPER_LIP_BOT_Y = [483.5, 482.5, 482.0, 481.5, 481.5, 481.5, 481.5, 482.0, 482.5, 483.5];
+const UPPER_TEETH_BOT_Y = [484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0, 484.0];
+const LOWER_LIP_TOP_Y = [484.5, 485.0, 485.2, 485.5, 485.5, 485.5, 485.5, 485.2, 485.0, 484.5];
 
 // Balanced bilateral parabola of human lower lip displacement (strong left-side participation at stations 1..4)
 const MANDIBLE_ARC_WEIGHT = [0.22, 0.72, 0.90, 0.98, 1.0, 1.0, 0.98, 0.90, 0.68, 0.16];
 
 export const EMOTION_LABELS: Record<AvatarEmotion, string> = {
-  enthusiastic: '😊 Joie & Enthousiasme bienveillant',
+  smiling: '😊 Sourire Chaleureux & Bienveillance',
+  enthusiastic: '🌟 Joie & Enthousiasme bienveillant',
   empathetic: '💛 Empathie & Douceur fraternelle',
   solemn: '⚖️ Vigilance & Rigueur juridique',
   curious: '🤔 Curiosité & Questionnement',
-  encouraging: '🌟 Encouragement & Inspiration',
-  pedagogical: '🎓 Éloquence & Sérénité académique',
+  encouraging: '🙌 Encouragement & Inspiration',
+  pedagogical: '🎓 Éloquence & Sourire Pédagogique',
   refusal: '🙅‍♀️ Refus & Interdiction (« Non »)',
   acceptance: '🙆‍♀️ Approbation & Validation (« Oui »)',
   astonished: '😲 Étonnement & Intonation vive',
@@ -258,7 +332,15 @@ export function detectSentenceEmotion(text: string): AvatarEmotion {
   }
 
   if (
-    /(bienvenue|bravo|excellent|félicitations|ravie|merveilleux|superbe|quel plaisir|quel honneur|magnifique|formidable|bonjour|heureuse|joie)/i.test(
+    /(bonjour|sourire|souris|souriante|heureuse|ravie|ravi|retrouver|joie|plaisir|enchantée|chaleureusement|bienvenue|ensemble|échange|confiance|mieux comprendre|avancer)/i.test(
+      s
+    )
+  ) {
+    return 'smiling';
+  }
+
+  if (
+    /(bienvenue|bravo|excellent|félicitations|merveilleux|superbe|quel honneur|magnifique|formidable|bonjour)/i.test(
       s
     )
   ) {
@@ -293,9 +375,10 @@ function classifyWordHeadGesture(rawWord: string): HeadGestureType {
     .trim();
   if (!w) return 'neutral';
 
-  // 1. Refusal / Negation / Prohibition -> Lateral head shake ("Non")
+  // 1. Refusal / Prohibition -> Lateral head shake ("Non / Interdit")
+  // (Note: never classify warm invitations like "n'hésitez pas" as refusal!)
   if (
-    /^(non|ne|n['’].*|pas|jamais|aucun|aucune|aucuns|rien|personne|ni|sans|interdit|interdite|interdits|interdiction|interdire|illégal|illégale|illicite|impossible|nul|nulle|nullité|rejet|rejeté|rejetée|rejeter|refus|refusé|refuser|forclusion|irrecevable|saucissonnage|fractionnement|fraude|conflit|faute|sanction|sanctions|pénalité|pénalités|éviter|évitez|prohibé|abus|irrégulier|irrégularité|défaut|jamais)$/.test(
+    /^(non|jamais|aucun|aucune|aucuns|rien|personne|interdit|interdite|interdits|interdiction|interdire|illégal|illégale|illicite|impossible|nul|nulle|nullité|rejet|rejeté|rejetée|rejeter|refus|refusé|refuser|forclusion|irrecevable|saucissonnage|fractionnement|fraude|conflit|faute|sanction|sanctions|pénalité|pénalités|éviter|évitez|prohibé|abus|irrégulier|irrégularité|défaut)$/.test(
       w
     )
   ) {
@@ -853,15 +936,26 @@ function computeWordIntonationWeight(
 
 let currentBoundaries: PreparedWordBoundary[] = [];
 let activeSentenceEmotion: AvatarEmotion = 'pedagogical';
+let activeEmotionalTags: TtsEmotionalTag[] = [];
 
 export function loadAvatarSentencePhonemes(
   sentence: string,
   wordBoundaries: WorkerWordBoundary[],
-  emotionOverride?: AvatarEmotion
+  emotionOverride?: AvatarEmotion,
+  emotionalTags?: TtsEmotionalTag[]
 ) {
   activeSentenceEmotion = emotionOverride || detectSentenceEmotion(sentence);
   const rawList = Array.isArray(wordBoundaries) ? wordBoundaries : [];
   const sentStr = sentence || '';
+  activeEmotionalTags =
+    Array.isArray(emotionalTags) && emotionalTags.length > 0
+      ? reanchorEmotionalTagsToBoundaries(
+          emotionalTags,
+          rawList,
+          sentStr,
+          activeSentenceEmotion
+        )
+      : extractTtsEmotionalTags(sentStr, rawList, activeSentenceEmotion);
   const initial: PreparedWordBoundary[] = rawList.map((wb, i) => {
     const snippet =
       typeof wb.charIndex === 'number' && wb.charIndex >= 0
@@ -928,6 +1022,7 @@ export function loadAvatarSentencePhonemes(
 
 export function clearAvatarSentencePhonemes() {
   currentBoundaries = [];
+  activeEmotionalTags = [];
 }
 
 interface SampledHeadGestureState {
@@ -990,7 +1085,7 @@ function sampleHeadGestureAtTime(
   if (sentenceEmotion === 'empathetic') {
     return { gesture: 'empathy', phase: continuousPhase % 1, intonation: sampledIntonation };
   }
-  if (sentenceEmotion === 'enthusiastic') {
+  if (sentenceEmotion === 'enthusiastic' || sentenceEmotion === 'smiling') {
     return { gesture: 'greeting', phase: continuousPhase % 1, intonation: Math.max(0.68, sampledIntonation) };
   }
   if (sentenceEmotion === 'solemn') {
@@ -1285,7 +1380,7 @@ export function stepAvatarExpressionFrame(
   const rmsRate = rawRms > pose.smoothRms ? Math.min(0.42, 0.30 * dtScale) : Math.min(0.18, 0.12 * dtScale);
   pose.smoothRms += (rawRms - pose.smoothRms) * rmsRate;
 
-  const REST_OPEN = 0.14;
+  const REST_OPEN = 0.04;
   let targetOpen = REST_OPEN;
   let targetRoundness = 0.0;
   let targetSpread = 0.18;
@@ -1309,10 +1404,11 @@ export function stepAvatarExpressionFrame(
       targetUpperLipLift = coart.upperLipLift;
       targetTongueLift = coart.tongueLift;
 
-      // 1. Acoustic silence or inter-word pause -> close lips cleanly between words
+      // 1. Acoustic silence or inter-word pause -> close lips immediately when voice drops
       if (
         coart.isPause ||
-        (pose.smoothRms < 0.018 && acousticRms >= 0 && acousticRms < 0.015 && streamElapsedMs > 0)
+        isPauseHint ||
+        (streamElapsedMs > 0 && rawRms < 0.020 && pose.smoothRms < 0.024)
       ) {
         targetOpen = 0.0;
         targetRoundness = 0.05;
@@ -1335,13 +1431,13 @@ export function stepAvatarExpressionFrame(
         targetOpen = Math.min(0.16, coart.openness);
         viseme = coart.viseme;
       } else {
-        // 5. Vowel nucleus: full, expressive mouth opening modulated by syllable & acoustic energy
+        // 5. Vowel nucleus: directly locked to real instantaneous voice energy (zero drift!)
+        const instantVoice = Math.max(rawRms, pose.smoothRms);
         const envFactor =
-          pose.smoothRms > 0.02
-            ? 0.88 + Math.min(0.24, Math.pow(pose.smoothRms, 0.45) * 0.32)
-            : 0.84 + livelySyllablePulse * 0.22;
-        const syllableBreathMod = 0.88 + 0.16 * livelySyllablePulse;
-        targetOpen = Math.min(1.0, Math.max(0.42, coart.openness * envFactor * syllableBreathMod));
+          instantVoice > 0.018
+            ? 0.38 + Math.min(0.72, Math.pow(instantVoice, 0.45) * 0.95)
+            : 0.78 + livelySyllablePulse * 0.22;
+        targetOpen = Math.min(1.0, Math.max(0.28, coart.openness * envFactor));
         viseme = coart.viseme;
       }
     } else {
@@ -1399,25 +1495,20 @@ export function stepAvatarExpressionFrame(
   }
 
   // ============================================================================
-  // HIGH-RESPONSE SYLLABIC JAW & LIP TRACKING (Crisp Closures & Full Vowel Peaks)
+  // STATE-SPACE KALMAN FILTER ARTICULATORY TRACKING (Zero-Lag Voice Lock)
   // ============================================================================
-  const stage1OpenRate =
-    targetOpen < pose.rawOpen
-      ? Math.min(0.78, 0.66 * dtScale)
-      : Math.min(0.74, 0.62 * dtScale);
-  pose.rawOpen += (targetOpen - pose.rawOpen) * stage1OpenRate;
-
-  const stage2OpenRate = Math.min(0.82, 0.70 * dtScale);
-  pose.open += (pose.rawOpen - pose.open) * stage2OpenRate;
+  const dtSec = dtMs / 1000.0;
+  pose.rawOpen = targetOpen;
+  pose.open = avatarKalmanSmoother.mouthOpen.update(targetOpen, dtSec);
   if (!isSpeaking && Math.abs(pose.open - REST_OPEN) < 0.004) {
     pose.open = REST_OPEN;
   }
 
+  pose.roundness = Math.max(0, Math.min(1, avatarKalmanSmoother.mouthRound.update(targetRoundness, dtSec)));
+  pose.spread = Math.max(0, Math.min(1, avatarKalmanSmoother.mouthSpread.update(targetSpread, dtSec)));
   const lipRate = Math.min(0.56, 0.44 * dtScale);
-  pose.roundness += (targetRoundness - pose.roundness) * lipRate;
-  pose.spread += (targetSpread - pose.spread) * lipRate;
   pose.upperLipLift += (targetUpperLipLift - pose.upperLipLift) * lipRate;
-  pose.tongueLift += (targetTongueLift - pose.tongueLift) * Math.min(0.48, 0.38 * dtScale);
+  pose.tongueLift = Math.max(0, Math.min(1, avatarKalmanSmoother.tongueLift.update(targetTongueLift, dtSec)));
 
   const targetWidth = 1.0 - pose.roundness * 0.11 + pose.spread * 0.042;
   pose.widthFactor += (targetWidth - pose.widthFactor) * lipRate;
@@ -1481,84 +1572,132 @@ export function stepAvatarExpressionFrame(
   pose.wEmphasis += ((gType === 'emphasis' ? 1 : 0) - pose.wEmphasis) * wRate;
 
   // Continuous, infinitely differentiable sinusoidal waves (zero cusps, zero phase jumps)
-  const refusalWave = Math.sin(nowMs * 0.0048);
-  const acceptanceWave = 0.5 - 0.5 * Math.cos(nowMs * 0.0052);
-  const greetingWave = Math.sin(nowMs * 0.0036);
-  const emphasisWave = 0.5 - 0.5 * Math.cos(nowMs * 0.0044);
-  const astonishmentWave = Math.sin(nowMs * 0.0041);
-  const intonationAccentWave = Math.sin(nowMs * 0.0032);
+  const refusalWave = Math.sin(nowMs * 0.0046);
+  const acceptanceWave = 0.5 - 0.5 * Math.cos(nowMs * 0.0050);
+  const greetingWave = Math.sin(nowMs * 0.0034);
+  const emphasisWave = 0.5 - 0.5 * Math.cos(nowMs * 0.0042);
+  const astonishmentWave = Math.sin(nowMs * 0.0038);
+  const intonationAccentWave = Math.sin(nowMs * 0.0030);
+
+  // ============================================================================
+  // ACTIVE LISTENING ("MOUVEMENT D'ÉCOUTE") & CONVERSATIONAL HEAD KINEMATICS:
+  // - When listening (!isSpeaking): rhythmic, attentive nods of comprehension
+  //   ("Oui, je vous écoute"), warm feminine lateral head tilt (±3.8°..4.8°),
+  //   and natural 3D conversational turns (±5.2px) so the head movement is clearly felt!
+  // - When speaking (isSpeaking): lively prosodic nods, expressive feminine tilts
+  //   (±4.5°..5.6°), and 3D turns (±7.5px) synchronized with vocal intonation.
+  // ============================================================================
+  const listeningNodCycle = Math.max(0, Math.sin(nowMs * 0.0026));
+  const listeningAckPulse = Math.pow(listeningNodCycle, 2) * 5.6 + Math.sin(nowMs * 0.0017) * 2.4;
+  const listeningTiltWave =
+    Math.sin(nowMs * 0.00145) * 3.2 +
+    Math.cos(nowMs * 0.00095) * 1.6;
+  const listeningTurnWave =
+    Math.sin(nowMs * 0.00125) * 4.6 +
+    Math.cos(nowMs * 0.00195) * 2.2;
+
+  const voiceActivityBoost = isSpeaking
+    ? Math.min(1.28, 0.58 + Math.pow(Math.max(0, pose.smoothRms), 0.48) * 0.98)
+    : 1.0;
+
+  const speakingCadenceTilt =
+    (Math.sin(nowMs * 0.00175) * 3.1 + Math.cos(nowMs * 0.00110) * 1.65) * voiceActivityBoost;
+  const speakingCadenceTurn =
+    (Math.sin(nowMs * 0.00145) * 5.6 + Math.cos(nowMs * 0.00225) * 2.8) * voiceActivityBoost;
+  // Direct prosodic nod impulse locked to VivienneMultilingualNeural's real voice syllable energy
+  // and smooth breath lift during comma/inter-sentence pauses
+  const isBreathPause = isSpeaking && (isPauseHint || (pose.smoothRms < 0.022 && pose.open <= 0.05));
+  const voiceSyllableNod = isBreathPause
+    ? -1.25
+    : pose.smoothRms * 5.2 + Math.max(0, pose.open - 0.10) * 3.8;
+  const speakingCadenceNod =
+    Math.sin(nowMs * 0.00255) * 3.6 +
+    Math.cos(nowMs * 0.00165) * 2.0 +
+    voiceSyllableNod;
 
   const gestureTurn =
-    pose.wRefusal * (refusalWave * 6.4) +
-    pose.wQuestion * (2.8 + Math.sin(nowMs * 0.0024) * 1.4) +
-    pose.wAstonishment * (astonishmentWave * 3.2 - 1.8) -
-    pose.wEmpathy * 2.0 +
-    pose.wGreeting * (greetingWave * 2.2) +
-    (isSpeaking ? (pose.intonation - 0.35) * intonationAccentWave * 2.4 : 0);
+    pose.wRefusal * (refusalWave * 8.8) +
+    pose.wGreeting * (greetingWave * 5.2) +
+    pose.wQuestion * (Math.sin(nowMs * 0.0026) * 4.6) +
+    pose.wEmphasis * (Math.sin(nowMs * 0.0032) * 5.0) +
+    pose.wEmpathy * (Math.cos(nowMs * 0.0020) * 4.2) +
+    (isSpeaking ? (pose.intonation - 0.20) * intonationAccentWave * 5.8 : 0);
 
   const gestureNod =
-    pose.wAcceptance * (acceptanceWave * 5.8) -
-    pose.wQuestion * 2.6 -
-    pose.wAstonishment * (3.4 + Math.abs(astonishmentWave) * 2.2) +
-    pose.wEmpathy * 2.2 +
-    pose.wGreeting * (greetingWave * 4.2) +
-    pose.wEmphasis * (emphasisWave * 4.4) -
-    pose.wRefusal * 0.6 -
-    (isSpeaking ? Math.max(0, pose.intonation - 0.45) * 2.8 * Math.cos(nowMs * 0.0042) : 0);
+    pose.wAcceptance * (acceptanceWave * 7.8) -
+    pose.wQuestion * 3.4 -
+    pose.wAstonishment * (3.8 + Math.abs(astonishmentWave) * 2.6) +
+    pose.wEmpathy * (3.4 + Math.sin(nowMs * 0.0029) * 3.0) +
+    pose.wGreeting * (greetingWave * 5.5) +
+    pose.wEmphasis * (emphasisWave * 6.4) -
+    pose.wRefusal * 1.0 +
+    (isSpeaking
+      ? -Math.max(0, pose.intonation - 0.28) * 5.2 * Math.cos(nowMs * 0.0040)
+      : listeningAckPulse * 0.55);
 
+  // Expressive Feminine Head Inclination ('tilt' in degrees, clearly perceptible up to ±5.6°):
   const gestureTilt =
-    pose.wRefusal * (Math.cos(nowMs * 0.0048) * 1.4) +
-    pose.wAcceptance * 1.3 -
-    pose.wQuestion * 3.8 -
-    pose.wAstonishment * (2.6 + astonishmentWave * 1.6) +
-    pose.wEmpathy * 3.6 +
-    pose.wGreeting * 2.0 +
-    pose.wEmphasis * (emotion === 'solemn' ? -1.2 : 1.4) +
-    (isSpeaking ? (pose.intonation - 0.35) * Math.sin(nowMs * 0.0027) * 1.9 : 0);
+    pose.wEmpathy * (2.6 + Math.sin(nowMs * 0.0020) * 1.5) +
+    pose.wQuestion * (-3.2 + Math.cos(nowMs * 0.0023) * 1.4) +
+    pose.wGreeting * (2.4 * Math.sin(nowMs * 0.0028) + 1.5) +
+    pose.wAcceptance * (2.0 * Math.sin(nowMs * 0.0034)) +
+    pose.wEmphasis * (2.2 * Math.cos(nowMs * 0.0030)) +
+    (emotion === 'smiling' || emotion === 'enthusiastic'
+      ? 2.0 + Math.sin(nowMs * 0.0019) * 1.5
+      : emotion === 'empathetic' || emotion === 'encouraging'
+      ? 2.4 + Math.cos(nowMs * 0.0017) * 1.4
+      : emotion === 'curious'
+      ? -2.6 + Math.sin(nowMs * 0.0019) * 1.2
+      : 0);
 
-  // Living, attentive head presence both when speaking AND when looking at the user
-  const baseTilt = isSpeaking
-    ? Math.sin(nowMs * 0.00095) * 1.45 + Math.cos(nowMs * 0.00062) * 0.75
-    : (emotion === 'empathetic' ? 1.5 : emotion === 'curious' || emotion === 'astonished' ? -1.6 : 0) +
-      Math.sin(nowMs * 0.00075) * 0.95 +
-      Math.cos(nowMs * 0.00048) * 0.55;
-  const baseNod = isSpeaking
-    ? Math.sin(nowMs * 0.00115) * 1.55 + Math.cos(nowMs * 0.00075) * 0.85
-    : Math.sin(nowMs * 0.00082) * 1.05 + Math.cos(nowMs * 0.00052) * 0.55;
-  const baseTurn = isSpeaking
-    ? Math.sin(nowMs * 0.00080) * 2.15 + Math.cos(nowMs * 0.00115) * 0.95
-    : Math.sin(nowMs * 0.00068) * 1.45 + Math.cos(nowMs * 0.00042) * 0.75;
+  const baseTilt = isSpeaking ? speakingCadenceTilt : listeningTiltWave;
+  const baseNod = isSpeaking ? speakingCadenceNod : listeningAckPulse;
+  const baseTurn = isSpeaking ? speakingCadenceTurn : listeningTurnWave;
 
-  const targetTilt = baseTilt + gestureTilt;
-  const targetNod = baseNod + gestureNod;
-  const targetTurn = baseTurn + gestureTurn;
+  // Evaluate TTS Emotional Tag Micro-Gestures (haussements d'épaules, hochements de tête affirmatifs, etc.)
+  const microGesture = evaluateMicroGestureTimeline(
+    streamElapsedMs,
+    nowMs,
+    isSpeaking,
+    emotion,
+    activeEmotionalTags
+  );
 
-  // Stage 1 & Stage 2 C²-continuous head filter: eliminates any sudden velocity change
-  const headStage1Rate = Math.min(0.18, 0.12 * dtScale);
-  const headStage2Rate = Math.min(0.20, 0.13 * dtScale);
+  const targetTilt = Math.max(
+    -5.6,
+    Math.min(5.6, baseTilt + gestureTilt + microGesture.tiltOffsetDeg)
+  );
+  const targetNod = Math.max(
+    -8.5,
+    Math.min(10.2, baseNod + gestureNod + microGesture.nodOffsetPx)
+  );
+  const targetTurn = Math.max(
+    -9.2,
+    Math.min(9.2, baseTurn + gestureTurn + microGesture.turnOffsetPx)
+  );
 
-  pose.midTilt += (targetTilt - pose.midTilt) * headStage1Rate;
-  pose.midNod += (targetNod - pose.midNod) * headStage1Rate;
-  pose.midTurn += (targetTurn - pose.midTurn) * headStage1Rate;
+  // State-Space Kalman Temporal Smoothing for 3D Head Kinematics (eliminates all saccades & jitter)
+  pose.tilt = avatarKalmanSmoother.headTilt.update(targetTilt, dtSec);
+  pose.nod = avatarKalmanSmoother.headNod.update(targetNod, dtSec);
+  pose.turn = avatarKalmanSmoother.headTurn.update(targetTurn, dtSec);
+  pose.midTilt = pose.tilt;
+  pose.midNod = pose.nod;
+  pose.midTurn = pose.turn;
 
-  pose.tilt += (pose.midTilt - pose.tilt) * headStage2Rate;
-  pose.nod += (pose.midNod - pose.nod) * headStage2Rate;
-  pose.turn += (pose.midTurn - pose.turn) * headStage2Rate;
+  // Cohesive head & hair state
+  pose.hairLagTurn = pose.turn;
+  pose.hairLagNod = pose.nod;
 
-  // Secondary spring-damped follow-through for the back hair chignon & crown hair
-  const hairRate = Math.min(0.11, 0.065 * dtScale);
-  pose.hairLagTurn += (pose.turn * 1.24 - pose.hairLagTurn) * hairRate;
-  pose.hairLagNod += (pose.nod * 1.20 - pose.hairLagNod) * hairRate;
-
-  // Expressive bilateral eyebrow arch synchronized with speech intonation, astonishment, questions, and emphasis
+  // Expressive bilateral eyebrow arch synchronized with speech intonation, astonishment, questions, and micro-gestures
   const targetBrow = isSpeaking
     ? Math.min(
         1.0,
         0.22 +
           Math.max(0, pose.open - 0.14) * 0.48 +
           pose.intonation * 0.52 +
+          microGesture.browBoost +
           pose.wAstonishment * 0.65 +
-          pose.wQuestion * 0.52 +
+          pose.wQuestion * 0.42 +
           pose.wEmphasis * 0.44 +
           pose.wAcceptance * 0.28 +
           (emotion === 'astonished'
@@ -1570,9 +1709,107 @@ export function stepAvatarExpressionFrame(
             : 0)
       )
     : (emotion === 'astonished' ? 0.68 : emotion === 'curious' ? 0.38 : 0.22) +
+      microGesture.browBoost +
       Math.sin(nowMs * 0.0011) * 0.14 +
       Math.cos(nowMs * 0.0007) * 0.08;
-  pose.eyebrowLift += (targetBrow - pose.eyebrowLift) * Math.min(0.22, 0.15 * dtScale);
+  pose.eyebrowLift = avatarKalmanSmoother.eyebrowLift.update(targetBrow, dtSec);
+
+  // Inner eyebrow furrow ('browFurrow') for Precision & Critical Analysis
+  const targetBrowFurrow = isSpeaking
+    ? Math.min(
+        1.0,
+        pose.wQuestion * 0.88 +
+          pose.wRefusal * 0.48 +
+          microGesture.furrowBoost +
+          (emotion === 'curious' ? 0.65 : emotion === 'solemn' ? 0.38 : 0)
+      )
+    : (emotion === 'curious' ? 0.68 : emotion === 'solemn' ? 0.28 : 0.0) +
+      microGesture.furrowBoost;
+  pose.browFurrow = avatarKalmanSmoother.browFurrow.update(targetBrowFurrow, dtSec);
+
+  // Compute the 6 Upright Facial & Hand-Speaking Postures inspired by planche_parole_mains.png (Visage droit et non incliné)
+  let bodyLanguagePosture: BodyLanguagePostureId = 'serene_clasped';
+  if (!isSpeaking) {
+    bodyLanguagePosture =
+      emotion === 'curious'
+        ? 'chin_reflection'
+        : emotion === 'astonished'
+        ? 'astonished_chest_hands'
+        : emotion === 'enthusiastic' || emotion === 'smiling'
+        ? 'welcome_open_palm'
+        : emotion === 'empathetic' || emotion === 'encouraging'
+        ? 'heart_encouragement'
+        : 'serene_clasped';
+  } else if (pose.open <= 0.03 && isPauseHint) {
+    bodyLanguagePosture = 'welcome_open_palm';
+  } else if (gType === 'greeting' || emotion === 'enthusiastic' || emotion === 'smiling') {
+    bodyLanguagePosture = 'welcome_open_palm';
+  } else if (gType === 'questioning' || emotion === 'curious') {
+    bodyLanguagePosture = 'chin_reflection';
+  } else if (
+    gType === 'astonishment' ||
+    gType === 'refusal' ||
+    emotion === 'astonished' ||
+    emotion === 'refusal'
+  ) {
+    bodyLanguagePosture = 'astonished_chest_hands';
+  } else if (
+    gType === 'empathy' ||
+    gType === 'acceptance' ||
+    emotion === 'empathetic' ||
+    emotion === 'encouraging' ||
+    emotion === 'acceptance'
+  ) {
+    bodyLanguagePosture = 'heart_encouragement';
+  } else if (emotion === 'solemn' && gType !== 'emphasis') {
+    bodyLanguagePosture = 'serene_clasped';
+  } else {
+    bodyLanguagePosture = 'teaching_gesture';
+  }
+
+  const pRate = Math.min(0.14, 0.09 * dtScale);
+  pose.pWelcome += ((bodyLanguagePosture === 'welcome_open_palm' ? 1 : 0) - pose.pWelcome) * pRate;
+  pose.pReflection += ((bodyLanguagePosture === 'chin_reflection' ? 1 : 0) - pose.pReflection) * pRate;
+  pose.pAstonished += ((bodyLanguagePosture === 'astonished_chest_hands' ? 1 : 0) - pose.pAstonished) * pRate;
+  pose.pSerene += ((bodyLanguagePosture === 'serene_clasped' ? 1 : 0) - pose.pSerene) * pRate;
+  pose.pTeaching += ((bodyLanguagePosture === 'teaching_gesture' ? 1 : 0) - pose.pTeaching) * pRate;
+  pose.pEncouragement += ((bodyLanguagePosture === 'heart_encouragement' ? 1 : 0) - pose.pEncouragement) * pRate;
+
+  const BODY_LANGUAGE_LABELS: Record<BodyLanguagePostureId, string> = {
+    welcome_open_palm: '🌸 Port de tête féminin • Sourire & Accueil',
+    chin_reflection: '💫 Inflexion interrogative • Écoute & Analyse',
+    astonished_chest_hands: '✨ Port de tête vif • Alerte & Intonation',
+    serene_clasped: '👂 Mouvement d\'écoute active • Hochement bienveillant',
+    teaching_gesture: '🎓 Port de tête gracieux • Conversation & Éloquence',
+    heart_encouragement: '💛 Inclinaison d\'écoute • Empathie & Sourire',
+  };
+  const bodyLanguageLabel = microGesture.activeLabel || BODY_LANGUAGE_LABELS[bodyLanguagePosture];
+
+  // Classify active mouth posture into the 6 Phonetic Visemes of Reference Sheet 2
+  let activeVisemeNumber: 1 | 2 | 3 | 4 | 5 | 6 = 1;
+  if (!isSpeaking || pose.open <= 0.06) {
+    activeVisemeNumber = 1; // Panel 1 (Top-Left): Lèvres jointes (Repos / M, B, P)
+  } else if (pose.roundness >= 0.48) {
+    activeVisemeNumber = 5; // Panel 5 (Bottom-Center): Lèvres arrondies & projetées (OU, O, ON, U, CH)
+  } else if (pose.open >= 0.56 && pose.spread < 0.52) {
+    activeVisemeNumber = 4; // Panel 4 (Bottom-Left): Grande ouverture verticale (A, AN, OI)
+  } else if (pose.spread >= 0.45) {
+    activeVisemeNumber = 3; // Panel 3 (Top-Right): Étirement souriant (I, É, IN)
+  } else if (viseme === 'narrow' && pose.upperLipLift >= 0.18) {
+    activeVisemeNumber = 6; // Panel 6 (Bottom-Right): Labio-dental & semi-ouvert (F, V, R, È)
+  } else {
+    activeVisemeNumber = 2; // Panel 2 (Top-Center): Légèrement entrouvert & dentales (E, T, D, L, N)
+  }
+
+  const VISEME_6_LABELS: Record<1 | 2 | 3 | 4 | 5 | 6, string> = {
+    1: 'Visème 1 • Lèvres jointes (M, B, P & Pause)',
+    2: 'Visème 2 • Entrouvert doux (E, T, D, L, N)',
+    3: 'Visème 3 • Souriant écarté (I, É, IN)',
+    4: 'Visème 4 • Grande ouverture (A, AN, OI)',
+    5: 'Visème 5 • Arrondi projeté (OU, O, ON, U)',
+    6: 'Visème 6 • Labio-dental & souple (F, V, R, È)',
+  };
+  const activeVisemeLabel = VISEME_6_LABELS[activeVisemeNumber];
 
   // Eyelid widening ('eyeWide') on astonishment, inquisitive intonation, and vocal pitch peaks
   const targetEyeWide = isSpeaking
@@ -1589,51 +1826,170 @@ export function stepAvatarExpressionFrame(
   pose.eyeWide += (targetEyeWide - pose.eyeWide) * Math.min(0.22, 0.15 * dtScale);
 
   // Bilateral zygomaticus cheek & nasolabial animation ('cheekLift')
+  // Full Duchenne Smile ("Insérer le sourire") & Bilateral Zygomaticus Cheek Lift ('smile' & 'cheekLift')
+  const emotionSmileBase =
+    emotion === 'smiling'
+      ? 0.98
+      : emotion === 'enthusiastic'
+      ? 0.94
+      : emotion === 'encouraging' || emotion === 'acceptance'
+      ? 0.90
+      : emotion === 'empathetic'
+      ? 0.86
+      : emotion === 'pedagogical'
+      ? 0.78
+      : emotion === 'curious'
+      ? 0.70
+      : emotion === 'astonished'
+      ? 0.36
+      : 0.22; // solemn / refusal
+
+  // Insert a warm, radiant smile on inter-clause comma pauses, sentence transitions, and open vowels
+  const breathPauseSmileBoost = isBreathPause && emotion !== 'refusal' && emotion !== 'solemn' ? 0.28 : 0;
+  const liveSmileWave = 0.5 + 0.5 * Math.sin(nowMs * 0.00145) * Math.cos(nowMs * 0.00085);
+  const targetSmile = isSpeaking
+    ? Math.min(
+        1.0,
+        Math.max(
+          0.22,
+          emotionSmileBase * (1 - pose.roundness * 0.45) +
+            pose.spread * 0.52 +
+            breathPauseSmileBoost +
+            pose.wGreeting * 0.48 +
+            pose.wAcceptance * 0.42 +
+            pose.wEmpathy * 0.38 +
+            microGesture.smileBoost -
+            pose.wRefusal * 0.30 -
+            pose.browFurrow * 0.18
+        )
+      )
+    : Math.min(
+        1.0,
+        Math.max(
+          0.35,
+          emotionSmileBase +
+            0.12 +
+            microGesture.smileBoost +
+            liveSmileWave * 0.14 -
+            pose.browFurrow * 0.16
+        )
+      );
+  pose.smile = avatarKalmanSmoother.smile.update(targetSmile, dtSec);
+
   const targetCheekLift = isSpeaking
     ? Math.min(
         1.0,
-        0.20 +
-          pose.spread * 0.52 +
-          pose.intonation * 0.34 +
-          pose.wGreeting * 0.42 +
-          pose.wAcceptance * 0.35 +
-          pose.wEmpathy * 0.32 +
-          (emotion === 'enthusiastic' || emotion === 'encouraging' ? 0.28 : 0)
+        0.34 +
+          pose.smile * 0.64 +
+          pose.spread * 0.42 +
+          pose.intonation * 0.28 +
+          pose.wGreeting * 0.35 +
+          pose.wAcceptance * 0.30 +
+          pose.wEmpathy * 0.28
       )
-    : 0.22 + Math.sin(nowMs * 0.00095) * 0.12 + Math.cos(nowMs * 0.0006) * 0.06;
-  pose.cheekLift += (targetCheekLift - pose.cheekLift) * Math.min(0.20, 0.14 * dtScale);
+    : Math.min(1.0, 0.34 + pose.smile * 0.66 + Math.sin(nowMs * 0.00095) * 0.08);
+  pose.cheekLift = avatarKalmanSmoother.cheekLift.update(targetCheekLift, dtSec);
 
   const gazeX =
-    Math.sin(nowMs * 0.00105) * 1.45 +
-    Math.cos(nowMs * 0.0021) * 0.72 +
-    pose.turn * 0.22;
+    Math.sin(nowMs * 0.00115) * 1.85 +
+    Math.cos(nowMs * 0.0022) * 0.85 +
+    pose.turn * 0.26;
   const gazeY =
-    Math.sin(nowMs * 0.00085) * 0.88 +
-    Math.cos(nowMs * 0.0016) * 0.42 +
-    pose.nod * 0.18 -
-    pose.eyeWide * 0.55;
+    Math.sin(nowMs * 0.00095) * 1.05 +
+    Math.cos(nowMs * 0.0017) * 0.48 +
+    pose.nod * 0.20 -
+    pose.eyeWide * 0.60;
   const breathY =
-    Math.sin(nowMs * 0.00165) * (isSpeaking ? 1.65 + pose.intonation * 0.85 : 1.25);
+    Math.sin(nowMs * 0.00185) * (isSpeaking ? 2.6 + pose.intonation * 1.2 : 1.85);
 
-  pose.shoulderX = 0;
-  pose.shoulderY = breathY;
+  // Full-Image Upper-Body, Shoulder & Independent Bilateral Hand Kinematics ("animer toute l'image, les mains")
+  const syllableBeat = isSpeaking
+    ? Math.sin(nowMs * 0.0068) * (0.45 + pose.open * 0.85 + pose.intonation * 0.45)
+    : Math.sin(nowMs * 0.0018) * 0.30;
+  const counterBeat = isSpeaking
+    ? Math.cos(nowMs * 0.0054) * (0.40 + pose.open * 0.75 + pose.intonation * 0.40)
+    : Math.cos(nowMs * 0.0015) * 0.25;
+
+  const targetTorsoSwayX =
+    (isSpeaking ? Math.sin(nowMs * 0.00125) * 3.0 : Math.sin(nowMs * 0.00085) * 1.4) +
+    pose.turn * 0.22 +
+    microGesture.torsoSwayDx;
+  const baseShoulderBreathLift =
+    breathY * 1.1 -
+    (isSpeaking ? pose.intonation * 2.8 + pose.open * 1.8 : 0) -
+    pose.pAstonished * 3.2 -
+    pose.pWelcome * 2.2 -
+    pose.smile * 1.2;
+
+  const targetLeftShoulderLift = baseShoulderBreathLift + microGesture.leftShoulderLiftDy;
+  const targetRightShoulderLift = baseShoulderBreathLift + microGesture.rightShoulderLiftDy;
+  const targetCollarLift = baseShoulderBreathLift * 0.72 + microGesture.collarLiftDy;
+
+  pose.shoulderX = avatarKalmanSmoother.torsoSwayX.update(targetTorsoSwayX, dtSec);
+  pose.leftShoulderY = avatarKalmanSmoother.leftShoulderLift.update(targetLeftShoulderLift, dtSec);
+  pose.rightShoulderY = avatarKalmanSmoother.rightShoulderLift.update(targetRightShoulderLift, dtSec);
+  pose.collarY = avatarKalmanSmoother.collarLift.update(targetCollarLift, dtSec);
+  pose.shoulderY = (pose.leftShoulderY + pose.rightShoulderY) * 0.5;
+
+  // Expressive Left Hand (x=176..430, y=800..960) & Right Hand (x=430..728, y=780..950)
+  const targetLeftHandDx =
+    pose.shoulderX * 1.15 -
+    pose.pWelcome * 10.5 -
+    pose.pTeaching * (6.5 + syllableBeat * 7.5) +
+    pose.pReflection * 6.0 -
+    pose.pAstonished * 8.0 +
+    pose.pEncouragement * 4.5 +
+    counterBeat * (isSpeaking ? 6.2 : 2.2);
+
+  const targetLeftHandDy =
+    pose.shoulderY * 1.1 -
+    (isSpeaking ? pose.open * 10.5 + pose.intonation * 7.5 : 0) -
+    pose.pWelcome * 8.5 -
+    pose.pTeaching * (8.0 + Math.abs(syllableBeat) * 8.5) -
+    pose.pAstonished * 13.5 -
+    pose.pReflection * 7.5 -
+    pose.pEncouragement * 6.5 +
+    syllableBeat * (isSpeaking ? 7.4 : 2.4);
+
+  const targetRightHandDx =
+    pose.shoulderX * 1.15 +
+    pose.pWelcome * (11.5 + syllableBeat * 6.5) +
+    pose.pTeaching * (7.5 + counterBeat * 8.2) -
+    pose.pReflection * 7.5 +
+    pose.pAstonished * 8.5 -
+    pose.pEncouragement * 5.0 +
+    syllableBeat * (isSpeaking ? 6.8 : 2.4);
+
+  const targetRightHandDy =
+    pose.shoulderY * 1.1 -
+    (isSpeaking ? pose.open * 12.0 + pose.intonation * 8.5 : 0) -
+    pose.pWelcome * (10.5 + Math.abs(counterBeat) * 6.0) -
+    pose.pTeaching * (9.5 + Math.abs(counterBeat) * 9.0) -
+    pose.pAstonished * 14.5 -
+    pose.pReflection * 11.0 -
+    pose.pEncouragement * 8.0 +
+    counterBeat * (isSpeaking ? 8.2 : 2.6);
+
+  const handRate = Math.min(0.24, 0.16 * dtScale);
+  pose.leftHandDx += (targetLeftHandDx - pose.leftHandDx) * handRate;
+  pose.leftHandDy += (targetLeftHandDy - pose.leftHandDy) * handRate;
+  pose.rightHandDx += (targetRightHandDx - pose.rightHandDx) * handRate;
+  pose.rightHandDy += (targetRightHandDy - pose.rightHandDy) * handRate;
 
   const activeBadgeLabel =
-    isSpeaking && gType !== 'neutral' && HEAD_GESTURE_LABELS[gType]
+    microGesture.activeLabel
+      ? microGesture.activeLabel
+      : isSpeaking && gType !== 'neutral' && HEAD_GESTURE_LABELS[gType]
       ? HEAD_GESTURE_LABELS[gType]
       : EMOTION_LABELS[emotion];
 
-  // Body/shoulders stay 100% stationary while ONLY the head pivots smoothly around the cervical neck joint (508, 468)
-  const torsoTransform = 'translate(0, 0)';
-  const headTransform = `translate(${(508 + pose.turn).toFixed(2)}, ${(468 + pose.nod).toFixed(2)}) rotate(${pose.tilt.toFixed(2)}) scale(1.0180) translate(-508, -468)`;
+  // Animate upper torso / shoulders with Kalman-smoothed micro-gesture shrugs & breathing
+  const torsoTransform = `translate(${(pose.shoulderX * 0.45).toFixed(2)}, ${(pose.shoulderY * 0.65).toFixed(2)})`;
+  const headTransform = `translate(${(455 + pose.turn).toFixed(2)}, ${(563 + pose.nod).toFixed(2)}) rotate(${pose.tilt.toFixed(2)}) scale(1.0120) translate(-455, -563)`;
 
   // ============================================================================
   // REAL FEMALE ANATOMICAL MOUTH KINEMATICS (10-Station Pixel-Calibrated Inlay)
-  // - REST_OPEN = 0.14 matches the natural resting lip parting in imgTutrice.
-  // - Gentle Bilabial Closure (open < 0.14): lower lip rises (-7.8px max) and upper lip
-  //   descends (+3.4px max) to cover the upper teeth and meet softly on M/B/P.
-  // - Smooth Female Mandible Drop (open > 0.14): oral cavity opens strictly BELOW
-  //   UPPER_TEETH_BOT_Y (y=422.5) while the lower lip drops cleanly up to +10.4px.
+  // - REST_OPEN = 0.04 matches the natural resting lip posture in aisha_posture_droite_mains_1790908221106.jpg.
   // ============================================================================
   const open = pose.open;
   const roundness = pose.roundness;
@@ -1645,25 +2001,24 @@ export function stepAvatarExpressionFrame(
 
   if (open <= REST_OPEN) {
     const closeRatio = 1 - open / REST_OPEN;
-    jawDy = -closeRatio * 8.2;
-    jawScaleY = 1 + closeRatio * 0.15;
+    jawDy = 0;
+    jawScaleY = 1.0;
     const descendFactor = Math.max(0, -pose.upperLipLift);
-    upperDy = closeRatio * (3.6 + descendFactor * 0.9);
-    upperScaleY = 1 + closeRatio * (0.15 + descendFactor * 0.06);
+    upperDy = closeRatio * (0.4 + descendFactor * 0.2);
+    upperScaleY = 1.0;
   } else {
     const openRatio = (open - REST_OPEN) / (1 - REST_OPEN);
     const intonationJawBoost = 1.0 + Math.max(0, pose.intonation - 0.4) * 0.18;
-    const maxNaturalJawDrop = 18.2 * (1 - roundness * 0.15) * intonationJawBoost;
+    const maxNaturalJawDrop = 16.5 * (1 - roundness * 0.15) * intonationJawBoost;
     jawDy = openRatio * maxNaturalJawDrop;
     jawScaleY = 1.0 + roundness * 0.08;
-    upperDy = -pose.upperLipLift * openRatio * 1.8 + roundness * 1.8;
+    upperDy = -pose.upperLipLift * openRatio * 1.8 + roundness * 1.6;
     upperScaleY = 1.0 + roundness * 0.08;
   }
 
-  // Keep horizontal scale at 1.000 so mouth corners (468.5, 407.0) and (543.5, 417.5) never shear against the cheeks
-  const jawInlayTransform = `translate(0.00, ${jawDy.toFixed(2)}) translate(505.0, 442.0) scale(1.000, ${jawScaleY.toFixed(3)}) translate(-505.0, -442.0)`;
+  const jawInlayTransform = `translate(0.00, ${jawDy.toFixed(2)}) translate(454.0, 505.0) scale(1.000, ${jawScaleY.toFixed(3)}) translate(-454.0, -505.0)`;
 
-  const upperLipInlayTransform = `translate(0.00, ${upperDy.toFixed(2)}) translate(505.0, 398.0) scale(1.000, ${upperScaleY.toFixed(3)}) translate(-505.0, -398.0)`;
+  const upperLipInlayTransform = `translate(0.00, ${upperDy.toFixed(2)}) translate(454.0, 476.0) scale(1.000, ${upperScaleY.toFixed(3)}) translate(-454.0, -476.0)`;
 
   const upperLipInlayOpacity = '1.00';
 
@@ -1721,29 +2076,29 @@ export function stepAvatarExpressionFrame(
 
   // Expressive anatomical tongue inside the oral cavity (elevates on T/D/L/N, rests in lower cavity on open vowels)
   const tongueOpacity =
-    mouthActive && (open > 0.12 || pose.tongueLift > 0.28)
-      ? Math.min(0.92, Math.max((open - 0.10) * 1.45, pose.tongueLift * 0.82)).toFixed(2)
+    mouthActive && (open > 0.10 || pose.tongueLift > 0.28)
+      ? Math.min(0.92, Math.max((open - 0.08) * 1.45, pose.tongueLift * 0.82)).toFixed(2)
       : '0';
-  const tongueCx = '506.5';
+  const tongueCx = '454.0';
   const tongueCy = (
-    423.5 +
+    488.0 +
     Math.max(0, jawDy) * 0.54 -
-    pose.tongueLift * 4.6
+    pose.tongueLift * 4.2
   ).toFixed(2);
   const tongueRx = (17.2 * (1 - roundness * 0.28) + open * 3.8).toFixed(2);
   const tongueRy = (3.2 + Math.max(0, open - REST_OPEN) * 5.6 + pose.tongueLift * 1.8).toFixed(2);
 
   // Photorealistic Eye Blinks & Winks ("clins d'œil")
   const bL = pose.blinkLeft;
-  const leftLidCtrlY = 287.0 + bL * 20.8;
-  const leftEyelidD = `M 434 299.0 Q 456 285.5 479 302.0 Q 456 ${leftLidCtrlY.toFixed(2)} 434 299.0 Z`;
-  const leftLashD = `M 434 299.0 Q 456 ${leftLidCtrlY.toFixed(2)} 479 302.0`;
+  const leftLidCtrlY = 356.0 + bL * 19.5;
+  const leftEyelidD = `M 373 365.0 Q 395 354.5 417 366.0 Q 395 ${leftLidCtrlY.toFixed(2)} 373 365.0 Z`;
+  const leftLashD = `M 373 365.0 Q 395 ${leftLidCtrlY.toFixed(2)} 417 366.0`;
   const leftBlinkOpacity = bL > 0.04 ? Math.min(1, bL * 1.15).toFixed(2) : '0';
 
   const bR = pose.blinkRight;
-  const rightLidCtrlY = 288.0 + bR * 19.8;
-  const rightEyelidD = `M 547 304.0 Q 565 286.5 585 294.0 Q 567 ${rightLidCtrlY.toFixed(2)} 547 304.0 Z`;
-  const rightLashD = `M 547 304.0 Q 567 ${rightLidCtrlY.toFixed(2)} 585 294.0`;
+  const rightLidCtrlY = 356.0 + bR * 19.5;
+  const rightEyelidD = `M 496 366.0 Q 518 354.5 540 365.0 Q 518 ${rightLidCtrlY.toFixed(2)} 496 366.0 Z`;
+  const rightLashD = `M 496 366.0 Q 518 ${rightLidCtrlY.toFixed(2)} 540 365.0`;
   const rightBlinkOpacity = bR > 0.04 ? Math.min(1, bR * 1.15).toFixed(2) : '0';
 
   const eqY: [string, string, string, string, string] = ['4.25', '4.25', '4.25', '4.25', '4.25'];
@@ -1796,16 +2151,39 @@ export function stepAvatarExpressionFrame(
     hairLagTurn: pose.hairLagTurn,
     hairLagNod: pose.hairLagNod,
     eyebrowLift: pose.eyebrowLift,
+    browFurrow: pose.browFurrow,
     eyeWide: pose.eyeWide,
     cheekLift: pose.cheekLift,
+    smile: pose.smile,
     intonation: pose.intonation,
     blinkLeft: pose.blinkLeft,
     blinkRight: pose.blinkRight,
     gazeX,
     gazeY,
     breathY,
+    shoulderLift: pose.shoulderY,
+    leftShoulderLift: pose.leftShoulderY,
+    rightShoulderLift: pose.rightShoulderY,
+    collarLift: pose.collarY,
+    torsoSwayX: pose.shoulderX,
+    activeMicroGestureTag: microGesture.activeTag,
+    activeMicroGestureLabel: microGesture.activeLabel,
+    leftHandDx: pose.leftHandDx,
+    leftHandDy: pose.leftHandDy,
+    rightHandDx: pose.rightHandDx,
+    rightHandDy: pose.rightHandDy,
     cavTopYs,
     cavBotYs,
+    activeVisemeNumber,
+    activeVisemeLabel,
+    bodyLanguagePosture,
+    bodyLanguageLabel,
+    pWelcome: pose.pWelcome,
+    pReflection: pose.pReflection,
+    pAstonished: pose.pAstonished,
+    pSerene: pose.pSerene,
+    pTeaching: pose.pTeaching,
+    pEncouragement: pose.pEncouragement,
   };
 }
 
@@ -1817,7 +2195,13 @@ if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'functio
     if (data.type === 'LOAD_SENTENCE') {
       const sentence = String(data.sentence || '');
       const boundaries = Array.isArray(data.wordBoundaries) ? data.wordBoundaries : [];
-      loadAvatarSentencePhonemes(sentence, boundaries, data.emotion as AvatarEmotion | undefined);
+      const emotionalTags = Array.isArray(data.emotionalTags) ? data.emotionalTags : undefined;
+      loadAvatarSentencePhonemes(
+        sentence,
+        boundaries,
+        data.emotion as AvatarEmotion | undefined,
+        emotionalTags
+      );
       return;
     }
 

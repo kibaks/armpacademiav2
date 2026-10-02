@@ -1,7 +1,13 @@
 import React from 'react';
-import { Factory, ShieldCheck, Users, Award, ArrowRight, ChevronRight, Building2, FileCheck, TrendingUp, MapPin, Hammer } from 'lucide-react';
+import { Factory, ShieldCheck, Users, Award, ArrowRight, ChevronRight, Building2, FileCheck, TrendingUp, MapPin, Hammer, PlayCircle, Sparkles } from 'lucide-react';
+import { PME_DEMO_ACCOUNTS } from '../data/initialData';
+import { UserProfile } from '../types';
 
-export const ContenuLocalSection: React.FC<{ onExploreCourses: () => void; onOpenTuteur: () => void }> = ({ onExploreCourses, onOpenTuteur }) => {
+export const ContenuLocalSection: React.FC<{
+  onExploreCourses: () => void;
+  onOpenTuteur: () => void;
+  onSelectPmeDemoAccount?: (profile: UserProfile, openModuleId?: string) => void;
+}> = ({ onExploreCourses, onOpenTuteur, onSelectPmeDemoAccount }) => {
   return (
     <div className="bg-white dark:bg-black text-zinc-900 dark:text-white border-t border-zinc-100 dark:border-zinc-900">
       {/* ===== Header ===== */}
@@ -233,6 +239,85 @@ export const ContenuLocalSection: React.FC<{ onExploreCourses: () => void; onOpe
 
           <div className="mt-6 flex flex-wrap items-center gap-2 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
             <MapPin className="w-3.5 h-3.5" /> Kinshasa • Lubumbashi • Goma • Kolwezi • Matadi • Kananga — votre province, votre marché.
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Comptes Démo PME & Sous-Traitants (Accès direct aux formations PME) ===== */}
+      <section className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-8 mt-8">
+        <div className="rounded-[28px] bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-950 text-white border border-emerald-800/50 p-6 sm:p-8 lg:p-10 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+            <div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" /> Comptes Démo PME • Accès Immédiat Formation
+              </span>
+              <h3 className="mt-2.5 text-2xl sm:text-3xl font-bold tracking-tight">
+                Testez l’espace formation PME avec 4 profils métiers réels
+              </h3>
+              <p className="mt-1.5 text-xs sm:text-sm text-emerald-100/80 max-w-2xl">
+                Connectez-vous en 1 clic avec un compte démo PME congolaise certifiée ARSP (BTP, Médical, Numérique ou Agro-industrie) pour suivre les modules dédiés au Contenu Local (Loi 17/001), aux Appels d’Offres et à l’Exécution Financière.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (onSelectPmeDemoAccount && PME_DEMO_ACCOUNTS[0]) {
+                  onSelectPmeDemoAccount(PME_DEMO_ACCOUNTS[0], 'MOD-007');
+                } else {
+                  onExploreCourses();
+                }
+              }}
+              className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm shadow-lg transition inline-flex items-center gap-2 self-start lg:self-center shrink-0"
+            >
+              <PlayCircle className="w-4 h-4" />
+              <span>Lancer le Module PME (MP-RDC-707)</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {PME_DEMO_ACCOUNTS.map((acct) => (
+              <div
+                key={acct.id}
+                className="rounded-2xl bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 p-4 flex flex-col justify-between transition group"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 truncate max-w-[160px]">
+                      {acct.matricule}
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-300 shrink-0">
+                      {acct.level}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-extrabold text-white group-hover:text-emerald-300 transition">
+                    {acct.institution.split('(')[0].trim()}
+                  </h4>
+                  <p className="text-[11px] font-semibold text-emerald-200 mt-0.5">
+                    {acct.name} • {acct.location || 'RDC'}
+                  </p>
+                  <p className="text-[11px] text-slate-300 mt-2 leading-relaxed line-clamp-2">
+                    {acct.roleTitle} — {acct.bio}
+                  </p>
+                  <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[10px] text-emerald-200/90">
+                    <span>{acct.completedModulesCount} modules validés</span>
+                    <span>{acct.certificationsCount} certif. ARMP</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (onSelectPmeDemoAccount) {
+                      onSelectPmeDemoAccount(acct, 'MOD-007');
+                    } else {
+                      onExploreCourses();
+                    }
+                  }}
+                  className="mt-4 w-full py-2 px-3 rounded-xl bg-white text-slate-950 hover:bg-emerald-300 font-extrabold text-[11px] transition flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <PlayCircle className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Ouvrir ce compte Démo PME</span>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </section>
