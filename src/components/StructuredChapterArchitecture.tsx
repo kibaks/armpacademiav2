@@ -591,11 +591,11 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
     ambientMusicService.start();
     if (!isMuted) {
       speechService.unlockAudio();
-      speechService.play(
+        speechService.play(
         sequences.map((s) => s.spoken).join(' '),
         summaryId,
         {
-          speed: 1.0,
+          speed: 0.94,
           voice: speechService.getVoicePersona(),
           startSentenceIndex: clamped,
           customSentences: sequences.map((s) => s.spoken)
@@ -627,11 +627,10 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
   const currentSeq = sequences[activeSeqIdx] || sequences[0];
   const overallPct = Math.min(100, Math.round(((activeSeqIdx + seqProgress) / sequences.length) * 100));
 
-  // Hand first sketches the SINGLE essential illustration on the left (seqProgress 0..0.35),
-  // then writes the 3 fundamental lines on the right (seqProgress 0.35..1.0)
-  const isSketchingIllustration = seqProgress < 0.35;
-  const sketchRatio = Math.min(1, seqProgress / 0.35);
-  const writeProgress = Math.max(0, (seqProgress - 0.35) / 0.65);
+  // Sketch the essential illustration on the left (seqProgress 0..0.20) while writing the 3 fundamental lines (seqProgress 0.06..0.88) in lockstep with the voice
+  const isSketchingIllustration = seqProgress < 0.06;
+  const sketchRatio = Math.min(1, seqProgress / 0.22);
+  const writeProgress = Math.min(1, Math.max(0, (seqProgress - 0.06) / 0.82));
   const cardIdx = writeProgress < 0.34 ? 0 : writeProgress < 0.68 ? 1 : 2;
   const localCardRatio =
     cardIdx === 0

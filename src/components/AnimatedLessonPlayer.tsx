@@ -398,7 +398,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         if (current < act.startPct || current > act.endPct) {
           next = targetVoicePct;
         } else {
-          next = current + (targetVoicePct - current) * 0.68;
+          next = current + (targetVoicePct - current) * 0.85;
         }
         const clampedInAct = Math.max(act.startPct, Math.min(act.endPct - 0.02, next));
         commitProgressIfChanged(clampedInAct);
@@ -571,16 +571,18 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     return calibratedLesson.acts[idx] || calibratedLesson.acts[0];
   }, [isVoiceDriving, playbackState?.currentSentence, calibratedLesson.acts, filmProgress]);
 
-  // Exact 0..1 progress inside the active screen (strictly locked 1:1 to live audio wordProgressPct when voice is speaking)
+  // Exact 0..1 progress inside the active screen (locked to live audio wordProgressPct and smooth filmProgress)
   const actVoiceProgress = useMemo(() => {
     if (isPreloading) {
       return 0;
     }
-    if (isSpeaking && playbackState) {
-      return clamp01((playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0) / 100);
-    }
     const actSpan = Math.max(1, activeAct.endPct - activeAct.startPct);
-    return clamp01((filmProgress - activeAct.startPct) / actSpan);
+    const filmActRatio = clamp01((filmProgress - activeAct.startPct) / actSpan);
+    if (isSpeaking && playbackState) {
+      const liveVoiceRatio = clamp01((playbackState.wordProgressPct ?? playbackState.wordProgress ?? 0) / 100);
+      return Math.max(liveVoiceRatio, filmActRatio);
+    }
+    return filmActRatio;
   }, [isSpeaking, isPreloading, playbackState, filmProgress, activeAct]);
 
   const currentScreenCard =

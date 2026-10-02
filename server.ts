@@ -952,14 +952,14 @@ function attachCharIndices(
     if (!cleanWord) continue;
     const normWord = cleanWord.toLowerCase().replace(/[’‘]/g, "'");
     const foundIdx = normSentence.indexOf(normWord, cursor);
-    const isValidMatch = foundIdx !== -1 && foundIdx - cursor <= 48;
+    const isValidMatch = foundIdx !== -1 && foundIdx - cursor <= 56;
     const charIndex = isValidMatch
       ? foundIdx
       : Math.min(sentence.length - 1, cursor);
     if (isValidMatch) {
       cursor = foundIdx + cleanWord.length;
     } else {
-      cursor = Math.min(sentence.length - 1, cursor + Math.max(1, Math.min(cleanWord.length, 6)));
+      cursor = Math.min(sentence.length - 1, cursor + Math.max(2, cleanWord.length));
     }
     result.push({
       text: cleanWord,
@@ -1220,7 +1220,8 @@ async function synthesizeWithStudioNeuralHD(
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
     const { voice, tag } = candidateVoices[attempt];
     try {
-      const result = await runSingleEdgeSynthesis(text, voice, tag, '+8%', '+0Hz');
+      // Calm, poised pedagogical diction (-4%) so the voice never rushes ahead of the video
+      const result = await runSingleEdgeSynthesis(text, voice, tag, '-4%', '+0Hz');
       if (result) return result;
     } catch {
       // Wait briefly before retrying
@@ -1403,7 +1404,7 @@ async function getOrSynthesizeTtsPayload(
 
   const voiceKey = 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `prof_vivienne_smile_v22::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `prof_vivienne_smile_v23::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey);
   if (cached) return cached;
 

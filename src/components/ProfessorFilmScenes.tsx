@@ -987,9 +987,9 @@ export function buildSynchronizedLessonScreens(
 
     const shortLabel = pillarMeta.tab;
 
-    // Clean, eloquent & concise explanation & practical rule matched to whiteboard drawing speed
-    const explanationText = truncateClean(parsed.explanationBody, 195);
-    const fieldRuleText = truncateClean(parsed.terrainRule, 130);
+    // Clean, eloquent & well-paced explanation & practical rule matched to whiteboard drawing speed
+    const explanationText = truncateClean(parsed.explanationBody, 230);
+    const fieldRuleText = truncateClean(parsed.terrainRule, 150);
 
     const variation =
       PEDAGOGICAL_TRANSITION_VARIATIONS[
@@ -1003,11 +1003,11 @@ export function buildSynchronizedLessonScreens(
         : parsed.visualTitle;
 
     const ELOQUENT_OPENERS = [
-      `Bonjour et bienvenue, ${precedence.spokenFullName}, ravie de vous retrouver pour explorer ${naturalTitleSpoken}. `,
-      `Voyez-vous, au cœur du sujet, penchons-nous maintenant sur ${naturalTitleSpoken}. `,
-      `Concrètement sur le terrain, regardons de près ${naturalTitleSpoken}. `,
-      `Faisons maintenant le point sur l'essentiel à retenir concernant ${naturalTitleSpoken}. `,
-      `Terminons enfin par la validation et la prise de décision autour de ${naturalTitleSpoken}. `
+      `Bonjour et bienvenue, ${precedence.spokenFullName}, c'est un vrai plaisir de vous retrouver aujourd'hui. Prenons le temps d'explorer ensemble ${naturalTitleSpoken}. `,
+      `Voyez-vous, au cœur du sujet, penchons-nous maintenant pas à pas sur ${naturalTitleSpoken}. `,
+      `Concrètement sur le terrain, regardons de près comment s'applique ${naturalTitleSpoken}. `,
+      `Faisons maintenant le point, avec clarté, sur l'essentiel à retenir concernant ${naturalTitleSpoken}. `,
+      `Terminons enfin par la validation pratique et la prise de décision autour de ${naturalTitleSpoken}. `
     ];
 
     const introPrefix = ELOQUENT_OPENERS[idx] || `${parsed.visualTitle}... `;
@@ -1022,9 +1022,9 @@ export function buildSynchronizedLessonScreens(
 
     const fullSpoken = `${part1Explanation} ${part2Rule}`;
     const totalSpokenLen = Math.max(1, fullSpoken.length);
-    const exactExplanationStartRatio = clamp01(introPrefix.length / totalSpokenLen);
-    // Start drawing the bottom field rule box when Aïsha enters the practical rule segment
-    const ruleStartChar = part1Explanation.length + Math.floor(personalizedLeadIn.length * 0.55);
+    const exactExplanationStartRatio = clamp01((introPrefix.length * 0.8) / totalSpokenLen);
+    // Start drawing the bottom field rule box as soon as Aïsha finishes the 3 explanation points
+    const ruleStartChar = part1Explanation.length;
     const shortRoleTag = precedence.roleBadgeLabel.replace(/^RÔLE ACTIF\s*:\s*/i, '').slice(0, 32);
 
     return {
@@ -2446,9 +2446,9 @@ function extractVisualSketchDiagrams(card: SingleScreenCardData): VisualSketchDi
   const n2Start = n1End;
   const n2End = fieldStart;
 
-  const fmt0 = formatCompleteVisualLines(expClauses[0], 45);
-  const fmt1 = formatCompleteVisualLines(expClauses[1], 45);
-  const fmt2 = formatCompleteVisualLines(expClauses[2], 45);
+  const fmt0 = formatCompleteVisualLines(expClauses[0], 64);
+  const fmt1 = formatCompleteVisualLines(expClauses[1], 64);
+  const fmt2 = formatCompleteVisualLines(expClauses[2], 64);
 
   const usedArch = new Set<SemanticSketchArchetype>();
   const sem0 = analyzeClauseSemanticContext(expClauses[0], card.title, 0, usedArch);
@@ -2460,15 +2460,15 @@ function extractVisualSketchDiagrams(card: SingleScreenCardData): VisualSketchDi
   const fLen1 = Math.max(6, fieldClauses[1].length);
   const totalFieldLen = fLen0 + fLen1;
 
-  const sealStartRatio = 0.985;
+  const sealStartRatio = 0.90;
   const fieldDrawSpan = Math.max(0.1, sealStartRatio - fieldStart);
   const check1Start = fieldStart;
   const check1End = check1Start + (fLen0 / totalFieldLen) * fieldDrawSpan;
   const check2Start = check1End;
   const check2End = sealStartRatio;
 
-  const check1Fmt = formatCompleteVisualLines(fieldClauses[0], 54);
-  const check2Fmt = formatCompleteVisualLines(fieldClauses[1], 54);
+  const check1Fmt = formatCompleteVisualLines(fieldClauses[0], 68);
+  const check2Fmt = formatCompleteVisualLines(fieldClauses[1], 68);
   const semField1 = analyzeClauseSemanticContext(fieldClauses[0], card.title, 3, usedArch);
   const semField2 = analyzeClauseSemanticContext(fieldClauses[1], card.title, 4, usedArch);
 
@@ -3591,18 +3591,18 @@ export const ProfessorContextualStage: React.FC<{
           />
         </clipPath>
 
-        {/* Per-Row Fundamental Text Clip Masks (scaled to exact pixel width of each line so text reveals at exact voice speed) */}
+        {/* Per-Row Fundamental Text Clip Masks (starts immediately with clause voice and finishes at 85% of clause so video never lags behind voice) */}
         {[0, 1, 2].map((nIdx) => {
           const node = sketchData.nodes[nIdx];
           const r = nodeRatios[nIdx];
-          const writeR = clamp01((r - 0.16) / 0.84);
+          const writeR = clamp01((r - 0.03) / 0.82);
           const len1 = Math.max(1, (node.line1 || '').length);
           const len2 = Math.max(0, (node.line2 || '').length);
           const l1Share = len2 > 0 ? len1 / Math.max(1, len1 + len2) : 1;
           const l1R = clamp01(writeR / Math.max(0.1, l1Share));
           const l2R = len2 > 0 ? clamp01((writeR - l1Share) / Math.max(0.1, 1 - l1Share)) : 0;
-          const w1Px = estimateLinePixelWidth(node.line1, 6.4, 430) + 16;
-          const w2Px = estimateLinePixelWidth(node.line2, 6.0, 430) + 16;
+          const w1Px = estimateLinePixelWidth(node.line1, 6.8, 435) + 24;
+          const w2Px = estimateLinePixelWidth(node.line2, 6.4, 435) + 24;
           return (
             <React.Fragment key={nIdx}>
               <clipPath id={`${clipIdBase}-fund-${nIdx}-l1`}>
