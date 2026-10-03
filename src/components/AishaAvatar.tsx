@@ -113,12 +113,13 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   }, []);
 
   useEffect(() => {
-    // Frame the close-up portrait head, mouth & upper blazer shoulders with enlarged framing & static flower-pot studio backdrop
+    // True Gros Plan (Close-Up) framing on Aïsha's expressive face, smile, eyes & mouth
+    // with static pedagogical studio background (flower pots, plants & warm shelves)
     const viewport = isVisio
-      ? { x: 170, y: 140, w: 556, h: 520, tutorPersona }
+      ? { x: 210, y: 170, w: 476, h: 450, tutorPersona }
       : isStudio || dim.w >= 120
-      ? { x: 180, y: 142, w: 536, h: 512, tutorPersona }
-      : { x: 200, y: 140, w: 495, h: 500, tutorPersona };
+      ? { x: 238, y: 200, w: 420, h: 395, tutorPersona }
+      : { x: 240, y: 205, w: 416, h: 390, tutorPersona };
 
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: wav2lipCanvasRef.current,

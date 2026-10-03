@@ -775,6 +775,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const manualStudioEmotionRef = useRef<AvatarEmotion | 'auto'>('auto');
   manualStudioEmotionRef.current = manualStudioEmotion;
 
+  const [cameraZoomMode, setCameraZoomMode] = useState<'close_up' | 'cinematic'>('close_up');
+
   const handleSelectStudioEmotion = (emo: AvatarEmotion | 'auto') => {
     setManualStudioEmotion(emo);
     if (emo !== 'auto') {
@@ -783,9 +785,16 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   };
 
   useEffect(() => {
+    // Gros Plan (Close-Up): focuses right on face, smile, eyes & speech articulation
+    // with static flower pots & library shelves in the background
+    const viewport =
+      cameraZoomMode === 'close_up'
+        ? { x: 238, y: 200, w: 420, h: 395 }
+        : { x: 190, y: 150, w: 516, h: 490 };
+
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: headerWav2LipCanvasRef.current,
-      wav2lipViewport: { x: 180, y: 142, w: 536, h: 512 },
+      wav2lipViewport: viewport,
       emotionBadgeEl: headerEmotionBadgeRef.current,
       postureBadgeEl: headerPostureBadgeRef.current,
       visemeBadgeEl: headerVisemeBadgeRef.current,
@@ -795,7 +804,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         manualStudioEmotionRef.current !== 'auto' ? manualStudioEmotionRef.current : undefined,
     });
     return unregister;
-  }, []);
+  }, [cameraZoomMode]);
 
   // ===========================================================================
   // GOOGLE FLOW (VEO 3.1) VIDEO GENERATION & VOICE-SYNCHRONIZED GESTURE ENGINE
@@ -956,13 +965,13 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       {/* =========================================================================== */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b-2 border-amber-500/30 p-3 sm:p-4">
         <div className="flex flex-col md:flex-row items-stretch gap-3.5 sm:gap-4">
-          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (POSTURE DROITE, VISAGE FACE CAMÉRA & DÉCOR STATIQUE AVEC PLANTES) */}
+          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (GROS PLAN VISAGE, DÉCOR STATIQUE & POTS DE FLEURS) */}
           <div
-            className={`relative shrink-0 rounded-2xl overflow-hidden transition-all duration-300 bg-slate-950 shadow-2xl border-2 border-amber-500/40 ${
+            className={`relative shrink-0 rounded-2xl overflow-hidden transition-all duration-300 bg-slate-950 shadow-2xl border-2 border-amber-500/50 ${
               pipExpanded
                 ? 'w-full md:w-[420px] xl:w-[470px] h-[340px] sm:h-[375px]'
                 : 'w-full md:w-[350px] lg:w-[385px] xl:w-[420px] h-[300px] sm:h-[330px]'
-            } mx-auto md:mx-0`}
+            } mx-auto md:mx-0 group`}
           >
             {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer (Décor Statique + Pots de Fleurs) */}
             <canvas
@@ -971,6 +980,46 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
               height={620}
               className="w-full h-full block object-cover opacity-100"
             />
+
+            {/* Badges de Cadrage Caméra Gros Plan & Décor Statique */}
+            <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 pointer-events-none">
+              <span className="px-2 py-0.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-amber-400/50 text-[10px] font-black text-amber-300 flex items-center gap-1 shadow-md">
+                <span>🎥</span>
+                <span>GROS PLAN HD</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-950/85 backdrop-blur-md border border-emerald-400/50 text-[10px] font-bold text-emerald-300 flex items-center gap-1 shadow-md">
+                <span>🪴</span>
+                <span>DÉCOR FIXE</span>
+              </span>
+            </div>
+
+            {/* Sélecteur de Zoom Caméra (Gros Plan vs Plan Buste) */}
+            <div className="absolute bottom-2.5 right-2.5 z-20 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCameraZoomMode('close_up')}
+                className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer shadow-md ${
+                  cameraZoomMode === 'close_up'
+                    ? 'bg-amber-400 text-slate-950 border-amber-300'
+                    : 'bg-slate-950/85 hover:bg-slate-900 text-slate-200 border-white/20'
+                }`}
+                title="Cadrage Gros Plan : Focus sur le visage, le sourire et la parole"
+              >
+                Gros Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => setCameraZoomMode('cinematic')}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shadow-md ${
+                  cameraZoomMode === 'cinematic'
+                    ? 'bg-amber-400 text-slate-950 border-amber-300'
+                    : 'bg-slate-950/85 hover:bg-slate-900 text-slate-200 border-white/20'
+                }`}
+                title="Cadrage Plan Buste : Vue plus large sur les épaules et le studio"
+              >
+                Plan Buste
+              </button>
+            </div>
           </div>
 
           {/* B. PROTOCOLE DE PRÉSÉANCE, RÔLE DE L'APPRENANT & NAVIGATION D'ÉCRAN */}
