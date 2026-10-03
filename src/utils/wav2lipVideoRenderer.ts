@@ -783,20 +783,17 @@ class SharedWav2LipWebGLCore {
     return this.glCanvas;
   }
 
-  // HiDPI backing-store metadata per target canvas.
-  // Captures the authored attribute size + first-seen CSS box so the backing
-  // store can be scaled by devicePixelRatio WITHOUT changing framing: the
-  // viewport crop math below only depends on the backing aspect ratio, which
-  // stays equal to the authored attribute aspect while the CSS box scales.
-  private targetMeta = new WeakMap<
-    HTMLCanvasElement,
-    { w0: number; h0: number; cw0: number; ch0: number; lastW: number; lastH: number }
-  >();
+  // HiDPI backing-store metadata per target canvas: the authored attribute
+  // size (w0×h0) is kept as reference so the backing store can grow with
+  // devicePixelRatio WHILE preserving the attribute aspect ratio exactly —
+  // renderToTargetCanvas's viewport-crop math (and therefore framing) stays
+  // identical to the authored layout at any resolution or CSS box size.
+  private targetMeta = new WeakMap<HTMLCanvasElement, { w0: number; h0: number; lastW: number; lastH: number }>();
 
   private syncTargetBackingStore(targetCanvas: HTMLCanvasElement) {
     const cssW = targetCanvas.clientWidth;
     const cssH = targetCanvas.clientHeight;
-    // Hidden (display:none) canvases have no CSS box: keep the authored size.
+    // Hidden (display:none) canvases have no CSS box: keep the current size.
     if (cssW === 0 || cssH === 0) return;
 
     let meta = this.targetMeta.get(targetCanvas);
@@ -806,20 +803,23 @@ class SharedWav2LipWebGLCore {
       meta = {
         w0: targetCanvas.width,
         h0: targetCanvas.height,
-        cw0: cssW,
-        ch0: cssH,
         lastW: targetCanvas.width,
         lastH: targetCanvas.height,
       };
       this.targetMeta.set(targetCanvas, meta);
     }
+    if (!meta.w0 || !meta.h0) return;
 
-    const dpr = Math.min(
-      typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
-      2
-    );
-    const wantW = Math.round(cssW * dpr * (meta.w0 / meta.cw0));
-    const wantH = Math.round(cssH * dpr * (meta.h0 / meta.ch0));
+    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
+    // Scalar resolution factor applied to BOTH axes:
+    //  - ≥ dpr: the backing store always covers the CSS box at device pixels
+    //  - ≥ 1: never below the authored attribute size (no quality regression)
+    //  - follows the box when it outgrows the attributes (e.g. w-full studio)
+    // One scalar ⇒ authored aspect preserved exactly ⇒ object-cover framing
+    // in the CSS box is byte-identical to the unpatched behavior.
+    const k = dpr * Math.max(1, cssW / meta.w0, cssH / meta.h0);
+    const wantW = Math.round(meta.w0 * k);
+    const wantH = Math.round(meta.h0 * k);
     if (wantW > 0 && wantH > 0 && (targetCanvas.width !== wantW || targetCanvas.height !== wantH)) {
       targetCanvas.width = wantW;
       targetCanvas.height = wantH;
