@@ -1386,15 +1386,6 @@ async function synthesizeWithStudioNeuralHD(
 // Authentic Congolese & French phonetic adaptation for DRC Provinces, Capitals, Cities, Proper Nouns & Loanwords
 function normalizeCongoleseProperNounsServer(text: string): string {
   return text
-    // 0. Ensure any opening "Bonjour [Titre/Nom]..." has a warm French anchor so the multilingual model never uses an English accent at the start
-    .replace(
-      /^Bonjour\s+(Monsieur|Madame|Ingénieur|Professeur|Docteur|Maître|Son Excellence)\s+([^,.!?]+?)\s*(?:\.\.\.|…)\s*/i,
-      'Bonjour et bienvenue, $1 $2, '
-    )
-    .replace(
-      /^Bonjour\s+([A-ZÀÂÉÈÊËÎÏÔÙÛÇ][^,.!?]{2,35}?)\s*(?:\.\.\.|…)\s*/i,
-      'Bonjour et bienvenue, $1, '
-    )
     // Prevent any English-accented reading of first names or English loanwords at the start of sentences
     .replace(/\bLandry\b/gi, 'Landri')
     .replace(/\bstandstill\b/gi, 'délai de suspension')
@@ -1421,19 +1412,18 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bSud[\s-]+Kivu\b/gi, 'Sud-Kivou')
     .replace(/\bNord[\s-]+Ubangi\b/gi, 'Nord-Oubangui')
     .replace(/\bSud[\s-]+Ubangi\b/gi, 'Sud-Oubangui')
-    // 2. Single-word DRC Provinces & Historic Regions (authentic Congolese oral vowels & consonants)
-    .replace(/\bKinshasa\b/gi, 'Ki-nchassa')
-    .replace(/\bKinchassa\b/gi, 'Ki-nchassa')
-    .replace(/\bKasa[iï][\s-]+Vubu\b/gi, 'Kassa-Voubou')
+    // 2. Single-word DRC Provinces & Historic Regions
+    .replace(/\bKinshasa\b/gi, 'Kinshasa')
+    .replace(/\bKinchassa\b/gi, 'Kinshasa')
+    .replace(/\bKasa[iï][\s-]+Vubu\b/gi, 'Kasa-Vubu')
     .replace(/\bKasa[iï]\b/gi, 'Kassaï')
-    .replace(/\bKwilu\b/gi, 'Kouilou')
-    .replace(/\bKwilou\b/gi, 'Kouilou')
-    .replace(/\bKwango\b/gi, 'Kouango')
+    .replace(/\bKwilu\b/gi, 'Kwilu')
+    .replace(/\bKwango\b/gi, 'Kwango')
     .replace(/\bSankuru\b/gi, 'Sankourou')
     .replace(/\bManiema\b/gi, 'Maniéma')
     .replace(/\bIturi\b/gi, 'Itouri')
-    .replace(/\bTshopo\b/gi, 'Tchopo')
-    .replace(/\bTshuapa\b/gi, 'Tchouapa')
+    .replace(/\bTshopo\b/gi, 'Tshopo')
+    .replace(/\bTshuapa\b/gi, 'Tshuapa')
     .replace(/\bLualaba\b/gi, 'Loualaba')
     .replace(/\bLulua\b/gi, 'Louloua')
     .replace(/\bTanganyika\b/gi, 'Tanganyika')
@@ -1443,7 +1433,7 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bKivu\b/gi, 'Kivou')
     .replace(/\bBandundu\b/gi, 'Bandoundou')
     .replace(/\bKatanga\b/gi, 'Katanga')
-    // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities, Communes & Sites
+    // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities & Communes
     .replace(/\bLubumbashi\b/gi, 'Louboumbachi')
     .replace(/\bKisangani\b/gi, 'Kissangani')
     .replace(/\bBukavu\b/gi, 'Boukavou')
@@ -1461,8 +1451,8 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bTshikapa\b/gi, 'Tchikapa')
     .replace(/\bKikwit\b/gi, 'Kikouite')
     .replace(/\bKenge\b/gi, 'Kéngué')
-    .replace(/\bInongo\b/gi, 'I-nongo')
-    .replace(/\bInga\b/gi, 'I-nga')
+    .replace(/\bInongo\b/gi, 'Inongo')
+    .replace(/\bInga\b/gi, 'Inga')
     .replace(/\bBoende\b/gi, 'Boéndé')
     .replace(/\bGemena\b/gi, 'Guéména')
     .replace(/\bGbadolite\b/gi, 'Gbadolité')
@@ -1470,8 +1460,8 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bBumba\b/gi, 'Boumba')
     .replace(/\bIsiro\b/gi, 'Issiro')
     .replace(/\bBunia\b/gi, 'Bounia')
-    .replace(/\bKindu\b/gi, 'Kine dou')
-    .replace(/\bKindou\b/gi, 'Kine dou')
+    .replace(/\bKindu\b/gi, 'Kindou')
+    .replace(/\bKindou\b/gi, 'Kindou')
     .replace(/\bKalemie\b/gi, 'Kalémi')
     .replace(/\bKamina\b/gi, 'Kamina')
     .replace(/\bKabinda\b/gi, 'Kabinda')
@@ -1484,7 +1474,7 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bMuanda\b/gi, 'Mouanda')
     .replace(/\bMoanda\b/gi, 'Mouanda')
     .replace(/\bZongo\b/gi, 'Zongo')
-    .replace(/\bKimpese\b/gi, 'Kime-péssé')
+    .replace(/\bKimpese\b/gi, 'Kimpéssé')
     .replace(/\bGombe\b/gi, 'Gombé')
     .replace(/\bLukunga\b/gi, 'Loukounga')
     .replace(/\bFuna\b/gi, 'Founa')
@@ -1492,17 +1482,15 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bMasina\b/gi, 'Massina')
     .replace(/\bLimete\b/gi, 'Limété')
     .replace(/\bNgaliema\b/gi, 'Ngaliéma')
-    .replace(/\bKintambo\b/gi, 'Ki-ntambo')
-    .replace(/\bKinetambo\b/gi, 'Ki-ntambo')
+    .replace(/\bKintambo\b/gi, 'Kintambo')
     .replace(/\bBandalungwa\b/gi, 'Bandaloungoua')
-    .replace(/\bBandaloungwa\b/gi, 'Bandaloungoua')
-    .replace(/\bSelembao\b/gi, 'Sélémbao')
-    .replace(/\bKimbanseke\b/gi, 'Kime-banséké')
-    .replace(/\bKimbanséké\b/gi, 'Kime-banséké')
+        .replace(/\bSelembao\b/gi, 'Sélémbao')
+    .replace(/\bKimbanseke\b/gi, 'Kimbanséké')
+    .replace(/\bKimbanséké\b/gi, 'Kimbanséké')
     .replace(/\bMaluku\b/gi, 'Maloukou')
     .replace(/\bKalamu\b/gi, 'Kalamou')
     .replace(/\bBarumbu\b/gi, 'Baroumbou')
-    .replace(/\bLingwala\b/gi, 'Li-ngouala')
+    .replace(/\bLingwala\b/gi, 'Lingwala')
     .replace(/\bMatete\b/gi, 'Matété')
     .replace(/\bLemba\b/gi, 'Lémba')
     .replace(/\bNsele\b/gi, 'Nsélé')
