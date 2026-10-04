@@ -10,12 +10,18 @@ const rgb = fs.readFileSync('/tmp/sans_rgb.raw');
 
 // True anatomical detection per row
 function isWallLeft(r, g, b) {
-  return (b >= r + 7 && g >= r + 2) || (b >= 90 && b > g && g > r);
+  // Blue-dominance test with a low luma floor:
+  //  - lit wall (160,170,195), shadowed wall (95,127,150) → b-r >= 25 → wall ✓
+  //  - dark braids (40,45,60) and braid sheen (100,95,110) → b-r < 25 → NOT wall ✓
+  // Floor 170: the wall's dark base column dips to ~190 (44,68,80)=192 — must glide too.
+  // Braid darkness stays below (typical 145 < 170) and the b-r >= 25 test protects the rest.
+  if (r + g + b < 170) return false;
+  return (b >= r + 25 && g >= r + 2) || (b >= 90 && b > g && g > r);
 }
 
 function isBgRight(r, g, b, x, y) {
-  // Slate blue wall
-  if (b >= r + 7 && g >= r + 2) return true;
+  // Slate blue wall — blue-dominance (b-r >= 25) so dark braids near the right edge are never wall
+  if (r + g + b >= 170 && b >= r + 25 && g >= r + 2) return true;
   // Green plant foliage
   if (g > r + 5 && g > b + 2) return true;
   if (g > 65 && g > r && b < 85) return true;
@@ -45,14 +51,35 @@ for (let y = 0; y < H; y++) {
   // Scan left from center towards edge
   let left = 454;
   const startScanL = y < 550 ? 270 : (y < 680 ? 110 : 70);
+  // Below y=680 the subject is only the bright cream blazer (no braids/bun remain):
+  // the dark photo corner & shadow (sum < 300) is background by construction, so the
+  // scan must glide over it instead of stopping on the first dark pixel (kept-wall junk).
+  const isLeftBg = (rr, gg, bb) => (y >= 680 && rr + gg + bb < 300) || isWallLeft(rr, gg, bb);
   for (let x = startScanL; x < 454; x++) {
     const idx = (y * W + x) * 3;
     const r = rgb[idx], g = rgb[idx + 1], b = rgb[idx + 2];
-    if (!isWallLeft(r, g, b)) {
+    if (!isLeftBg(r, g, b)) {
       const idx1 = (y * W + x + 1) * 3;
       const idx2 = (y * W + x + 2) * 3;
-      if (!isWallLeft(rgb[idx1], rgb[idx1 + 1], rgb[idx1 + 2]) &&
-          !isWallLeft(rgb[idx2], rgb[idx2 + 1], rgb[idx2 + 2])) {
+      if (!isLeftBg(rgb[idx1], rgb[idx1 + 1], rgb[idx1 + 2]) &&
+          !isLeftBg(rgb[idx2], rgb[idx2 + 1], rgb[idx2 + 2])) {
+        // Bun band (y540-680): a thin dark hair wisp (sum < 240, weak blue dominance)
+        // reads as non-wall and stops the scan early, keeping a slab of wall with a
+        // pale feather outline. Measure the dark run: short (<40px) → glide past it;
+        // long → it's the solid bun → stop at its true outer edge.
+        const wispish = (rr, gg, bb) => rr + gg + bb < 240 && (bb - rr) < 25;
+        if (y >= 540 && y <= 680 && wispish(r, g, b)) {
+          let run = 0;
+          let xs = x;
+          while (xs < 454 && wispish(rgb[(y * W + xs) * 3], rgb[(y * W + xs) * 3 + 1], rgb[(y * W + xs) * 3 + 2])) {
+            run++;
+            xs++;
+          }
+          if (run > 0 && run < 40) {
+            x += run;
+            continue;
+          }
+        }
         left = x;
         break;
       }
@@ -77,8 +104,8 @@ for (let y = 0; y < H; y++) {
   }
 
   // Sanity bounds
-  if (y >= 151 && y <= 165) {
-    left = Math.max(400, Math.min(460, left));
+    if (y >= 151 && y <= 165) {
+      left = Math.max(350, Math.min(460, left));
     right = Math.min(525, Math.max(454, right));
   } else if (y <= 520) {
     left = Math.max(280, Math.min(400, left));
@@ -154,29 +181,11 @@ for (let y = 0; y < H; y++) {
     let g = rgb[rIdx + 1];
     let b = rgb[rIdx + 2];
 
-    if (a > 0) {
-      if (y < 540) {
-        // Head / hair: if pixel has wall tint (b > r + 3 or b > 55), completely replace with hair melanin!
-        if (b >= r + 3 || (b > 50 && r < 75)) {
-          r = 22; g = 22; b = 24;
-        } else if (a < 255) {
-          const blend = a / 255;
-          r = Math.round(r * blend + 22 * (1 - blend));
-          g = Math.round(g * blend + 22 * (1 - blend));
-          b = Math.round(b * blend + 24 * (1 - blend));
-        }
-      } else {
-        // Blazer / shoulders: if pixel has green plant tint or blue wall tint, completely replace with cream fabric!
-        if (g > r || b >= r + 2 || (g > 60 && r < 140)) {
-          r = 232; g = 226; b = 218;
-        } else if (a < 255) {
-          const blend = a / 255;
-          r = Math.round(r * blend + 232 * (1 - blend));
-          g = Math.round(g * blend + 226 * (1 - blend));
-          b = Math.round(b * blend + 218 * (1 - blend));
-        }
-      }
-    }
+    // No color repaint: keep the photo's true RGB and let the feathered alpha do the
+    // edge work. The previous repaint rules painted cream (232,226,218) over shadowed
+    // neck skin at full opacity (white holes y560-640) and left white step-lines on
+    // any wall block the scan kept (boundary blend, a < 250).
+    if (a > 0) { /* rgb copied through unchanged */ }
 
     const outIdx = idx * 4;
     rgba[outIdx] = r;
@@ -187,5 +196,9 @@ for (let y = 0; y < H; y++) {
 }
 
 fs.writeFileSync('/tmp/perfect_cutout.raw', rgba);
+// Safety: never lose the current app cutout when re-running this generator
+if (fs.existsSync('src/assets/images/aisha_cutout_foreground.png')) {
+  fs.copyFileSync('src/assets/images/aisha_cutout_foreground.png', '/tmp/aisha_cutout_foreground.prev.png');
+}
 execSync('convert -size 896x1200 -depth 8 rgba:/tmp/perfect_cutout.raw src/assets/images/aisha_cutout_foreground.png');
-console.log('Re-generated src/assets/images/aisha_cutout_foreground.png!');
+console.log('Re-generated src/assets/images/aisha_cutout_foreground.png! (previous saved to /tmp/aisha_cutout_foreground.prev.png)');
