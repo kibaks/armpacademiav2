@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import {
@@ -934,6 +935,54 @@ interface CachedTtsPayload {
 
 // In-memory cache, in-flight deduplication & rate-limit guard for Neural TTS
 const ttsMemoryCache = new Map<string, CachedTtsPayload>();
+
+// Persistent disk cache: the dev server is restarted often (and hosts restart
+// too). Without it every restart re-synthesizes everything — burning ElevenLabs
+// free-tier quota AND silently switching voices mid-course (Rachel -> edge-tts).
+const ttsDiskDir = path.join(process.cwd(), '.tts-cache');
+const TTS_DISK_MAX_ENTRIES = 400;
+
+function loadTtsFromDisk(cacheKey: string): CachedTtsPayload | null {
+  try {
+    const id = crypto.createHash('sha1').update(cacheKey).digest('hex');
+    const metaP = path.join(ttsDiskDir, `${id}.json`);
+    const audioP = path.join(ttsDiskDir, `${id}.bin`);
+    if (!fs.existsSync(metaP) || !fs.existsSync(audioP)) return null;
+    const meta = JSON.parse(fs.readFileSync(metaP, 'utf8'));
+    const audio = fs.readFileSync(audioP).toString('base64');
+    return { ...meta, audioData: audio };
+  } catch {
+    return null;
+  }
+}
+
+function saveTtsToDisk(cacheKey: string, payload: CachedTtsPayload): void {
+  try {
+    fs.mkdirSync(ttsDiskDir, { recursive: true });
+    const id = crypto.createHash('sha1').update(cacheKey).digest('hex');
+    const { audioData, ...meta } = payload;
+    fs.writeFileSync(path.join(ttsDiskDir, `${id}.json`), JSON.stringify(meta));
+    fs.writeFileSync(path.join(ttsDiskDir, `${id}.bin`), Buffer.from(audioData, 'base64'));
+    const entries = fs
+      .readdirSync(ttsDiskDir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => ({ f, m: fs.statSync(path.join(ttsDiskDir, f)).mtimeMs }))
+      .sort((a, b) => a.m - b.m);
+    while (entries.length > TTS_DISK_MAX_ENTRIES) {
+      const victim = entries.shift();
+      if (!victim) break;
+      const base = victim.f.replace(/\.json$/, '');
+      try {
+        fs.unlinkSync(path.join(ttsDiskDir, `${base}.json`));
+        fs.unlinkSync(path.join(ttsDiskDir, `${base}.bin`));
+      } catch {
+        // ignore prune failure
+      }
+    }
+  } catch {
+    // disk cache is best-effort — never fail synthesis because of it
+  }
+}
 const inFlightServerTts = new Map<string, Promise<CachedTtsPayload | null>>();
 let geminiTtsCooldownUntil = 0;
 
@@ -1002,19 +1051,22 @@ function elevenLabsExpressiveSettings(emotion?: string): {
   use_speaker_boost: boolean;
 } {
   const base = { similarity_boost: 0.86, use_speaker_boost: true };
+  // Deliberately narrow band (0.46..0.74): enough expressivity for breaths,
+  // exclamations and astonished lifts without jarring style jumps between
+  // consecutive sentences of the same reply.
   switch ((emotion || '').toLowerCase()) {
     case 'enthusiastic':
-      return { ...base, stability: 0.45, style: 0.78 }; // exclamations, bright energy
+      return { ...base, stability: 0.46, style: 0.74 }; // exclamations, bright energy
     case 'smiling':
-      return { ...base, stability: 0.48, style: 0.72 }; // warm smile in the voice + breaths
+      return { ...base, stability: 0.48, style: 0.7 }; // warm smile in the voice + breaths
     case 'curious':
-      return { ...base, stability: 0.46, style: 0.75 }; // étonnement / questioning lift
+      return { ...base, stability: 0.47, style: 0.72 }; // étonnement / questioning lift
     case 'encouraging':
-      return { ...base, stability: 0.5, style: 0.7 };
+      return { ...base, stability: 0.5, style: 0.68 };
     case 'empathetic':
-      return { ...base, stability: 0.52, style: 0.62 };
+      return { ...base, stability: 0.52, style: 0.64 };
     case 'solemn':
-      return { ...base, stability: 0.62, style: 0.4 }; // controlled gravity on legal warnings
+      return { ...base, stability: 0.58, style: 0.46 }; // controlled gravity on legal warnings
     default:
       return { ...base, stability: 0.52, style: 0.66 };
   }
@@ -1111,13 +1163,39 @@ async function synthesizeWithElevenLabs(
   }
 }
 
-// Monthly character budget for ElevenLabs: the provided key is on the free tier
-// (10 000 chars / month). We reserve ~1000 chars of headroom and let bulk lesson
-// content fall back to edge-tts HD. Resets locally on calendar-month rollover;
-// if ElevenLabs itself replies 429 the function fails open to the same fallback.
-const ELEVENLABS_MONTHLY_CHAR_BUDGET = 9000;
-let elevenBudgetMonth = new Date().getMonth();
-let elevenBudgetUsed = 0;
+// ElevenLabs budget = real-time truth from the subscription API (free tier:
+// 10 000 chars/month). Local counter only as fallback when that call fails.
+// Circuit breaker: after 3 consecutive failures pause EL for 10 minutes so
+// sentences never stall behind a dead endpoint — they go straight to edge-tts.
+const ELEVENLABS_MONTHLY_CHAR_BUDGET = Number(process.env.ELEVENLABS_CHAR_BUDGET || 9600);
+let elevenUsedChars: number | null = null;
+let elevenUsedCharsAt = 0;
+let elevenLocalUsed = 0;
+let elevenConsecutiveFails = 0;
+let elevenDownUntil = 0;
+
+async function getElevenUsedChars(): Promise<number> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return Number.MAX_SAFE_INTEGER;
+  if (elevenUsedChars !== null && Date.now() - elevenUsedCharsAt < 600_000) {
+    return elevenUsedChars;
+  }
+  try {
+    const r = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+      headers: { 'xi-api-key': apiKey },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (r.ok) {
+      const d: any = await r.json();
+      elevenUsedChars = Number(d.character_count || 0);
+      elevenUsedCharsAt = Date.now();
+      return elevenUsedChars;
+    }
+  } catch {
+    // fall through to local counter
+  }
+  return elevenUsedChars !== null ? elevenUsedChars : elevenLocalUsed;
+}
 
 async function synthesizeWithElevenLabsBudgeted(
   text: string,
@@ -1125,14 +1203,31 @@ async function synthesizeWithElevenLabsBudgeted(
   emotion?: string
 ): Promise<CachedTtsPayload | null> {
   if (!process.env.ELEVENLABS_API_KEY) return null;
-  const m = new Date().getMonth();
-  if (m !== elevenBudgetMonth) {
-    elevenBudgetMonth = m;
-    elevenBudgetUsed = 0;
+  if (Date.now() < elevenDownUntil) return null;
+
+  const used = await getElevenUsedChars();
+  if (used + text.length + 400 > ELEVENLABS_MONTHLY_CHAR_BUDGET) return null;
+
+  let result = await synthesizeWithElevenLabs(text, requestedVoice, emotion);
+  if (!result) {
+    // one quick retry for transient failures (network flap / 5xx)
+    await new Promise((r) => setTimeout(r, 250));
+    result = await synthesizeWithElevenLabs(text, requestedVoice, emotion);
   }
-  if (elevenBudgetUsed + text.length > ELEVENLABS_MONTHLY_CHAR_BUDGET) return null;
-  const result = await synthesizeWithElevenLabs(text, requestedVoice, emotion);
-  if (result) elevenBudgetUsed += text.length;
+
+  if (result) {
+    elevenLocalUsed += text.length;
+    elevenUsedChars = (elevenUsedChars ?? 0) + text.length;
+    elevenUsedCharsAt = Date.now();
+    elevenConsecutiveFails = 0;
+  } else if (elevenDownUntil === 0 || Date.now() >= elevenDownUntil) {
+    elevenConsecutiveFails += 1;
+    if (elevenConsecutiveFails >= 3) {
+      elevenDownUntil = Date.now() + 600_000;
+      elevenConsecutiveFails = 0;
+      console.warn('[TTS] ElevenLabs circuit open — 10 min of edge-tts HD only');
+    }
+  }
   return result;
 }
 
@@ -1463,8 +1558,11 @@ async function getOrSynthesizeTtsPayload(
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
   const cacheKey = `prof_vivienne_smile_v24::${voiceKey}::${emoKey}::${cleanText}`;
-  const cached = ttsMemoryCache.get(cacheKey);
-  if (cached) return cached;
+  const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
+  if (cached) {
+    ttsMemoryCache.set(cacheKey, cached);
+    return cached;
+  }
 
   const inFlight = inFlightServerTts.get(cacheKey);
   if (inFlight) return inFlight;
@@ -1485,6 +1583,7 @@ async function getOrSynthesizeTtsPayload(
           if (firstKey) ttsMemoryCache.delete(firstKey);
         }
         ttsMemoryCache.set(cacheKey, enrichedPayload);
+        saveTtsToDisk(cacheKey, enrichedPayload);
         return enrichedPayload;
       };
 

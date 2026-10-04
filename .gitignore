@@ -6,5 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+.tts-cache/
 package-lock.json
 tools/preview/

@@ -1590,7 +1590,9 @@ class SpeechService {
 
     const fetchPromise = (async (): Promise<DecodedNeuralEntry | null> => {
       try {
-        for (let attempt = 0; attempt < 2; attempt++) {
+        // 4 attempts with backoff: bridges brief API restarts (the dev server
+        // restarts often) instead of instantly dropping to robotic web-speech.
+        for (let attempt = 0; attempt < 4; attempt++) {
           try {
             const controller = new AbortController();
             const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -1666,8 +1668,9 @@ class SpeechService {
           } catch {
             // Transient fetch hiccup, retry once
           }
-          if (attempt === 0) {
-            await new Promise((r) => window.setTimeout(r, 180));
+          if (attempt < 3) {
+            // exponential-ish backoff: 250 / 500 / 1000 ms
+            await new Promise((r) => window.setTimeout(r, 250 * 2 ** attempt));
           }
         }
         return null;
