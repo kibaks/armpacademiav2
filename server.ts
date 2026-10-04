@@ -1351,17 +1351,18 @@ function humanizeTextForNaturalEloquenceServer(text: string): string {
   );
 }
 
-// Reference voice synthesis: fr-FR-VivienneMultilingualNeural with natural +0% rate and +0Hz pitch
+// Fallback synthesis when ElevenLabs is unavailable/out of quota.
+// Native French first: fr-FR-DeniseNeural is warmer and accent-free in French
+// than the multilingual port; Vivienne (multi then mono) stays behind it.
 async function synthesizeWithStudioNeuralHD(
   text: string,
   _voiceOption?: string,
   _emotionOption?: string
 ): Promise<CachedTtsPayload | null> {
-  // Always prioritize the exact reference voice: fr-FR-VivienneMultilingualNeural
   const candidateVoices: Array<{ voice: string; tag: CachedTtsPayload['provider'] }> = [
-    { voice: 'fr-FR-VivienneMultilingualNeural', tag: 'neural-vivienne-hd' },
-    { voice: 'fr-FR-VivienneMultilingualNeural', tag: 'neural-vivienne-hd' },
     { voice: 'fr-FR-DeniseNeural', tag: 'neural-denise-hd' },
+    { voice: 'fr-FR-VivienneMultilingualNeural', tag: 'neural-vivienne-hd' },
+    { voice: 'fr-FR-VivienneNeural', tag: 'neural-vivienne-hd' },
   ];
 
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
