@@ -9,6 +9,7 @@
 // 4. 100% Natural Photographic Inlay (zero synthetic lip lines or painted teeth overlays).
 
 import { avatarKalmanSmoother } from '../utils/kalmanMotionFilter';
+import { avatarProceduralEngine } from '../utils/avatarProceduralEngagement';
 import {
   type MicroGestureId,
   type TtsEmotionalTag,
@@ -1374,10 +1375,9 @@ export function stepAvatarExpressionFrame(
   pose.lastNowMs = nowMs;
   const dtScale = dtMs / 16.67;
 
-  // Low-pass filter the 200Hz acoustic RMS envelope so 5ms unvoiced consonant dips (t, k, s)
-  // never cause the lips to flutter/stammer ("balbutier") mid-word!
+  // Fast, responsive acoustic RMS envelope for instantaneous French syllabic tracking
   const rawRms = Math.max(0, acousticRms);
-  const rmsRate = rawRms > pose.smoothRms ? Math.min(0.42, 0.30 * dtScale) : Math.min(0.18, 0.12 * dtScale);
+  const rmsRate = rawRms > pose.smoothRms ? Math.min(0.85, 0.70 * dtScale) : Math.min(0.60, 0.45 * dtScale);
   pose.smoothRms += (rawRms - pose.smoothRms) * rmsRate;
 
   const REST_OPEN = 0.04;
@@ -1500,22 +1500,36 @@ export function stepAvatarExpressionFrame(
   const dtSec = dtMs / 1000.0;
   pose.rawOpen = targetOpen;
   pose.open = avatarKalmanSmoother.mouthOpen.update(targetOpen, dtSec);
-  if (!isSpeaking && Math.abs(pose.open - REST_OPEN) < 0.004) {
+  if (targetOpen <= 0.045 && pose.open <= 0.075) {
+    pose.open = targetOpen; // Snappy crisp closure on consonants & pauses
+  } else if (!isSpeaking && Math.abs(pose.open - REST_OPEN) < 0.02) {
     pose.open = REST_OPEN;
   }
+  pose.open = Math.max(0, Math.min(1.0, pose.open));
 
   pose.roundness = Math.max(0, Math.min(1, avatarKalmanSmoother.mouthRound.update(targetRoundness, dtSec)));
   pose.spread = Math.max(0, Math.min(1, avatarKalmanSmoother.mouthSpread.update(targetSpread, dtSec)));
-  const lipRate = Math.min(0.56, 0.44 * dtScale);
+  const lipRate = Math.min(0.85, 0.72 * dtScale);
   pose.upperLipLift += (targetUpperLipLift - pose.upperLipLift) * lipRate;
   pose.tongueLift = Math.max(0, Math.min(1, avatarKalmanSmoother.tongueLift.update(targetTongueLift, dtSec)));
 
   const targetWidth = 1.0 - pose.roundness * 0.11 + pose.spread * 0.042;
   pose.widthFactor += (targetWidth - pose.widthFactor) * lipRate;
 
-  const { targetBlinkLeft, targetBlinkRight } = computeBlinkAndWink(nowMs, isSpeaking, emotion);
-  pose.blinkLeft += (targetBlinkLeft - pose.blinkLeft) * 0.45;
-  pose.blinkRight += (targetBlinkRight - pose.blinkRight) * 0.45;
+  // Evaluate procedural human engagement (stochastic bio-blinking, micro-saccades, attentive head-tilts, Lissajous sway, breathing)
+  const procedural = avatarProceduralEngine.step(
+    nowMs,
+    dtSec,
+    isSpeaking,
+    emotion,
+    pose.smoothRms,
+    pose.turn,
+    pose.nod,
+    pose.tilt
+  );
+
+  pose.blinkLeft += (procedural.blinkLeft - pose.blinkLeft) * 0.72;
+  pose.blinkRight += (procedural.blinkRight - pose.blinkRight) * 0.72;
 
   // ============================================================================
   // ULTRA-FLUID, C²-CONTINUOUS 3D HEAD & PROSODIC INTONATION KINEMATICS
@@ -1664,16 +1678,16 @@ export function stepAvatarExpressionFrame(
   );
 
   const targetTilt = Math.max(
-    -5.6,
-    Math.min(5.6, baseTilt + gestureTilt + microGesture.tiltOffsetDeg)
+    -2.8,
+    Math.min(2.8, (baseTilt + gestureTilt + microGesture.tiltOffsetDeg + procedural.proceduralTiltDeg) * 0.65)
   );
   const targetNod = Math.max(
-    -8.5,
-    Math.min(10.2, baseNod + gestureNod + microGesture.nodOffsetPx)
+    -5.8,
+    Math.min(7.2, (baseNod + gestureNod + microGesture.nodOffsetPx + procedural.proceduralNodPx) * 0.75)
   );
   const targetTurn = Math.max(
-    -9.2,
-    Math.min(9.2, baseTurn + gestureTurn + microGesture.turnOffsetPx)
+    -7.2,
+    Math.min(7.2, (baseTurn + gestureTurn + microGesture.turnOffsetPx + procedural.proceduralTurnPx) * 0.75)
   );
 
   // State-Space Kalman Temporal Smoothing for 3D Head Kinematics (eliminates all saccades & jitter)
@@ -1812,7 +1826,7 @@ export function stepAvatarExpressionFrame(
   const activeVisemeLabel = VISEME_6_LABELS[activeVisemeNumber];
 
   // Eyelid widening ('eyeWide') on astonishment, inquisitive intonation, and vocal pitch peaks
-  const targetEyeWide = isSpeaking
+  const targetEyeWide = (isSpeaking
     ? Math.min(
         1.0,
         Math.max(0, pose.intonation - 0.30) * 0.85 +
@@ -1822,7 +1836,7 @@ export function stepAvatarExpressionFrame(
           (emotion === 'astonished' ? 0.55 : emotion === 'curious' ? 0.30 : 0.12)
       )
     : (emotion === 'astonished' ? 0.62 : emotion === 'curious' ? 0.28 : 0.16) +
-      Math.sin(nowMs * 0.0010) * 0.10;
+      Math.sin(nowMs * 0.0010) * 0.10) + procedural.eyeWideMod;
   pose.eyeWide += (targetEyeWide - pose.eyeWide) * Math.min(0.22, 0.15 * dtScale);
 
   // Bilateral zygomaticus cheek & nasolabial animation ('cheekLift')
@@ -1890,17 +1904,9 @@ export function stepAvatarExpressionFrame(
     : Math.min(1.0, 0.34 + pose.smile * 0.66 + Math.sin(nowMs * 0.00095) * 0.08);
   pose.cheekLift = avatarKalmanSmoother.cheekLift.update(targetCheekLift, dtSec);
 
-  const gazeX =
-    Math.sin(nowMs * 0.00115) * 1.85 +
-    Math.cos(nowMs * 0.0022) * 0.85 +
-    pose.turn * 0.26;
-  const gazeY =
-    Math.sin(nowMs * 0.00095) * 1.05 +
-    Math.cos(nowMs * 0.0017) * 0.48 +
-    pose.nod * 0.20 -
-    pose.eyeWide * 0.60;
-  const breathY =
-    Math.sin(nowMs * 0.00185) * (isSpeaking ? 2.6 + pose.intonation * 1.2 : 1.85);
+  const gazeX = procedural.gazeX;
+  const gazeY = procedural.gazeY;
+  const breathY = procedural.breathY;
 
   // Full-Image Upper-Body, Shoulder & Independent Bilateral Hand Kinematics ("animer toute l'image, les mains")
   const syllableBeat = isSpeaking
@@ -1911,7 +1917,7 @@ export function stepAvatarExpressionFrame(
     : Math.cos(nowMs * 0.0015) * 0.25;
 
   const targetTorsoSwayX =
-    (isSpeaking ? Math.sin(nowMs * 0.00125) * 3.0 : Math.sin(nowMs * 0.00085) * 1.4) +
+    procedural.torsoSwayX +
     pose.turn * 0.22 +
     microGesture.torsoSwayDx;
   const baseShoulderBreathLift =
@@ -1931,50 +1937,11 @@ export function stepAvatarExpressionFrame(
   pose.collarY = avatarKalmanSmoother.collarLift.update(targetCollarLift, dtSec);
   pose.shoulderY = (pose.leftShoulderY + pose.rightShoulderY) * 0.5;
 
-  // Expressive Left Hand (x=176..430, y=800..960) & Right Hand (x=430..728, y=780..950)
-  const targetLeftHandDx =
-    pose.shoulderX * 1.15 -
-    pose.pWelcome * 10.5 -
-    pose.pTeaching * (6.5 + syllableBeat * 7.5) +
-    pose.pReflection * 6.0 -
-    pose.pAstonished * 8.0 +
-    pose.pEncouragement * 4.5 +
-    counterBeat * (isSpeaking ? 6.2 : 2.2);
-
-  const targetLeftHandDy =
-    pose.shoulderY * 1.1 -
-    (isSpeaking ? pose.open * 10.5 + pose.intonation * 7.5 : 0) -
-    pose.pWelcome * 8.5 -
-    pose.pTeaching * (8.0 + Math.abs(syllableBeat) * 8.5) -
-    pose.pAstonished * 13.5 -
-    pose.pReflection * 7.5 -
-    pose.pEncouragement * 6.5 +
-    syllableBeat * (isSpeaking ? 7.4 : 2.4);
-
-  const targetRightHandDx =
-    pose.shoulderX * 1.15 +
-    pose.pWelcome * (11.5 + syllableBeat * 6.5) +
-    pose.pTeaching * (7.5 + counterBeat * 8.2) -
-    pose.pReflection * 7.5 +
-    pose.pAstonished * 8.5 -
-    pose.pEncouragement * 5.0 +
-    syllableBeat * (isSpeaking ? 6.8 : 2.4);
-
-  const targetRightHandDy =
-    pose.shoulderY * 1.1 -
-    (isSpeaking ? pose.open * 12.0 + pose.intonation * 8.5 : 0) -
-    pose.pWelcome * (10.5 + Math.abs(counterBeat) * 6.0) -
-    pose.pTeaching * (9.5 + Math.abs(counterBeat) * 9.0) -
-    pose.pAstonished * 14.5 -
-    pose.pReflection * 11.0 -
-    pose.pEncouragement * 8.0 +
-    counterBeat * (isSpeaking ? 8.2 : 2.6);
-
-  const handRate = Math.min(0.24, 0.16 * dtScale);
-  pose.leftHandDx += (targetLeftHandDx - pose.leftHandDx) * handRate;
-  pose.leftHandDy += (targetLeftHandDy - pose.leftHandDy) * handRate;
-  pose.rightHandDx += (targetRightHandDx - pose.rightHandDx) * handRate;
-  pose.rightHandDy += (targetRightHandDy - pose.rightHandDy) * handRate;
+  // Natural posture without hands ("sans main"): zero hand offsets
+  pose.leftHandDx = 0;
+  pose.leftHandDy = 0;
+  pose.rightHandDx = 0;
+  pose.rightHandDy = 0;
 
   const activeBadgeLabel =
     microGesture.activeLabel
@@ -2168,10 +2135,10 @@ export function stepAvatarExpressionFrame(
     torsoSwayX: pose.shoulderX,
     activeMicroGestureTag: microGesture.activeTag,
     activeMicroGestureLabel: microGesture.activeLabel,
-    leftHandDx: pose.leftHandDx,
-    leftHandDy: pose.leftHandDy,
-    rightHandDx: pose.rightHandDx,
-    rightHandDy: pose.rightHandDy,
+    leftHandDx: 0,
+    leftHandDy: 0,
+    rightHandDx: 0,
+    rightHandDy: 0,
     cavTopYs,
     cavBotYs,
     activeVisemeNumber,

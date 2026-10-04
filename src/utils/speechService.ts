@@ -502,7 +502,7 @@ class SpeechService {
     forceQueue?: boolean;
     customSentences?: string[];
   };
-  private preferredPersona: NeuralVoicePersona = 'vivienne';
+  private preferredPersona: NeuralVoicePersona = 'denise';
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private cadenceTimer: number | null = null;
   private lastBoundaryCharIndex = 0;
@@ -534,7 +534,7 @@ class SpeechService {
     isLoading: false,
     currentId: null,
     source: 'none',
-    voiceProvider: 'neural-vivienne-hd',
+    voiceProvider: 'neural-denise-hd',
     currentSentence: 0,
     totalSentences: 0,
     wordProgressPct: 0,
@@ -973,18 +973,8 @@ class SpeechService {
   }
 
   // Authentic Congolese phonetic adaptation for the 26 DRC Provinces, Capitals, Cities & Proper Nouns
-  // Prevents metropolitan French TTS accent traps (French /y/ for 'u', voiced /z/ for single 's', nasal 'in'/'un', silent final '-e', soft 'g', or English 'w')
   public normalizeCongoleseProperNounsForSpeech(text: string): string {
     return text
-      // 0. Ensure any opening "Bonjour [Titre/Nom]..." has a warm French anchor so the multilingual model never uses an English accent at the start
-      .replace(
-        /^Bonjour\s+(Monsieur|Madame|Ingénieur|Professeur|Docteur|Maître|Son Excellence)\s+([^,.!?]+?)\s*(?:\.\.\.|…)\s*/i,
-        'Bonjour et bienvenue, $1 $2, '
-      )
-      .replace(
-        /^Bonjour\s+([A-ZÀÂÉÈÊËÎÏÔÙÛÇ][^,.!?]{2,35}?)\s*(?:\.\.\.|…)\s*/i,
-        'Bonjour et bienvenue, $1, '
-      )
       // Prevent any English-accented reading of first names (e.g. "Landry") or English loanwords at the start of sentences
       .replace(/\bLandry\b/gi, 'Landri')
       .replace(/\bstandstill\b/gi, 'délai de suspension')
@@ -1011,19 +1001,18 @@ class SpeechService {
       .replace(/\bSud[\s-]+Kivu\b/gi, 'Sud-Kivou')
       .replace(/\bNord[\s-]+Ubangi\b/gi, 'Nord-Oubangui')
       .replace(/\bSud[\s-]+Ubangi\b/gi, 'Sud-Oubangui')
-      // 2. Single-word DRC Provinces & Historic Regions (authentic Congolese oral vowels & consonants)
-      .replace(/\bKinshasa\b/gi, 'Ki-nchassa')
-      .replace(/\bKinchassa\b/gi, 'Ki-nchassa')
-      .replace(/\bKasa[iï][\s-]+Vubu\b/gi, 'Kassa-Voubou')
+      // 2. Single-word DRC Provinces & Historic Regions
+      .replace(/\bKinshasa\b/gi, 'Kinshasa')
+      .replace(/\bKinchassa\b/gi, 'Kinshasa')
+      .replace(/\bKasa[iï][\s-]+Vubu\b/gi, 'Kasa-Vubu')
       .replace(/\bKasa[iï]\b/gi, 'Kassaï')
-      .replace(/\bKwilu\b/gi, 'Kouilou')
-      .replace(/\bKwilou\b/gi, 'Kouilou')
-      .replace(/\bKwango\b/gi, 'Kouango')
+      .replace(/\bKwilu\b/gi, 'Kwilu')
+      .replace(/\bKwango\b/gi, 'Kwango')
       .replace(/\bSankuru\b/gi, 'Sankourou')
       .replace(/\bManiema\b/gi, 'Maniéma')
       .replace(/\bIturi\b/gi, 'Itouri')
-      .replace(/\bTshopo\b/gi, 'Tchopo')
-      .replace(/\bTshuapa\b/gi, 'Tchouapa')
+      .replace(/\bTshopo\b/gi, 'Tshopo')
+      .replace(/\bTshuapa\b/gi, 'Tshuapa')
       .replace(/\bLualaba\b/gi, 'Loualaba')
       .replace(/\bLulua\b/gi, 'Louloua')
       .replace(/\bTanganyika\b/gi, 'Tanganyika')
@@ -1033,7 +1022,7 @@ class SpeechService {
       .replace(/\bKivu\b/gi, 'Kivou')
       .replace(/\bBandundu\b/gi, 'Bandoundou')
       .replace(/\bKatanga\b/gi, 'Katanga')
-      // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities, Communes & Districts
+      // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities & Communes
       .replace(/\bLubumbashi\b/gi, 'Louboumbachi')
       .replace(/\bKisangani\b/gi, 'Kissangani')
       .replace(/\bBukavu\b/gi, 'Boukavou')
@@ -1051,8 +1040,8 @@ class SpeechService {
       .replace(/\bTshikapa\b/gi, 'Tchikapa')
       .replace(/\bKikwit\b/gi, 'Kikouite')
       .replace(/\bKenge\b/gi, 'Kéngué')
-      .replace(/\bInongo\b/gi, 'I-nongo')
-      .replace(/\bInga\b/gi, 'I-nga')
+      .replace(/\bInongo\b/gi, 'Inongo')
+      .replace(/\bInga\b/gi, 'Inga')
       .replace(/\bBoende\b/gi, 'Boéndé')
       .replace(/\bGemena\b/gi, 'Guéména')
       .replace(/\bGbadolite\b/gi, 'Gbadolité')
@@ -1060,8 +1049,8 @@ class SpeechService {
       .replace(/\bBumba\b/gi, 'Boumba')
       .replace(/\bIsiro\b/gi, 'Issiro')
       .replace(/\bBunia\b/gi, 'Bounia')
-      .replace(/\bKindu\b/gi, 'Kine dou')
-      .replace(/\bKindou\b/gi, 'Kine dou')
+      .replace(/\bKindu\b/gi, 'Kindou')
+      .replace(/\bKindou\b/gi, 'Kindou')
       .replace(/\bKalemie\b/gi, 'Kalémi')
       .replace(/\bKamina\b/gi, 'Kamina')
       .replace(/\bKabinda\b/gi, 'Kabinda')
@@ -1074,7 +1063,7 @@ class SpeechService {
       .replace(/\bMuanda\b/gi, 'Mouanda')
       .replace(/\bMoanda\b/gi, 'Mouanda')
       .replace(/\bZongo\b/gi, 'Zongo')
-      .replace(/\bKimpese\b/gi, 'Kime-péssé')
+      .replace(/\bKimpese\b/gi, 'Kimpéssé')
       .replace(/\bGombe\b/gi, 'Gombé')
       .replace(/\bLukunga\b/gi, 'Loukounga')
       .replace(/\bFuna\b/gi, 'Founa')
@@ -1082,17 +1071,15 @@ class SpeechService {
       .replace(/\bMasina\b/gi, 'Massina')
       .replace(/\bLimete\b/gi, 'Limété')
       .replace(/\bNgaliema\b/gi, 'Ngaliéma')
-      .replace(/\bKintambo\b/gi, 'Ki-ntambo')
-      .replace(/\bKinetambo\b/gi, 'Ki-ntambo')
+      .replace(/\bKintambo\b/gi, 'Kintambo')
       .replace(/\bBandalungwa\b/gi, 'Bandaloungoua')
-      .replace(/\bBandaloungwa\b/gi, 'Bandaloungoua')
       .replace(/\bSelembao\b/gi, 'Sélémbao')
-      .replace(/\bKimbanseke\b/gi, 'Kime-banséké')
-      .replace(/\bKimbanséké\b/gi, 'Kime-banséké')
+      .replace(/\bKimbanseke\b/gi, 'Kimbanséké')
+      .replace(/\bKimbanséké\b/gi, 'Kimbanséké')
       .replace(/\bMaluku\b/gi, 'Maloukou')
       .replace(/\bKalamu\b/gi, 'Kalamou')
       .replace(/\bBarumbu\b/gi, 'Baroumbou')
-      .replace(/\bLingwala\b/gi, 'Li-ngouala')
+      .replace(/\bLingwala\b/gi, 'Lingwala')
       .replace(/\bMatete\b/gi, 'Matété')
       .replace(/\bLemba\b/gi, 'Lémba')
       .replace(/\bNsele\b/gi, 'Nsélé')
@@ -1450,10 +1437,12 @@ class SpeechService {
           }
         }
 
+        const phoneme = analyzeFrenchPhonemeAt(sentence, leadCharIdx, streamElapsedMs);
         if (currentWb && boostedRms > 0.018) {
           activeWord = currentWb.text;
-          mouthOpenness = Math.min(1, boostedRms * 0.9 + 0.18);
-          viseme = mouthOpenness < 0.04 ? 'closed' : 'open';
+          const phonemeScale = phoneme.viseme === 'closed' ? 0.0 : (phoneme.mouthOpenness || 0.65);
+          mouthOpenness = Math.min(1, Math.max(0.12, boostedRms * 0.84 + 0.14) * (0.35 + phonemeScale * 0.65));
+          viseme = phoneme.viseme || (mouthOpenness < 0.04 ? 'closed' : 'open');
           isPauseBetweenWords = false;
         } else {
           isPauseBetweenWords = true;
@@ -1581,7 +1570,7 @@ class SpeechService {
     timeoutMs: number = 18000
   ): Promise<DecodedNeuralEntry | null> {
     if (!this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `prof_vivienne_smile_v24::${voice}::${sentence}`;
+    const cacheKey = `aisha_human_voice_v3::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1866,9 +1855,9 @@ class SpeechService {
     const voiceName = this.currentOptions?.voice || this.preferredPersona;
     const userSpeed = this.currentOptions?.speed || 1.0;
 
-    // 1. Primary: Reference Expressive Neural Voice (fr-FR-VivienneMultilingualNeural)
+    // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if (this.neuralTtsAvailable) {
-      const cacheKey = `prof_vivienne_smile_v24::${voiceName}::${sentence}`;
+      const cacheKey = `aisha_human_voice_v3::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -2194,13 +2183,16 @@ class SpeechService {
                 }
               }
 
+              const phoneme = analyzeFrenchPhonemeAt(sentence, leadCharIdx, streamElapsedMs);
               this.state = {
                 ...this.state,
                 charIndex: leadCharIdx,
                 wordProgressPct: Math.min(100, Math.round(leadRatio * 100)),
                 currentWord: activeWord,
-                mouthOpenness: isPauseBetweenWords ? 0 : 0.48,
-                viseme: isPauseBetweenWords ? 'closed' : 'open',
+                mouthOpenness: isPauseBetweenWords ? 0 : (phoneme.mouthOpenness || 0.48),
+                viseme: isPauseBetweenWords ? 'closed' : phoneme.viseme,
+                eyebrowLift: phoneme.eyebrowLift,
+                smileIntensity: phoneme.smileIntensity,
                 isPauseBetweenWords,
               };
               this.notify(false);

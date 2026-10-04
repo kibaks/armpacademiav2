@@ -166,8 +166,8 @@ const NUM_TRIS = (NUM_ROWS - 1) * (NUM_COLS - 1) * 2; // 648 triangles
 const GL_VERTS = new Float32Array(NUM_TRIS * 3 * 4);
 
 function deformMeshForFrame(frame: AvatarComputedFrame) {
-  // Expressive feminine head inclination ('tilt' up to ±5.2 deg) around cervical pivot (454, 538)
-  const clampedTiltDeg = Math.max(-5.2, Math.min(5.2, frame.tilt || 0));
+  // Expressive feminine head inclination ('tilt' up to ±2.8 deg) around cervical pivot (454, 538)
+  const clampedTiltDeg = Math.max(-2.8, Math.min(2.8, frame.tilt || 0));
   const tiltRad = (clampedTiltDeg * Math.PI) / 180.0;
   const cosT = Math.cos(tiltRad);
   const sinT = Math.sin(tiltRad);
@@ -186,6 +186,7 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
   const rightShoulderLift = frame.rightShoulderLift ?? frame.shoulderLift ?? 0;
   const collarLift = frame.collarLift ?? (leftShoulderLift + rightShoulderLift) * 0.38;
   const torsoSwayX = frame.torsoSwayX ?? 0;
+  const breathY = frame.breathY ?? 0;
 
   const closeRatio = open <= REST_OPEN ? 1 - open / REST_OPEN : 0;
   const openRatio = open > REST_OPEN ? (open - REST_OPEN) / (1 - REST_OPEN) : 0;
@@ -261,8 +262,8 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
           const wideLift = (1 - frame.blinkLeft) * extraWide * 1.35 * w;
           ly += frame.blinkLeft * 15.0 * w - wideLift + frame.gazeY * 0.30;
           lx += frame.gazeX * 0.32;
-        } else if (c >= 14 && c <= 15) {
-          const w = c === 15 ? 1.0 : 0.78;
+        } else if (c >= 13 && c <= 15) {
+          const w = c === 15 ? 1.0 : c === 14 ? 0.86 : 0.45;
           const wideLift = (1 - frame.blinkRight) * extraWide * 1.35 * w;
           ly += frame.blinkRight * 14.5 * w - wideLift + frame.gazeY * 0.30;
           lx += frame.gazeX * 0.32;
@@ -273,8 +274,8 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
           const w = c === 4 || c === 5 ? 1.0 : 0.52;
           ly += -duchenneSquint * w + frame.gazeY * 0.24;
           lx += frame.gazeX * 0.25;
-        } else if (c >= 14 && c <= 15) {
-          const w = c === 15 ? 1.0 : 0.60;
+        } else if (c >= 13 && c <= 15) {
+          const w = c === 15 ? 1.0 : c === 14 ? 0.85 : 0.48;
           ly += -duchenneSquint * w + frame.gazeY * 0.24;
           lx += frame.gazeX * 0.25;
         }
@@ -444,109 +445,184 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
       }
 
       // =======================================================================
-      // 2. FULL CONVERSATIONAL & LISTENING 3D HEAD MOVEMENT + UPPER-BODY SHOULDER SHRUGS
+      // 2. BIOMECHANICAL 3D SKELETON WITH TRUE DEPTH PERSPECTIVE & PARALLAX
+      // - Volumetric Z-depth coordinates for nose, lips, chin, cheeks, eyes & hair bun
+      // - Euler 3D Rotation Matrix (Yaw, Pitch, Roll) with camera focal perspective F=1250px
+      // - Smooth continuous 2D falloff for head rotation, neck follow, and shoulder breathing
       // =======================================================================
-      if (r >= 1 && r <= 12) {
-        // Smoothly taper outer background corner vertices at r=12 (c=2, 16) to prevent lower-bun shear
-        const rowTaper =
-          r === 12 && (c === 2 || c === 16)
-            ? 0.45
-            : r === 1 && (c === 2 || c === 16)
-            ? 0.55
-            : 1.0;
-        const yawW = YAW_PERSPECTIVE_W[c] * rowTaper;
-        const rx = lx - HEAD_PIVOT_X;
-        const ry = ly - HEAD_PIVOT_Y;
-        // Subtle coupling of cervical base with upper-body collar breath & torso sway
-        const bodyCoupledX = torsoSwayX * 0.25 * rowTaper;
-        const bodyCoupledY = collarLift * 0.28 * rowTaper;
-        const rotX = HEAD_PIVOT_X + frame.turn * yawW + bodyCoupledX + (rx * cosT - ry * sinT);
-        const rotY = HEAD_PIVOT_Y + frame.nod * yawW + bodyCoupledY + (rx * sinT + ry * cosT);
+      const ROW_HEAD_INFLUENCE = [
+        0.00, // r=0: top studio frame edge (100% static)
+        0.88, // r=1: crown hair top
+        0.94, // r=2: forehead
+        1.00, // r=3: brows
+        1.00, // r=4: upper eye
+        1.00, // r=5: lower eye
+        1.00, // r=6: nose
+        1.00, // r=7: upper lip top
+        1.00, // r=8: upper lip bot
+        1.00, // r=9: teeth
+        1.00, // r=10: lower lip top
+        1.00, // r=11: lower lip bot
+        0.92, // r=12: chin
+        0.65, // r=13: supple feminine neck
+        0.32, // r=14: collarbone
+        0.12, // r=15: shoulders
+        0.04, // r=16: bust
+        0.00, // r=17: lower blazer
+        0.00, // r=18: bottom static
+      ];
 
-        TARGET_DX[idx] = lx * (1 - rowTaper) + rotX * rowTaper;
-        TARGET_DY[idx] = ly * (1 - rowTaper) + rotY * rowTaper;
-      } else if (r === 13) {
-        // Supple feminine neck, white blouse collar & inner shoulders (y=622):
-        // Combines smooth cervical neck follow with TTS-triggered shoulder shrugs & collar lift!
-        const colNeckW =
-          c <= 1 || c >= 17
-            ? 0.0
-            : c === 2 || c === 16
-            ? 0.16
-            : c === 3 || c === 15
-            ? 0.30
-            : 0.46;
-        const neckWeight = colNeckW * YAW_PERSPECTIVE_W[c];
-        const rx = lx - HEAD_PIVOT_X;
-        const ry = ly - HEAD_PIVOT_Y;
-        const headX = HEAD_PIVOT_X + frame.turn * YAW_PERSPECTIVE_W[c] + (rx * cosT - ry * sinT);
-        const headY = HEAD_PIVOT_Y + frame.nod * 0.55 + (rx * sinT + ry * cosT);
+      const COL_HEAD_INFLUENCE = [
+        0.00, // c=0: left static border
+        0.35, // c=1: smooth blend zone
+        0.75, // c=2: hair bun silhouette
+        0.92, // c=3: cheeks & temples
+        1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // c=4..14
+        0.92, // c=15
+        0.75, // c=16
+        0.35, // c=17: smooth blend zone
+        0.00, // c=18: right static border
+      ];
 
-        const isLeftShoulder = c <= 7;
-        const isRightShoulder = c >= 11;
-        const shoulderColW =
-          c === 1 || c === 17
-            ? 0.55
-            : c === 2 || c === 16
-            ? 0.92
-            : c === 3 || c === 15
-            ? 1.00
-            : c === 4 || c === 14
-            ? 0.85
-            : 0.65;
-        const shrugDy = isLeftShoulder
-          ? leftShoulderLift * shoulderColW
-          : isRightShoulder
-          ? rightShoulderLift * shoulderColW
-          : collarLift * 0.85;
-        const shrugInwardDx = isLeftShoulder
-          ? -Math.min(0, leftShoulderLift) * 0.22 * shoulderColW
-          : isRightShoulder
-          ? Math.min(0, rightShoulderLift) * 0.22 * shoulderColW
-          : 0;
+      // Anatomical Z-depth map in camera space (pixels):
+      // Nose tip & lips protrude forward (+Z), cheeks & temples curve backward (-Z)
+      const ROW_BASE_DEPTH = [
+        0.0,   // r=0: static
+        -44.0, // r=1: crown hair bun (behind face)
+        +8.0,  // r=2: forehead
+        +12.0, // r=3: brows
+        -2.0,  // r=4: upper eye orbit
+        -4.0,  // r=5: lower eye orbit
+        +36.0, // r=6: nose bridge & tip (closest to camera)
+        +26.0, // r=7: upper lip top
+        +25.0, // r=8: upper lip bot
+        +20.0, // r=9: teeth
+        +23.0, // r=10: lower lip top
+        +22.0, // r=11: lower lip bot
+        +16.0, // r=12: chin apex
+        -10.0, // r=13: cervical neck
+        +10.0, // r=14: collarbone & white blouse
+        +5.0,  // r=15: blazer shoulders
+        +4.0,  // r=16: bust
+        0.0,   // r=17: lower blazer
+        0.0,   // r=18: bottom edge
+      ];
 
-        TARGET_DX[idx] =
-          lx * (1 - neckWeight) + headX * neckWeight + torsoSwayX * 0.55 + shrugInwardDx;
-        TARGET_DY[idx] = ly * (1 - neckWeight) + headY * neckWeight + shrugDy;
-      } else if (r >= 14 && r <= 17) {
-        // Tailored cream blazer shoulders, lapels & upper bust (r=14..17):
-        // Smooth continuous cosine falloff down to the bottom frame without any hard rectangular seam or shear!
-        const rowWeight = Math.pow(Math.cos(((r - 14) / 4) * (Math.PI / 2)), 1.6);
-        const colFactor = Math.sin((c / (NUM_COLS - 1)) * Math.PI);
-        const isLeftShoulder = c <= 7;
-        const isRightShoulder = c >= 11;
-        const shoulderProfileW =
-          (c === 1 || c === 17
-            ? 0.50
-            : c === 2 || c === 16
-            ? 0.85
-            : c === 3 || c === 15
-            ? 1.00
-            : c === 4 || c === 14
-            ? 0.86
-            : 0.68) * colFactor;
+      const COL_DEPTH_PROFILE = [
+        0.0,   // c=0
+        -16.0, // c=1
+        -32.0, // c=2: left hair bun & ear
+        -18.0, // c=3: left temple
+        -4.0,  // c=4: left cheek
+        +10.0, // c=5: left commissure
+        +18.0, // c=6: left mid-mouth
+        +26.0, // c=7
+        +32.0, // c=8
+        +36.0, // c=9: central facial axis (nose / philtrum apex)
+        +34.0, // c=10
+        +30.0, // c=11
+        +24.0, // c=12
+        +16.0, // c=13
+        +8.0,  // c=14: right commissure
+        -4.0,  // c=15: right cheek
+        -32.0, // c=16: right hair & ear
+        -16.0, // c=17
+        0.0,   // c=18
+      ];
 
-        const verticalShrug = isLeftShoulder
-          ? leftShoulderLift * shoulderProfileW
-          : isRightShoulder
-          ? rightShoulderLift * shoulderProfileW
-          : collarLift * 0.78;
+      const headWeight = ROW_HEAD_INFLUENCE[r] * COL_HEAD_INFLUENCE[c];
 
-        const clavicleDrawDx = isLeftShoulder
-          ? -Math.min(0, leftShoulderLift) * 0.22 * shoulderProfileW
-          : isRightShoulder
-          ? Math.min(0, rightShoulderLift) * 0.22 * shoulderProfileW
-          : 0;
+      // Original 3D coordinates relative to cervical neck pivot (454, 538)
+      const rx = lx - HEAD_PIVOT_X;
+      const ry = ly - HEAD_PIVOT_Y;
+      const rz = (ROW_BASE_DEPTH[r] * 0.60 + COL_DEPTH_PROFILE[c] * 0.60) * headWeight;
 
-        TARGET_DX[idx] = lx + (torsoSwayX * 0.50 + clavicleDrawDx) * rowWeight;
-        TARGET_DY[idx] = ly + verticalShrug * rowWeight;
-      }
+      // 1. Yaw 3D Rotation (Turn left/right) around Y axis
+      const yawRad = ((frame.turn ?? 0) * 0.68 * Math.PI) / 180.0;
+      const cosY = Math.cos(yawRad);
+      const sinY = Math.sin(yawRad);
+      const x1 = rx * cosY - rz * sinY;
+      const z1 = rx * sinY + rz * cosY;
+      const y1 = ry;
+
+      // 2. Pitch 3D Rotation (Nod up/down) around X axis
+      const pitchRad = ((frame.nod ?? 0) * 0.52 * Math.PI) / 180.0;
+      const cosP = Math.cos(pitchRad);
+      const sinP = Math.sin(pitchRad);
+      const y2 = y1 * cosP + z1 * sinP;
+      const z2 = -y1 * sinP + z1 * cosP;
+      const x2 = x1;
+
+      // 3. Roll 3D Rotation (Tilt inclination) around Z axis
+      const rollRad = tiltRad;
+      const cosR = Math.cos(rollRad);
+      const sinR = Math.sin(rollRad);
+      const x3 = x2 * cosR - y2 * sinR;
+      const y3 = x2 * sinR + y2 * cosR;
+      const z3 = z2;
+
+      // 4. Perspective Projection with Camera Focal Distance F = 1250px
+      const F = 1250.0;
+      const perspScale = F / Math.max(800.0, F - z3);
+      const projX = HEAD_PIVOT_X + x3 * perspScale;
+      const projY = HEAD_PIVOT_Y + y3 * perspScale;
+
+      const rotDx = projX - lx;
+      const rotDy = projY - ly;
+
+      // =======================================================================
+      // CONTINUOUS ANATOMICAL SKELETON: TORSO, SHOULDERS & THORACIC RESPIRATION
+      // =======================================================================
+      // 1. Organic Torso Sway across upper & lower torso (r=12..17)
+      const ROW_TORSO_W = [
+        0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00,
+        0.35, // r=12 (chin)
+        0.65, // r=13 (neck)
+        0.85, // r=14 (collar)
+        0.95, // r=15 (shoulders)
+        0.90, // r=16 (chest / mid-blazer)
+        0.70, // r=17 (lower blazer)
+        0.00, // r=18 (bottom base)
+      ];
+
+      // Torso & Shoulder lateral span across columns c=1..17:
+      // Smooth bell curve that spans across Aïsha's full blazer shoulders from x=86 to x=820:
+      const COL_TORSO_W = [
+        0.00, // c=0 (outer canvas edge, static)
+        0.65, // c=1 (outer left shoulder/deltoid)
+        0.85, // c=2 (left shoulder)
+        0.95, // c=3 (left clavicle)
+        1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // c=4..14 (chest & blouse)
+        0.95, // c=15 (right clavicle)
+        0.85, // c=16 (right shoulder)
+        0.65, // c=17 (outer right shoulder/deltoid)
+        0.00, // c=18 (outer canvas edge, static)
+      ];
+      const bodyTorsoX = (torsoSwayX ?? 0) * 0.65 * ROW_TORSO_W[r] * COL_TORSO_W[c];
+
+      // 2. Thoracic Respiration, Clavicle & Symmetrical Bilateral Shoulder Lifts (r=13..16)
+      const isShoulderRow = r >= 13 && r <= 16;
+      const shoulderRowW = isShoulderRow ? Math.sin(((r - 12) / 5) * Math.PI) : 0;
+      const colShoulderW = COL_TORSO_W[c];
+
+      // Smooth bilateral shoulder weight distribution:
+      // Left shoulder (c <= 8), Right shoulder (c >= 10), Collar seam (c ~ 9)
+      const leftColWeight = c <= 8 ? (8 - c) / 8 : 0;
+      const rightColWeight = c >= 10 ? (c - 10) / 8 : 0;
+      const centerColWeight = Math.max(0, 1 - leftColWeight - rightColWeight);
+      const shoulderLiftY = leftShoulderLift * leftColWeight + rightShoulderLift * rightColWeight + collarLift * centerColWeight;
+
+      // Subtle contralateral balance on head tilt (tilting right raises right shoulder slightly, relaxes left)
+      const tiltShoulderY = (c >= 10 ? 0.35 : c <= 8 ? -0.35 : 0) * clampedTiltDeg;
+      const shrugY = (shoulderLiftY + (breathY * 1.05) + tiltShoulderY) * shoulderRowW * colShoulderW;
+
+      TARGET_DX[idx] = lx + rotDx * headWeight + bodyTorsoX;
+      TARGET_DY[idx] = ly + rotDy * headWeight + shrugY;
 
       // =======================================================================
       // 3. PER-VERTEX TEMPORAL STATE-SPACE SMOOTHING (Kalman-style alpha-beta filter):
-      // - Mouth vertices (r=7..11, c=5..14) track voice with ultra-fast zero-lag gain (alpha=0.86)
-      // - Head & hair vertices track with silky velocity-damped smoothing (alpha=0.52, beta=0.14)
-      //   to eliminate 100% of micro-saccades and frame-time jitter!
+      // - Mouth vertices (r=7..11, c=5..14) track voice with ultra-fast zero-lag gain (alpha=0.96)
+      // - Body & head vertices track with silky velocity-damped smoothing
       // =======================================================================
       if (!meshStateInitialized) {
         CUR_DX[idx] = TARGET_DX[idx];
@@ -555,9 +631,9 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
         VEL_DY[idx] = 0;
       } else {
         const isMouthVertex = r >= 7 && r <= 12 && c >= 5 && c <= 14;
-        const alpha = isMouthVertex ? 0.86 : 0.54;
-        const beta = isMouthVertex ? 0.08 : 0.14;
-        const damping = isMouthVertex ? 0.65 : 0.80;
+        const alpha = isMouthVertex ? 0.96 : 0.54;
+        const beta = isMouthVertex ? 0.04 : 0.14;
+        const damping = isMouthVertex ? 0.35 : 0.80;
 
         const predX = CUR_DX[idx] + VEL_DX[idx] * damping;
         const predY = CUR_DY[idx] + VEL_DY[idx] * damping;
@@ -570,11 +646,18 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
         VEL_DY[idx] = VEL_DY[idx] * damping + beta * errY;
       }
 
-      // Guarantee strict vertical monotonicity within each column so no triangle ever folds
+      // Guarantee strict vertical monotonicity within each column so no triangle ever folds or inverts
       if (r > 0) {
-        const prevIdx = (r - 1) * NUM_COLS + c;
-        if (CUR_DY[idx] < CUR_DY[prevIdx] + 0.08) {
-          CUR_DY[idx] = CUR_DY[prevIdx] + 0.08;
+        const prevRowIdx = (r - 1) * NUM_COLS + c;
+        if (CUR_DY[idx] < CUR_DY[prevRowIdx] + 1.0) {
+          CUR_DY[idx] = CUR_DY[prevRowIdx] + 1.0;
+        }
+      }
+      // Guarantee strict horizontal monotonicity within each row
+      if (c > 0) {
+        const prevColIdx = r * NUM_COLS + (c - 1);
+        if (CUR_DX[idx] < CUR_DX[prevColIdx] + 1.0) {
+          CUR_DX[idx] = CUR_DX[prevColIdx] + 1.0;
         }
       }
     }
@@ -584,15 +667,17 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
 
 // Transform a point (x, y) in central head space by the active 3D head pose
 function transformHeadPoint(x: number, y: number, frame: AvatarComputedFrame): [number, number] {
-  const clampedTiltDeg = Math.max(-5.2, Math.min(5.2, frame.tilt || 0));
+  const clampedTiltDeg = Math.max(-2.8, Math.min(2.8, frame.tilt || 0));
   const tiltRad = (clampedTiltDeg * Math.PI) / 180.0;
   const cosT = Math.cos(tiltRad);
   const sinT = Math.sin(tiltRad);
   const rx = x - HEAD_PIVOT_X;
   const ry = y - HEAD_PIVOT_Y;
+  const turnX = (frame.turn || 0) * 0.72;
+  const nodY = (frame.nod || 0) * 0.58;
   return [
-    HEAD_PIVOT_X + frame.turn + (rx * cosT - ry * sinT),
-    HEAD_PIVOT_Y + frame.nod + (rx * sinT + ry * cosT),
+    HEAD_PIVOT_X + turnX + (rx * cosT - ry * sinT),
+    HEAD_PIVOT_Y + nodY + (rx * sinT + ry * cosT),
   ];
 }
 
@@ -769,7 +854,7 @@ class SharedWav2LipWebGLCore {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, GL_VERTS, gl.DYNAMIC_DRAW);
@@ -862,7 +947,7 @@ class SharedWav2LipWebGLCore {
     ctx.scale(scale, scale);
     ctx.translate(-sx, -sy);
 
-    // 1. 100% STATIC STUDIO BACKGROUND WITH FLOWER POTS & PEDAGOGICAL DECOR
+    // 1. ELEGANT PRESTIGIOUS STUDIO BACKGROUND
     // Rendered directly in static target coordinate space - completely immune to mesh deformation!
     if (this.bgImg && this.bgImg.complete && this.bgImg.naturalWidth > 0) {
       ctx.drawImage(this.bgImg, 0, 0, IMG_W, IMG_H);
@@ -873,6 +958,15 @@ class SharedWav2LipWebGLCore {
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, IMG_W, IMG_H);
     }
+
+    // 1b. Realistic ambient contact shadow onto studio background for physical grounding and natural depth
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.35)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 6;
+    ctx.drawImage(sourceSurface, 0, 0);
+    ctx.restore();
 
     // 2. AÏSHA'S 60 FPS ANIMATED FOREGROUND (Warped head, smile, eyes & breathing shoulders)
     ctx.drawImage(sourceSurface, 0, 0);
