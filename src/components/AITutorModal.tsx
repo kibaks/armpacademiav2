@@ -333,7 +333,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     title: 'Directrice Pédagogique • Loi 10/010 & Passation',
     specialty: 'Procédures globales, PPM, DAO & Seuils',
     badge: '👩‍🏫 Tutrice Principale',
-    voiceLabel: 'Vivienne HD • Souriante & Chaleureuse',
+    voiceLabel: 'Aïsha • Voix Éloquente & Humaine (Neural HD)',
     desc: 'Chaleureuse & charismatique',
     accentColor: 'from-blue-600 to-indigo-700',
     greeting: (_firstName: string) =>

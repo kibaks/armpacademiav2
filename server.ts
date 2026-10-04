@@ -992,9 +992,38 @@ function buildEstimatedWordBoundaries(sentence: string): TtsWordBoundary[] {
 }
 
 // 1. ElevenLabs Multilingual v2 API with Character/Word Alignment Timestamps (when ELEVENLABS_API_KEY is set)
+// Emotion-adaptive voice settings: lower stability + higher style = human
+// variability, natural breaths, exclamatory rises & astonished intonation;
+// solemn sentences stay steady & controlled.
+function elevenLabsExpressiveSettings(emotion?: string): {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
+} {
+  const base = { similarity_boost: 0.86, use_speaker_boost: true };
+  switch ((emotion || '').toLowerCase()) {
+    case 'enthusiastic':
+      return { ...base, stability: 0.45, style: 0.78 }; // exclamations, bright energy
+    case 'smiling':
+      return { ...base, stability: 0.48, style: 0.72 }; // warm smile in the voice + breaths
+    case 'curious':
+      return { ...base, stability: 0.46, style: 0.75 }; // étonnement / questioning lift
+    case 'encouraging':
+      return { ...base, stability: 0.5, style: 0.7 };
+    case 'empathetic':
+      return { ...base, stability: 0.52, style: 0.62 };
+    case 'solemn':
+      return { ...base, stability: 0.62, style: 0.4 }; // controlled gravity on legal warnings
+    default:
+      return { ...base, stability: 0.52, style: 0.66 };
+  }
+}
+
 async function synthesizeWithElevenLabs(
   text: string,
-  requestedVoice?: string
+  requestedVoice?: string,
+  emotion?: string
 ): Promise<CachedTtsPayload | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return null;
@@ -1005,6 +1034,8 @@ async function synthesizeWithElevenLabs(
         ? requestedVoice
         : process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // Sarah / Bella Multilingual expressive female
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 14000);
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`,
       {
@@ -1016,15 +1047,12 @@ async function synthesizeWithElevenLabs(
         body: JSON.stringify({
           text,
           model_id: 'eleven_multilingual_v2',
-          voice_settings: {
-            stability: 0.72,
-            similarity_boost: 0.86,
-            style: 0.22,
-            use_speaker_boost: true,
-          },
+          voice_settings: elevenLabsExpressiveSettings(emotion),
         }),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timeoutId);
 
     if (!response.ok) return null;
     const data: any = await response.json();
@@ -1081,6 +1109,31 @@ async function synthesizeWithElevenLabs(
   } catch {
     return null;
   }
+}
+
+// Monthly character budget for ElevenLabs: the provided key is on the free tier
+// (10 000 chars / month). We reserve ~1000 chars of headroom and let bulk lesson
+// content fall back to edge-tts HD. Resets locally on calendar-month rollover;
+// if ElevenLabs itself replies 429 the function fails open to the same fallback.
+const ELEVENLABS_MONTHLY_CHAR_BUDGET = 9000;
+let elevenBudgetMonth = new Date().getMonth();
+let elevenBudgetUsed = 0;
+
+async function synthesizeWithElevenLabsBudgeted(
+  text: string,
+  requestedVoice?: string,
+  emotion?: string
+): Promise<CachedTtsPayload | null> {
+  if (!process.env.ELEVENLABS_API_KEY) return null;
+  const m = new Date().getMonth();
+  if (m !== elevenBudgetMonth) {
+    elevenBudgetMonth = m;
+    elevenBudgetUsed = 0;
+  }
+  if (elevenBudgetUsed + text.length > ELEVENLABS_MONTHLY_CHAR_BUDGET) return null;
+  const result = await synthesizeWithElevenLabs(text, requestedVoice, emotion);
+  if (result) elevenBudgetUsed += text.length;
+  return result;
 }
 
 // 2. Expressive Studio Neural HD Female Voice (fr-FR-VivienneMultilingualNeural Reference Voice)
@@ -1401,7 +1454,13 @@ async function getOrSynthesizeTtsPayload(
   );
   if (!cleanText) return null;
 
-  const voiceKey = 'vivienne';
+  // Per-persona voice key (Aïsha = 'vivienne'); unknown values fall back to her.
+  const requestedVoiceKey = String(voice || '').toLowerCase();
+  const voiceKey = (['vivienne', 'denise', 'eloise', 'charline'] as const).includes(
+    requestedVoiceKey as 'vivienne'
+  )
+    ? requestedVoiceKey
+    : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
   const cacheKey = `prof_vivienne_smile_v24::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey);
@@ -1429,17 +1488,21 @@ async function getOrSynthesizeTtsPayload(
         return enrichedPayload;
       };
 
+      // 1. ElevenLabs first (most human voice — breaths, exclamations, emotion)
+      //    behind a soft monthly budget guard: free tier = 10k chars/month, so we
+      //    reserve the neural HD fallback (edge-tts) for bulk lesson content.
+      const elevenPayload = await synthesizeWithElevenLabsBudgeted(cleanText, voiceKey, emoKey);
+      if (elevenPayload) {
+        return storeInCache(elevenPayload);
+      }
+
+      // 2. Expressive Studio Neural HD (edge-tts Vivienne/Denise)
       const studioNeuralPayload = await synthesizeWithStudioNeuralHD(cleanText, voiceKey, emoKey);
       if (studioNeuralPayload) {
         return storeInCache(studioNeuralPayload);
       }
 
-      const elevenPayload = await synthesizeWithElevenLabs(cleanText, voiceKey);
-      if (elevenPayload) {
-        return storeInCache(elevenPayload);
-      }
-
-      // Fallback to Gemini TTS (gemini-3.8-flash-lite-tts) if available
+      // 3. Fallback to Gemini TTS (gemini-3.8-flash-lite-tts) if available
       const ai = getAIClient();
       if (ai && Date.now() > geminiTtsCooldownUntil) {
         try {
