@@ -337,7 +337,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     desc: 'Chaleureuse & charismatique',
     accentColor: 'from-blue-600 to-indigo-700',
     greeting: (_firstName: string) =>
-      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
   },
   {
     id: 'charline',
@@ -349,7 +349,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     desc: 'Veloutée & posée',
     accentColor: 'from-purple-600 to-fuchsia-700',
     greeting: (_firstName: string) =>
-      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
   },
   {
     id: 'denise',
@@ -361,7 +361,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     desc: 'Institutionnelle & sereine',
     accentColor: 'from-emerald-600 to-teal-700',
     greeting: (_firstName: string) =>
-      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
   },
   {
     id: 'eloise',
@@ -373,7 +373,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     desc: 'Claire & articulée',
     accentColor: 'from-amber-500 to-orange-600',
     greeting: (_firstName: string) =>
-      `Bonjour, ravie de vous retrouver. Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez, et n'hésitez pas à poser vos questions. Chaque échange nous aide à mieux comprendre et à avancer avec confiance.`
+      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
   }
 ];
 

@@ -1336,12 +1336,14 @@ function humanizeTextForNaturalEloquenceServer(text: string): string {
     text
       .replace(/\s*\(([^)]+)\)\s*/g, ', $1, ')
       .replace(/\s*[➔→]+\s*/g, ', puis ')
-      .replace(/\s*•\s*/g, '. ')
+      .replace(/\s*[•]\s*/g, '. ')
       .replace(/\s*\+\s*/g, ', ainsi que ')
       .replace(/\s*&\s*/g, ' et ')
       .replace(/\s*;\s*/g, ', ')
       .replace(/\s*:\s*/g, ', ')
-      .replace(/\s*—\s*/g, ', ')
+      // Em/en dashes become real audible breaths (points de suspension) — the
+      // TTS reads "…" as a pause, which is what gives the tutor her human rhythm
+      .replace(/\s*[—–]\s*/g, ' … ')
       .replace(/\.{4,}/g, '...')
       .replace(/\s*,\s*,+/g, ', ')
       .replace(/\s+\./g, '.')
@@ -1867,6 +1869,10 @@ Contexte : ${context || 'Apprenant RDC'} | Dernier cours : ${lc || 'non renseign
 Historique : ${(history || []).slice(-6).map((h: any) => `${h.sender}: ${h.text}`).join('\n')}
 Message exact de l'apprenant : "${fullMessage}"
 Réponds avec beaucoup d'âme, d'humanisme et d'empathie en tant que ${activeTutorMeta.name}. Commence par accueillir et refléter les mots/le ressenti de l'apprenant dans "${fullMessage}", puis explique clairement (160-240 mots) SANS ABRÉVIATIONS FROIDES (écris tout en toutes lettres), cite la loi et le cours comme une grande sœur bienveillante, donne une analogie vivante de chez nous, et termine par une seule question douce et attentionnée.
+[PAUSES, ÉMOTIONS & SENTIMENTS — LANGAGE VIVANT]
+- Rythme ta parole : points de suspension (…) après une accroche ou avant une idée forte, tirets (—) pour un aparté chaleureux, exclamations (!) quand tu es fière ou enthousiaste, virgules pour respirer.
+- Nomme tes sentiments avec tes mots : « Je suis ravie… », « Bravo ! », « Ça m'inquiète un peu… », « Prends ton temps… ».
+- La ponctuation est lue par la voix : chaque point de suspension devient une vraie respiration audible pour l'apprenant.
 `;
     arenaReply = await callArenaLLM(arenaPrompt);
     if (arenaReply) {
@@ -1897,6 +1903,8 @@ Message exact de l'apprenant : "${fullMessage}"
 - **Clarté et pédagogie vivante** : donne l'idée maîtresse en gras, raconte-la avec une image vivante du quotidien en République Démocratique du Congo (marché, famille, école, match), puis éclaire les points essentiels avec fluidité (et zéro abréviation froide).
 - **Citations naturelles** : intègre la loi du 27 avril 2010 et le cours étudié avec grâce dans le fil de ta parole, jamais comme une étiquette technique.
 - **Termine par une seule question de cœur**, douce et cousue sur la situation de l'apprenant.
+- **PAUSES & RESPIRATIONS** : ponctue de points de suspension (…) après une accroche ou avant une idée forte, de tirets (—) pour un aparté chaleureux, d'exclamations (!) pour l'enthousiasme ; la ponctuation est lue par la voix et devient une vraie respiration audible.
+- **SENTIMENTS EXPLICITES** : nomme tes émotions avec tes mots — « Je suis ravie… », « Bravo ! », « Ça m'inquiète un peu… », « Prends ton temps… » — pour que l'apprenant entende un cœur, pas un manuel.
 `;
 
     const response = await generateWithResilience(ai, {
