@@ -785,12 +785,17 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   };
 
   useEffect(() => {
-    // Gros Plan (Close-Up): focuses right on face, smile, eyes & speech articulation
-    // with static flower pots & library shelves in the background
+    // Sélecteur de Zoom Caméra — both framings keep Aïsha FULLY inside the
+    // camera window (hair crown y=149 → chin y≈590 with margin), including
+    // the object-cover trim of the 720×620 backing in the responsive box:
+    //  - Gros Plan: full head framed, speech articulation centered
+    //  - Plan Buste: head + shoulders + studio decor ("vue sur les épaules")
+    // Window aspect matches the 720×620 backing (1.161) so the engine crop
+    // trims nothing.
     const viewport =
       cameraZoomMode === 'close_up'
-        ? { x: 238, y: 200, w: 420, h: 395 }
-        : { x: 190, y: 150, w: 516, h: 490 };
+        ? { x: 151, y: 116, w: 597, h: 514 }
+        : { x: 55, y: 104, w: 785, h: 676 };
 
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: headerWav2LipCanvasRef.current,

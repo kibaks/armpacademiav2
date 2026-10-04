@@ -115,8 +115,10 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   useEffect(() => {
     // True Gros Plan (Close-Up) framing on Aïsha's expressive face, smile, eyes & mouth
     // with static pedagogical studio background (flower pots, plants & warm shelves)
+    // Visio framing keeps the full head inside the camera (crown y=149,
+    // chin y≈590) with shoulders entering at the bottom edge.
     const viewport = isVisio
-      ? { x: 210, y: 170, w: 476, h: 450, tutorPersona }
+      ? { x: 158, y: 110, w: 584, h: 550, tutorPersona }
       : isStudio || dim.w >= 120
       ? { x: 238, y: 200, w: 420, h: 395, tutorPersona }
       : { x: 240, y: 205, w: 416, h: 390, tutorPersona };
