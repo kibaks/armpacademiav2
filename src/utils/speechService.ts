@@ -1578,7 +1578,7 @@ class SpeechService {
   private async fetchNeuralAudioBuffer(
     sentence: string,
     voice: string = this.preferredPersona,
-    timeoutMs: number = 15000
+    timeoutMs: number = 18000
   ): Promise<DecodedNeuralEntry | null> {
     if (!this.neuralTtsAvailable || !sentence.trim()) return null;
     const cacheKey = `prof_vivienne_smile_v24::${voice}::${sentence}`;
@@ -1590,9 +1590,15 @@ class SpeechService {
 
     const fetchPromise = (async (): Promise<DecodedNeuralEntry | null> => {
       try {
-        // 4 attempts with backoff: bridges brief API restarts (the dev server
-        // restarts often) instead of instantly dropping to robotic web-speech.
-        for (let attempt = 0; attempt < 4; attempt++) {
+        // Long backoff ladder (~27s total): the API server is restarted by the
+        // platform between turns, and users hit speak() right when it is down.
+        // Without this, ONE fast failure drops the whole reply to robotic
+        // web-speech — the #1 source of "the voice isn't always human".
+        // Server down = instant connection error, so the ladder waits ~27s of
+        // pure retry; server up but slow = each attempt allows up to
+        // timeoutMs for ElevenLabs + edge to answer.
+        const NEURAL_BACKOFF_MS = [400, 800, 1600, 3200, 5000, 5000, 5000, 5000];
+        for (let attempt = 0; attempt <= NEURAL_BACKOFF_MS.length; attempt++) {
           try {
             const controller = new AbortController();
             const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -1668,9 +1674,8 @@ class SpeechService {
           } catch {
             // Transient fetch hiccup, retry once
           }
-          if (attempt < 3) {
-            // exponential-ish backoff: 250 / 500 / 1000 ms
-            await new Promise((r) => window.setTimeout(r, 250 * 2 ** attempt));
+          if (attempt < NEURAL_BACKOFF_MS.length) {
+            await new Promise((r) => window.setTimeout(r, NEURAL_BACKOFF_MS[attempt]));
           }
         }
         return null;
@@ -1694,7 +1699,7 @@ class SpeechService {
 
     (async () => {
       // 1. Fetch & decode Sentence 1 FIRST with zero competition so the opening of the lesson is instant & pure Vivienne HD
-      await this.fetchNeuralAudioBuffer(normalized[0], targetVoice, 15000);
+      await this.fetchNeuralAudioBuffer(normalized[0], targetVoice, 18000);
 
       // 2. Then prewarm remaining sentences sequentially on server and client
       if (normalized.length > 1) {
@@ -1703,7 +1708,7 @@ class SpeechService {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sentences: normalized.slice(1), voice: targetVoice }),
         }).catch(() => {});
-        await this.fetchNeuralAudioBuffer(normalized[1], targetVoice, 15000);
+        await this.fetchNeuralAudioBuffer(normalized[1], targetVoice, 18000);
       }
     })();
   }
@@ -1878,14 +1883,14 @@ class SpeechService {
         };
         this.notify();
       }
-      const neuralEntry = await this.fetchNeuralAudioBuffer(sentence, voiceName, 15000);
+      const neuralEntry = await this.fetchNeuralAudioBuffer(sentence, voiceName, 18000);
       if (this.isCancelled || this.currentSentenceIndex !== sentenceIdx) return;
 
       // Now that the current sentence is ready, pre-fetch the next sentences in the background
       if (sentenceIdx + 1 < this.queue.length) {
-        this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 15000);
+        this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 18000);
         if (sentenceIdx + 2 < this.queue.length) {
-          this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 2], voiceName, 15000);
+          this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 2], voiceName, 18000);
         }
       }
 
