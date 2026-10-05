@@ -1819,7 +1819,7 @@ class SpeechService {
     this.queue = sentences;
     this.currentSentenceIndex = startIdx;
     this.currentPlayingId = id;
-    this.currentOptions = { ...options, speed: options?.speed ?? 0.90 };
+    this.currentOptions = { ...options, speed: options?.speed ?? 1.0 };
 
     const firstPhoneme = analyzeFrenchPhonemeAt(sentences[startIdx], 0);
     const firstEmotion = detectSentenceEmotion(sentences[startIdx]);
@@ -1866,7 +1866,7 @@ class SpeechService {
     const sentenceIdx = this.currentSentenceIndex;
     const sentence = this.queue[sentenceIdx];
     const voiceName = this.currentOptions?.voice || this.preferredPersona;
-    const userSpeed = this.currentOptions?.speed ?? 0.90;
+    const userSpeed = this.currentOptions?.speed ?? 1.0;
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if (this.neuralTtsAvailable) {
@@ -1898,9 +1898,9 @@ class SpeechService {
 
       if (neuralEntry) {
         const ctx = this.getAudioContext();
-        // Natural, serene & calm pedagogical playback rate matching composed French delivery
+        // Natural, fluent & lively pedagogical playback rate matching standard speech
         const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
-        const playbackRate = Math.max(0.82, Math.min(1.04, userSpeed * 0.96));
+        const playbackRate = Math.max(0.92, Math.min(1.25, userSpeed * 1.02));
         let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
 
         if (ctx && ctx.state === 'suspended') {
@@ -2260,7 +2260,7 @@ class SpeechService {
 
     const utterance = new SpeechSynthesisUtterance(sentence);
     utterance.lang = 'fr-FR';
-    const effectiveRate = Math.max(0.78, Math.min(0.90, 0.86 * (userSpeed / 0.90)));
+    const effectiveRate = Math.max(0.90, Math.min(1.25, 1.02 * userSpeed));
     utterance.rate = effectiveRate;
     utterance.pitch = 1.0;
 

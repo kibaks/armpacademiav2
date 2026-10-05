@@ -533,7 +533,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
-  const [tutorSpeed, setTutorSpeed] = useState<number>(0.90);
+  const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
   const [showStudioStage, setShowStudioStage] = useState<boolean>(true);
   const [toastNotice, setToastNotice] = useState<string | null>(null);
 
@@ -743,7 +743,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const handleCycleSpeed = () => {
-    const order = [0.90, 0.85, 1.0];
+    const order = [0.95, 1.0, 0.88];
     const idx = order.indexOf(tutorSpeed);
     const next = order[(idx + 1) % order.length];
     setTutorSpeed(next);
@@ -1590,11 +1590,11 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                       className="text-amber-300 hover:underline font-mono"
                       title="Changer la cadence de diction"
                     >
-                      {tutorSpeed <= 0.86
-                        ? '0.85x • Calme'
-                        : tutorSpeed <= 0.94
-                        ? '0.9x • Posé'
-                        : '1.0x • Naturel'}
+                      {tutorSpeed >= 1.0
+                        ? '1.0x • Dynamique'
+                        : tutorSpeed <= 0.90
+                        ? '0.88x • Posé'
+                        : '0.95x • Équilibré'}
                     </button>
                   </div>
                   <div className="grid grid-cols-1 gap-1.5">

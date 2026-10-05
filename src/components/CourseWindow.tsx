@@ -42,7 +42,8 @@ import {
   Film,
   Phone,
   Mic,
-  Waves
+  Waves,
+  Lock
 } from 'lucide-react';
 import { CourseModule, UserProfile, CourseQAItem } from '../types';
 import { ArmpLogo } from './ArmpLogo';
@@ -120,7 +121,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [requestedScreenJump, setRequestedScreenJump] = useState<{ idx: number; ts: number } | null>(null);
   const [openSummaryVideoNow, setOpenSummaryVideoNow] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechRate, setSpeechRate] = useState<number>(0.90);
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
   const [autoReadLessons, setAutoReadLessons] = useState<boolean>(() => {
     try {
@@ -364,6 +365,16 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const handleOpenValidationTest = (lessonIdx = activeLessonIndex) => {
     setValidatingLessonIndex(lessonIdx);
     setIsValidatingLessonModalOpen(true);
+  };
+
+  // Check if a lesson at idx is locked due to an unvalidated preceding lesson requiring a test
+  const getFirstUnvalidatedPrereq = (targetIdx: number): number | null => {
+    for (let p = 0; p < targetIdx; p++) {
+      if (isLessonRequiringValidationTest(course, p) && !validatedLessonIndexes.has(p)) {
+        return p;
+      }
+    }
+    return null;
   };
 
   const handlePassLessonValidation = (lessonIdx: number) => {
@@ -1047,37 +1058,53 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                 {safeLessons.map((lesson, idx) => {
                   const isActive = idx === activeLessonIndex;
                   const isDone = completedLessons.has(idx);
+                  const prereqIdx = getFirstUnvalidatedPrereq(idx);
+                  const isLocked = prereqIdx !== null;
                   const lessonArts = Array.isArray(lesson.keyArticles) ? lesson.keyArticles : [];
 
                   return (
                     <button
                       key={lesson.id || idx}
                       onClick={() => {
+                        if (isLocked) {
+                          setValidationToast(`🔒 Chapitre verrouillé : Vous devez d'abord réussir le test du Chapitre ${prereqIdx + 1} (« ${safeLessons[prereqIdx]?.title || ''} »).`);
+                          setTimeout(() => setValidationToast(null), 4500);
+                          handleOpenValidationTest(prereqIdx);
+                          return;
+                        }
                         setActiveLessonIndex(idx);
                         setMode('reading');
                         setIsMobileChaptersOpen(false);
                         stopSpeech();
                       }}
-                      className={`w-full text-left p-2.5 rounded-2xl transition flex items-start space-x-3 ${
+                      className={`w-full text-left p-2.5 rounded-2xl transition flex items-start space-x-3 cursor-pointer ${
                         isActive
                           ? 'bg-[#0866FF] text-white shadow-md'
+                          : isLocked
+                          ? 'bg-slate-900/60 hover:bg-slate-800/60 text-slate-400 border border-dashed border-slate-700/50 opacity-75'
                           : isDone
                           ? 'bg-slate-800/40 hover:bg-slate-800/80 text-slate-300'
                           : 'hover:bg-slate-800/50 text-slate-400'
                       } ${isSidebarCollapsed ? 'justify-center p-2' : ''}`}
                     >
-                      {/* Chapter Indicator / Completion Checkmark */}
+                      {/* Chapter Indicator / Completion Checkmark / Lock */}
                       <div
                         className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
                           isActive
                             ? 'bg-white text-[#0866FF]'
+                            : isLocked
+                            ? 'bg-amber-500/15 border border-amber-400/40 text-amber-400'
                             : isDone
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                             : 'bg-slate-800 text-slate-400'
                         }`}
-                        title={(lesson as any).format || 'animation'}
+                        title={isLocked ? `Verrouillé : Test du Chapitre ${prereqIdx + 1} requis` : ((lesson as any).format || 'animation')}
                       >
-                        {isDone && !isActive ? <Check className="w-3.5 h-3.5" /> : (()=>{
+                        {isLocked ? (
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        ) : isDone && !isActive ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : (()=>{
                           const f=(lesson as any).format || 'animation';
                           if(f==='video') return '🎬';
                           if(f==='audio') return '🎙️';
@@ -1095,7 +1122,14 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                             <h4 className={`text-xs font-bold leading-snug line-clamp-2 ${isActive ? 'text-white' : ''}`}>
                               {lesson.title}
                             </h4>
-                            {isLessonRequiringValidationTest(course, idx) && (
+                            {isLocked ? (
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0 border bg-amber-950/80 text-amber-300 border-amber-500/40 flex items-center gap-1"
+                                title={`Verrouillé : validez le test du Chapitre ${prereqIdx + 1}`}
+                              >
+                                <Lock className="w-2.5 h-2.5" /> Ch. {prereqIdx + 1}
+                              </span>
+                            ) : isLessonRequiringValidationTest(course, idx) ? (
                               <span
                                 className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0 border ${
                                   validatedLessonIndexes.has(idx)
@@ -1106,7 +1140,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                               >
                                 {validatedLessonIndexes.has(idx) ? '✓ Test' : '🛡️ Test'}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <div className="flex items-center space-x-2 mt-1 text-[10px] opacity-75">
                             <span className="flex items-center gap-1">
@@ -1184,6 +1218,68 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   requiresValidationTest={isLessonRequiringValidationTest(course, activeLessonIndex)}
                   onOpenValidationTest={() => handleOpenValidationTest(activeLessonIndex)}
                 />
+
+                {/* BANDEAU TEST D'ASSIMILATION REQUIS SI LEÇON EXIGE UNE VALIDATION */}
+                {isLessonRequiringValidationTest(course, activeLessonIndex) && (
+                  <div
+                    className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg transition-all ${
+                      validatedLessonIndexes.has(activeLessonIndex)
+                        ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
+                        : 'bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-amber-500/20 border-amber-400/60 text-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          validatedLessonIndexes.has(activeLessonIndex)
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                            : 'bg-amber-500/25 text-amber-300 border border-amber-400/50 animate-pulse'
+                        }`}
+                      >
+                        {validatedLessonIndexes.has(activeLessonIndex) ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        ) : (
+                          <ShieldCheck className="w-5 h-5 text-amber-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-white flex items-center gap-2 flex-wrap">
+                          <span>
+                            {validatedLessonIndexes.has(activeLessonIndex)
+                              ? 'Test d’assimilation validé avec succès (100%)'
+                              : 'Validation par test obligatoire pour ce chapitre'}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-amber-300 font-mono">
+                            Chapitre {activeLessonIndex + 1}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                          {validatedLessonIndexes.has(activeLessonIndex)
+                            ? 'Vous avez démontré la maîtrise des principes réglementaires de ce chapitre. Vous pouvez revoir le test ou passer au chapitre suivant.'
+                            : 'Ce chapitre pose un ancrage légal fondamental. Réussissez les 2 questions pour débloquer l’accès aux chapitres suivants.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenValidationTest(activeLessonIndex)}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow-md shrink-0 ${
+                        validatedLessonIndexes.has(activeLessonIndex)
+                          ? 'bg-emerald-900/70 hover:bg-emerald-800 border border-emerald-500/50 text-emerald-200'
+                          : 'bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 hover:from-amber-300 hover:to-amber-200 text-slate-950 font-black shadow-amber-400/20 border border-amber-300'
+                      }`}
+                      title={validatedLessonIndexes.has(activeLessonIndex) ? 'Revoir les questions validées' : 'Passer le test d’assimilation de cette leçon'}
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>
+                        {validatedLessonIndexes.has(activeLessonIndex)
+                          ? 'Revoir le test validé ✓'
+                          : 'Passer le Test de Validation 📝'}
+                      </span>
+                    </button>
+                  </div>
+                )}
 
                 {/* STRUCTURED 5-PILLAR CHAPTER ARCHITECTURE + COURSE SUMMARY VIDEO */}
                 <StructuredChapterArchitecture
@@ -1854,9 +1950,13 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
       {/* Toast de validation de test d'assimilation */}
       {validationToast && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-emerald-600 border border-emerald-400 text-white font-bold text-xs shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300">
-          <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
-          <span>{validationToast}</span>
+        <div className="fixed bottom-6 right-6 z-[210] p-4 rounded-2xl bg-slate-900 border border-amber-400 text-amber-200 font-bold text-xs shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300 max-w-md">
+          {validationToast.includes('Félicitations') ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : (
+            <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+          )}
+          <span className="text-white leading-relaxed">{validationToast}</span>
         </div>
       )}
 

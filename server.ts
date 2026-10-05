@@ -1056,19 +1056,19 @@ function elevenLabsExpressiveSettings(emotion?: string): {
   // consecutive sentences of the same reply.
   switch ((emotion || '').toLowerCase()) {
     case 'enthusiastic':
-      return { ...base, stability: 0.55, style: 0.62 }; // energetic yet poised and distinct
+      return { ...base, stability: 0.48, style: 0.68 }; // lively, expressive
     case 'smiling':
-      return { ...base, stability: 0.58, style: 0.60 }; // warm calm smile in the voice
+      return { ...base, stability: 0.50, style: 0.62 }; // warm, engaging smile
     case 'curious':
-      return { ...base, stability: 0.56, style: 0.62 }; // inquisitive, calm questioning lift
+      return { ...base, stability: 0.50, style: 0.62 };
     case 'encouraging':
-      return { ...base, stability: 0.60, style: 0.58 };
+      return { ...base, stability: 0.52, style: 0.60 };
     case 'empathetic':
-      return { ...base, stability: 0.62, style: 0.54 };
+      return { ...base, stability: 0.54, style: 0.56 };
     case 'solemn':
-      return { ...base, stability: 0.68, style: 0.42 }; // serene, composed gravity on legal warnings
+      return { ...base, stability: 0.60, style: 0.46 };
     default:
-      return { ...base, stability: 0.60, style: 0.58 };
+      return { ...base, stability: 0.52, style: 0.58 };
   }
 }
 
@@ -1237,7 +1237,7 @@ async function runSingleEdgeSynthesis(
   text: string,
   neuralVoice: string = 'fr-FR-VivienneMultilingualNeural',
   providerTag: CachedTtsPayload['provider'] = 'neural-vivienne-hd',
-  rate: string = '-8%',
+  rate: string = '+2%',
   pitch: string = '+0Hz'
 ): Promise<CachedTtsPayload | null> {
   const comm = new Communicate(text, {
@@ -1370,8 +1370,8 @@ async function synthesizeWithStudioNeuralHD(
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
     const { voice, tag } = candidateVoices[attempt];
     try {
-      // Calm, poised human cadence (-8%) matching serene French speech rate perfectly
-      const result = await runSingleEdgeSynthesis(text, voice, tag, '-8%', '+0Hz');
+      // Natural, fluent and lively human cadence (+2%) matching standard French speech rate perfectly
+      const result = await runSingleEdgeSynthesis(text, voice, tag, '+2%', '+0Hz');
       if (result) return result;
     } catch {
       // Wait briefly before retrying
@@ -1548,7 +1548,7 @@ async function getOrSynthesizeTtsPayload(
     ? requestedVoiceKey
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `prof_vivienne_smile_v25::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `prof_vivienne_smile_v27::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
   if (cached) {
     ttsMemoryCache.set(cacheKey, cached);

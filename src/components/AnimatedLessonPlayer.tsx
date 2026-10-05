@@ -164,7 +164,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [voiceMuted, setVoiceMuted] = useState<boolean>(!autoPlayVoice);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(0.90);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [voicePersona, setVoicePersona] = useState<VoicePersona>('denise');
 
   // Miniature Avatar inside Course Screen state
@@ -532,8 +532,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const handleCycleSpeed = () => {
     speechService.unlockAudio();
-    const speeds = [0.90, 0.85, 1.0];
-    const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 0.90;
+    const speeds = [1.0, 1.1, 0.95];
+    const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 1.0;
     setPlaybackSpeed(nextSpeed);
     if (isPlaying && !voiceMuted) startVoiceAtProgress(filmProgress, nextSpeed);
   };
@@ -1470,9 +1470,9 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
               type="button"
               onClick={handleCycleSpeed}
               className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-black transition cursor-pointer"
-              title="Vitesse de diction posée d'Aïsha"
+              title="Vitesse d'élocution d'Aïsha"
             >
-              {playbackSpeed}x • {playbackSpeed >= 1.08 ? 'Dynamique' : playbackSpeed <= 0.94 ? 'Posé' : 'Naturel'}
+              {playbackSpeed}x • {playbackSpeed >= 1.1 ? 'Dynamique' : playbackSpeed >= 1.0 ? 'Fluide & Naturel' : 'Posé'}
             </button>
 
             <button

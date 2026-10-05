@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { CourseModule, UserProfile } from '../types';
 import { AnimatedLessonPlayer } from './AnimatedLessonPlayer';
+import { LessonValidationModal, isLessonRequiringValidationTest } from './LessonValidationModal';
 import { speechService } from '../utils/speechService';
 
 interface CourseAnimaticModalProps {
@@ -34,6 +35,25 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
   onRequestCgpmp,
 }) => {
   const [selectedLessonIndex, setSelectedLessonIndex] = useState(0);
+  const [isValidatingModalOpen, setIsValidatingModalOpen] = useState(false);
+  const [validatedIndexes, setValidatedIndexes] = useState<Set<number>>(() => {
+    if (!course) return new Set();
+    try {
+      const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+      return saved ? new Set<number>(JSON.parse(saved)) : new Set<number>();
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    if (course?.id) {
+      try {
+        const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+        setValidatedIndexes(saved ? new Set<number>(JSON.parse(saved)) : new Set<number>());
+      } catch {}
+    }
+  }, [course?.id]);
 
   const needsDfat = course ? course.requiresDfatApproval && currentProfile.role === 'cgpmp_member' : false;
 
@@ -112,22 +132,43 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 shrink-0">
               Chapitre :
             </span>
-            {course.lessons.map((les, idx) => (
-              <button
-                key={les.id || idx}
-                onClick={() => setSelectedLessonIndex(idx)}
-                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition shrink-0 flex items-center gap-1.5 ${
-                  selectedLessonIndex === idx
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                <span className="w-4 h-4 rounded-full bg-black/30 text-[10px] flex items-center justify-center font-black">
-                  {idx + 1}
-                </span>
-                <span className="max-w-[160px] truncate">{les.title}</span>
-              </button>
-            ))}
+            {course.lessons.map((les, idx) => {
+              let prereqIdx: number | null = null;
+              for (let p = 0; p < idx; p++) {
+                if (isLessonRequiringValidationTest(course, p) && !validatedIndexes.has(p)) {
+                  prereqIdx = p;
+                  break;
+                }
+              }
+              const isLocked = prereqIdx !== null;
+              return (
+                <button
+                  key={les.id || idx}
+                  onClick={() => {
+                    if (isLocked && prereqIdx !== null) {
+                      setSelectedLessonIndex(prereqIdx);
+                      setIsValidatingModalOpen(true);
+                      return;
+                    }
+                    setSelectedLessonIndex(idx);
+                  }}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                    selectedLessonIndex === idx
+                      ? 'bg-blue-600 text-white shadow'
+                      : isLocked
+                      ? 'bg-slate-900/60 text-amber-300/80 border border-amber-500/30'
+                      : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title={isLocked ? `Verrouillé : test du Chapitre ${(prereqIdx ?? 0) + 1} requis` : les.title}
+                >
+                  <span className="w-4 h-4 rounded-full bg-black/30 text-[10px] flex items-center justify-center font-black">
+                    {isLocked ? <Lock className="w-2.5 h-2.5 text-amber-400" /> : idx + 1}
+                  </span>
+                  <span className="max-w-[160px] truncate">{les.title}</span>
+                  {isLocked && <span className="text-[9px] text-amber-400 font-bold">🔒</span>}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -138,6 +179,23 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
             lesson={currentLesson}
             lessonIndex={selectedLessonIndex}
             currentProfile={currentProfile}
+            hasNextLesson={selectedLessonIndex < (course.lessons?.length || 1) - 1}
+            hasPrevLesson={selectedLessonIndex > 0}
+            onNextLesson={() => {
+              if (isLessonRequiringValidationTest(course, selectedLessonIndex) && !validatedIndexes.has(selectedLessonIndex)) {
+                setIsValidatingModalOpen(true);
+                return;
+              }
+              if (selectedLessonIndex < (course.lessons?.length || 1) - 1) {
+                setSelectedLessonIndex((prev) => prev + 1);
+              }
+            }}
+            onPrevLesson={() => {
+              if (selectedLessonIndex > 0) setSelectedLessonIndex((prev) => prev - 1);
+            }}
+            requiresValidationTest={isLessonRequiringValidationTest(course, selectedLessonIndex)}
+            isLessonValidated={validatedIndexes.has(selectedLessonIndex)}
+            onOpenValidationTest={() => setIsValidatingModalOpen(true)}
           />
         </div>
 
@@ -200,6 +258,39 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal de Validation de Leçon par Test Lié */}
+      <LessonValidationModal
+        isOpen={isValidatingModalOpen}
+        onClose={() => setIsValidatingModalOpen(false)}
+        course={course}
+        lesson={currentLesson}
+        lessonIndex={selectedLessonIndex}
+        onPassValidation={(idx) => {
+          setValidatedIndexes((prev) => {
+            const next = new Set(prev);
+            next.add(idx);
+            try {
+              localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+            } catch {}
+            return next;
+          });
+        }}
+        onPassAndNextLesson={(idx) => {
+          setValidatedIndexes((prev) => {
+            const next = new Set(prev);
+            next.add(idx);
+            try {
+              localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+            } catch {}
+            return next;
+          });
+          if (idx < (course.lessons?.length || 1) - 1) {
+            setSelectedLessonIndex(idx + 1);
+          }
+        }}
+        isAlreadyValidated={validatedIndexes.has(selectedLessonIndex)}
+      />
     </div>
   );
 };
