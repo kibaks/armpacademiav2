@@ -510,6 +510,40 @@ class SpeechService {
   private isCancelled = false;
   private isUnlocked = false;
   private neuralTtsAvailable = true;
+  // Voix machine de secours (Web Speech navigateur) — OFF par défaut.
+  // Synchronisé avec /api/tts/settings (panneau ⚙ Paramètres Voix) + localStorage
+  // pour survivre aux coupures serveur. Une seule voix humaine: jamais de robot.
+  private browserFallbackEnabled = false;
+  private lastFallbackRefreshAt = 0;
+
+  private async refreshBrowserFallbackFlag(force = false): Promise<boolean> {
+    const now = Date.now();
+    if (!force && now - this.lastFallbackRefreshAt < 15000) {
+      return this.browserFallbackEnabled;
+    }
+    this.lastFallbackRefreshAt = now;
+    try {
+      const controller = new AbortController();
+      const t = window.setTimeout(() => controller.abort(), 2500);
+      const res = await fetch('/api/tts/settings', { signal: controller.signal });
+      window.clearTimeout(t);
+      if (res.ok) {
+        const data = await res.json();
+        this.browserFallbackEnabled = !!data.browserFallback;
+        try {
+          localStorage.setItem('academia_browser_fallback', String(this.browserFallbackEnabled));
+        } catch {}
+        return this.browserFallbackEnabled;
+      }
+    } catch {
+      /* serveur en coupure → on garde la dernière valeur connue */
+    }
+    try {
+      const cached = localStorage.getItem('academia_browser_fallback');
+      if (cached !== null) this.browserFallbackEnabled = cached === 'true';
+    } catch {}
+    return this.browserFallbackEnabled;
+  }
   private liveTimeDomainBuffer: Uint8Array = new Uint8Array(256);
   private currentStartTimeCtx = 0;
   private currentPlaybackRate = 1.0;
@@ -1849,6 +1883,8 @@ class SpeechService {
     };
     this.notify();
 
+    // Synchronise l'autorisation de voix machine (paramétrage serveur) avant de jouer
+    await this.refreshBrowserFallbackFlag();
     await this.playNextInQueue();
   }
 
@@ -2247,7 +2283,17 @@ class SpeechService {
       }
     }
 
-    // 2. Fallback to Natural Feminine Web Speech API
+    // 2. Voix machine (Web Speech navigateur) — UNIQUEMENT si activée dans le
+    //    paramétrage ⚙ Paramètres Voix (browserFallback, OFF par défaut).
+    //    Sinon: arrêt propre, zéro voix robotisée — le message du chat reste
+    //    entièrement lisible et la synthèse reprendra dès le retour du serveur.
+    const allowBrowserVoice = await this.refreshBrowserFallbackFlag(true);
+    if (!allowBrowserVoice) {
+      console.warn('[Speech] Voix neurale indisponible et voix machine désactivée (paramétrage) — lecture interrompue.');
+      this.stop();
+      return;
+    }
+
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       this.stop();
       return;

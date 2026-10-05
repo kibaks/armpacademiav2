@@ -1556,6 +1556,8 @@ type NeuralVoicePref = 'denise' | 'vivienne-multilingual' | 'vivienne';
 interface TtsSettings {
   order: Array<{ id: TtsProviderId; enabled: boolean }>;
   neuralVoice: NeuralVoicePref;
+  /** Voix machine de secours (Web Speech navigateur) — désactivée par défaut. */
+  browserFallback: boolean;
 }
 
 const TTS_SETTINGS_FILE = path.join(process.cwd(), 'tts-settings.json');
@@ -1568,6 +1570,7 @@ const DEFAULT_TTS_SETTINGS: TtsSettings = {
     { id: 'gemini', enabled: false },
   ],
   neuralVoice: 'denise',
+  browserFallback: false,
 };
 
 function normalizeTtsSettings(raw: any): TtsSettings {
@@ -1584,17 +1587,26 @@ function normalizeTtsSettings(raw: any): TtsSettings {
     neuralVoice: (NEURAL_VOICE_PREFS as string[]).includes(raw?.neuralVoice)
       ? (raw.neuralVoice as NeuralVoicePref)
       : DEFAULT_TTS_SETTINGS.neuralVoice,
+    browserFallback: typeof raw?.browserFallback === 'boolean' ? raw.browserFallback : false,
   };
 }
 
 function loadTtsSettings(): TtsSettings {
   try {
     if (!fs.existsSync(TTS_SETTINGS_FILE)) {
-      return { order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })), neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice };
+      return {
+        order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })),
+        neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice,
+        browserFallback: DEFAULT_TTS_SETTINGS.browserFallback,
+      };
     }
     return normalizeTtsSettings(JSON.parse(fs.readFileSync(TTS_SETTINGS_FILE, 'utf8')));
   } catch {
-    return { order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })), neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice };
+    return {
+      order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })),
+      neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice,
+      browserFallback: DEFAULT_TTS_SETTINGS.browserFallback,
+    };
   }
 }
 

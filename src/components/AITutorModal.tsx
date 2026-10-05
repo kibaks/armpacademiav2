@@ -522,6 +522,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [voiceSettings, setVoiceSettings] = useState<{
     order: Array<{ id: 'elevenlabs' | 'neural' | 'gemini'; enabled: boolean }>;
     neuralVoice: 'denise' | 'vivienne-multilingual' | 'vivienne';
+    browserFallback?: boolean;
     availability?: { elevenlabs?: boolean; neural?: boolean; gemini?: boolean };
     elevenlabsVoiceId?: string;
   } | null>(null);
@@ -1403,7 +1404,11 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const res = await fetch('/api/tts/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: voiceSettings.order, neuralVoice: voiceSettings.neuralVoice }),
+        body: JSON.stringify({
+          order: voiceSettings.order,
+          neuralVoice: voiceSettings.neuralVoice,
+          browserFallback: !!voiceSettings.browserFallback,
+        }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -1666,6 +1671,19 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     );
                   })}
                 </div>
+
+                <label className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/85 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!voiceSettings.browserFallback}
+                    onChange={(e) => setVoiceSettings({ ...voiceSettings, browserFallback: e.target.checked })}
+                    className="accent-amber-400"
+                  />
+                  <span className="font-bold text-amber-200">Voix machine de secours (navigateur)</span>
+                  <span className="text-white/50">
+                    synthèse robotisée si la voix neurale tombe — <strong>désactivée par défaut</strong>
+                  </span>
+                </label>
 
                 <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px]">
                   <label className="flex items-center gap-1.5 text-white/80">
