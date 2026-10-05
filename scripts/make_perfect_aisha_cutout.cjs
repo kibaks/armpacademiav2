@@ -1,6 +1,10 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 
+// ⚠ Pipeline HISTORIQUE (règles couleur à la main). Pour une découpe calibrée,
+// utiliser scripts/soigner_contours_aisha.cjs (tresses/cou/préserve corrigés).
+console.log('⚠ make_perfect = pipeline historique — voir soigner_contours_aisha.cjs pour la version calibrée.');
+
 const W = 896;
 const H = 1200;
 
@@ -181,9 +185,17 @@ for (let y = 0; y < H; y++) {
 }
 
 fs.writeFileSync('/tmp/flawless_rgba.raw', rgba);
+// Safety: preserve the current app cutout before overwriting
+if (fs.existsSync('src/assets/images/aisha_cutout_foreground.png')) {
+  fs.copyFileSync('src/assets/images/aisha_cutout_foreground.png', '/tmp/aisha_cutout_foreground.prev-make_perfect.png');
+}
 execSync('convert -size 896x1200 -depth 8 rgba:/tmp/flawless_rgba.raw src/assets/images/aisha_cutout_foreground.png');
 console.log('src/assets/images/aisha_cutout_foreground.png created with 100% flawless C1 continuous contours!');
 
 // 6. Regenerate crisp 512x512 thumbnail
+// Safety: preserve the current avatar thumb before overwriting
+if (fs.existsSync('src/assets/images/aisha_avatar_thumb.jpg')) {
+  fs.copyFileSync('src/assets/images/aisha_avatar_thumb.jpg', '/tmp/aisha_avatar_thumb.prev-make_perfect.jpg');
+}
 execSync('convert src/assets/images/aisha_portrait_sans_main_1790912759956.jpg -crop 560x560+168+180 -resize 512x512 -quality 95 src/assets/images/aisha_avatar_thumb.jpg');
 console.log('src/assets/images/aisha_avatar_thumb.jpg updated!');
