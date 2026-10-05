@@ -2596,123 +2596,149 @@ const SketchedNodePictogram: React.FC<{
         cx="22"
         cy="22"
         r="20"
-        fill="#FFFFFF"
+        fill={p > 0.05 ? '#FFFFFF' : '#F8FAFC'}
         stroke={color}
         strokeWidth="2.5"
         strokeDasharray="126"
         strokeDashoffset={dashOffset}
+        filter={p > 0.3 ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.12))' : undefined}
       />
-      <g stroke={color} strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round">
-        {(type === 'citizen_school' || type === 'works_crane') && (
+      <g stroke={color} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        {type === 'citizen_school' && (
           <>
-            <polygon points="22,8 9,17 35,17" fill={p > 0.5 ? `${color}22` : 'none'} />
-            <rect x="12" y="17" width="20" height="15" rx="1.5" />
-            <line x1="22" y1="11" x2="22" y2="15" />
-            <line x1="20" y1="13" x2="24" y2="13" />
-            <rect x="19" y="23" width="6" height="9" />
+            <polygon points="22,7 8,16 36,16" fill={p > 0.4 ? `${color}25` : 'none'} />
+            <rect x="11" y="16" width="22" height="17" rx="1.5" fill={p > 0.5 ? '#EFF6FF' : 'none'} />
+            <rect x="14" y="19" width="4" height="5" rx="0.5" fill={p > 0.6 ? '#BFDBFE' : 'none'} />
+            <rect x="26" y="19" width="4" height="5" rx="0.5" fill={p > 0.6 ? '#BFDBFE' : 'none'} />
+            <path d="M 19 33 L 19 26 C 19 24.5 25 24.5 25 26 L 25 33 Z" fill={p > 0.7 ? `${color}44` : 'none'} />
+          </>
+        )}
+        {type === 'works_crane' && (
+          <>
+            <line x1="28" y1="9" x2="28" y2="34" strokeWidth="2.8" />
+            <line x1="12" y1="12" x2="35" y2="12" strokeWidth="2.8" />
+            <polygon points="26,12 28,6 30,12" fill={color} />
+            <line x1="18" y1="12" x2="18" y2="22" strokeDasharray="2 1.5" />
+            <rect x="13" y="22" width="10" height="4" rx="1" fill={p > 0.5 ? '#FBBF24' : 'none'} strokeWidth="1.5" />
+            <polyline points="28,34 32,28 28,22 32,16 28,10" strokeWidth="1.4" />
           </>
         )}
         {type === 'scale_equity' && (
           <>
-            <line x1="22" y1="9" x2="22" y2="33" />
-            <line x1="11" y1="15" x2="33" y2="15" />
-            <polygon points="11,15 8,24 14,24" fill={p > 0.5 ? '#FEF08A' : 'none'} />
-            <polygon points="33,15 30,24 36,24" fill={p > 0.5 ? '#FEF08A' : 'none'} />
-            <line x1="16" y1="33" x2="28" y2="33" />
+            <line x1="22" y1="8" x2="22" y2="34" strokeWidth="2.6" />
+            <line x1="10" y1="14" x2="34" y2="14" strokeWidth="3" />
+            <circle cx="22" cy="14" r="3" fill="#FBBF24" />
+            <path d="M 8 23 Q 13 29 18 23 Z" fill={p > 0.5 ? '#FEF08A' : 'none'} strokeWidth="2" />
+            <line x1="10" y1="14" x2="8" y2="23" strokeWidth="1.4" />
+            <line x1="10" y1="14" x2="18" y2="23" strokeWidth="1.4" />
+            <path d="M 26 23 Q 31 29 36 23 Z" fill={p > 0.5 ? '#FEF08A' : 'none'} strokeWidth="2" />
+            <line x1="34" y1="14" x2="26" y2="23" strokeWidth="1.4" />
+            <line x1="34" y1="14" x2="36" y2="23" strokeWidth="1.4" />
+            <line x1="15" y1="34" x2="29" y2="34" strokeWidth="2.8" />
           </>
         )}
         {type === 'open_access' && (
           <>
-            <path d="M 11 22 L 19 16 L 19 28 Z" fill={p > 0.5 ? `${color}22` : 'none'} />
-            <path d="M 23 16 Q 28 22 23 28" />
-            <path d="M 27 12 Q 35 22 27 32" />
+            <path d="M 10 22 L 20 15 L 20 29 Z" fill={p > 0.5 ? '#FEF08A' : 'none'} strokeWidth="2.4" />
+            <rect x="7" y="19" width="3" height="6" rx="1" fill={color} />
+            <path d="M 24 16 Q 29 22 24 28" strokeWidth="2.4" />
+            <path d="M 29 12 Q 37 22 29 32" strokeWidth="2.4" />
           </>
         )}
         {(type === 'triad_institutions' || type === 'cgpmp_needs') && (
           <>
-            <rect x="9" y="13" width="6" height="18" rx="1" fill={p > 0.4 ? `${color}22` : 'none'} />
-            <rect x="19" y="10" width="6" height="21" rx="1" fill={p > 0.6 ? `${color}33` : 'none'} />
-            <rect x="29" y="13" width="6" height="18" rx="1" fill={p > 0.8 ? `${color}22` : 'none'} />
-            <line x1="8" y1="33" x2="36" y2="33" />
+            <rect x="8" y="14" width="7" height="18" rx="1" fill={p > 0.4 ? '#DBEAFE' : 'none'} />
+            <rect x="18.5" y="10" width="7" height="22" rx="1" fill={p > 0.6 ? '#D1FAE5' : 'none'} strokeWidth="2.5" />
+            <rect x="29" y="14" width="7" height="18" rx="1" fill={p > 0.8 ? '#FEF3C7' : 'none'} />
+            <line x1="6" y1="33" x2="38" y2="33" strokeWidth="2.8" />
+            <line x1="6" y1="14" x2="38" y2="14" strokeWidth="2" />
           </>
         )}
         {type === 'ppm_calendar' && (
           <>
-            <rect x="10" y="11" width="24" height="22" rx="3" fill={p > 0.5 ? `${color}18` : 'none'} />
-            <line x1="10" y1="17" x2="34" y2="17" />
-            <line x1="16" y1="8" x2="16" y2="13" />
-            <line x1="28" y1="8" x2="28" y2="13" />
-            <path d="M 16 25 L 20 29 L 28 21" />
+            <rect x="9" y="10" width="26" height="23" rx="3" fill={p > 0.5 ? '#EFF6FF' : 'none'} />
+            <rect x="9" y="10" width="26" height="6" rx="2" fill={color} stroke="none" />
+            <line x1="9" y1="16" x2="35" y2="16" strokeWidth="2" />
+            <line x1="15" y1="7" x2="15" y2="11" strokeWidth="2.5" />
+            <line x1="29" y1="7" x2="29" y2="11" strokeWidth="2.5" />
+            <polyline points="15,24 19,28 29,19" stroke={color} strokeWidth="2.6" strokeLinecap="round" />
           </>
         )}
         {type === 'thresholds_nosplit' && (
           <>
-            <path d="M 11 28 A 11 11 0 0 1 33 28" />
-            <line x1="22" y1="28" x2="29" y2="17" strokeWidth="2.5" />
-            <circle cx="22" cy="28" r="2.5" fill={color} />
+            <path d="M 10 27 A 12 12 0 0 1 34 27" strokeWidth="3" />
+            <circle cx="22" cy="27" r="3" fill={color} />
+            <line x1="22" y1="27" x2="30" y2="17" strokeWidth="2.8" stroke="#DC2626" />
+            <circle cx="31" cy="16" r="1.5" fill="#DC2626" stroke="none" />
+            <line x1="12" y1="12" x2="18" y2="18" stroke="#DC2626" strokeWidth="2" />
+            <line x1="18" y1="12" x2="12" y2="18" stroke="#DC2626" strokeWidth="2" />
           </>
         )}
         {type === 'supplies_truck' && (
           <>
-            <rect x="9" y="14" width="16" height="12" rx="2" fill={p > 0.5 ? `${color}22` : 'none'} />
-            <path d="M 25 18 L 32 18 L 35 22 L 35 26 L 25 26 Z" />
-            <circle cx="15" cy="29" r="3" />
-            <circle cx="30" cy="29" r="3" />
+            <rect x="8" y="13" width="16" height="13" rx="2" fill={p > 0.5 ? '#FEF3C7' : 'none'} />
+            <path d="M 24 17 L 31 17 L 35 21 L 35 26 L 24 26 Z" fill={p > 0.5 ? '#EFF6FF' : 'none'} />
+            <circle cx="14" cy="29" r="3.2" fill="#334155" />
+            <circle cx="29" cy="29" r="3.2" fill="#334155" />
+            <line x1="16" y1="13" x2="16" y2="26" strokeWidth="1.2" />
           </>
         )}
         {type === 'intellectual_tdr' && (
           <>
-            <circle cx="22" cy="12" r="3" fill={color} />
-            <line x1="20" y1="15" x2="13" y2="33" />
-            <line x1="24" y1="15" x2="31" y2="33" />
-            <line x1="15" y1="25" x2="29" y2="25" />
+            <circle cx="22" cy="11" r="3.5" fill="#FBBF24" />
+            <line x1="22" y1="11" x2="14" y2="33" strokeWidth="2.5" />
+            <line x1="22" y1="11" x2="30" y2="33" strokeWidth="2.5" />
+            <path d="M 16 26 Q 22 29 28 26" strokeWidth="1.8" />
           </>
         )}
         {type === 'pme_allotment' && (
           <>
-            <rect x="10" y="11" width="10" height="10" rx="2" fill={p > 0.4 ? '#DBEAFE' : 'none'} />
-            <rect x="24" y="11" width="10" height="10" rx="2" fill={p > 0.6 ? '#D1FAE5' : 'none'} />
-            <rect x="17" y="24" width="10" height="10" rx="2" fill={p > 0.8 ? '#FEF3C7' : 'none'} />
+            <rect x="9" y="10" width="11" height="11" rx="2" fill={p > 0.4 ? '#DBEAFE' : 'none'} stroke="#2563EB" />
+            <rect x="24" y="10" width="11" height="11" rx="2" fill={p > 0.6 ? '#D1FAE5' : 'none'} stroke="#059669" />
+            <rect x="16.5" y="24" width="11" height="11" rx="2" fill={p > 0.8 ? '#FEF3C7' : 'none'} stroke="#D97706" />
           </>
         )}
         {type === 'sealed_bids' && (
           <>
-            <rect x="10" y="13" width="24" height="18" rx="2" fill={p > 0.5 ? '#FEF3C7' : 'none'} />
-            <polyline points="10,13 22,23 34,13" />
-            <circle cx="22" cy="22" r="3" fill="#E11D48" />
+            <rect x="8" y="12" width="28" height="20" rx="3" fill={p > 0.5 ? '#FFFBEB' : 'none'} strokeWidth="2.2" />
+            <polyline points="8,12 22,23 36,12" strokeWidth="2" />
+            <circle cx="22" cy="22" r="3.5" fill="#DC2626" stroke="#991B1B" strokeWidth="1" />
           </>
         )}
         {type === 'dgcmp_ano' && (
           <>
             <path
-              d="M 22 8 L 34 13 L 34 23 C 34 31 22 36 22 36 C 22 36 10 31 10 23 L 10 13 Z"
-              fill={p > 0.55 ? `${color}22` : 'none'}
+              d="M 22 7 L 35 12 L 35 22 C 35 31 22 36 22 36 C 22 36 9 31 9 22 L 9 12 Z"
+              fill={p > 0.5 ? '#D1FAE5' : 'none'}
+              stroke="#059669"
+              strokeWidth="2.2"
             />
-            <path d="M 17 22 L 21 26 L 28 18" strokeWidth="2.6" />
+            <polyline points="16,21 20,26 28,16" stroke="#059669" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
           </>
         )}
         {type === 'finance_vault' && (
           <>
-            <rect x="10" y="11" width="24" height="22" rx="3" fill={p > 0.5 ? `${color}18` : 'none'} />
-            <circle cx="22" cy="22" r="6" />
-            <line x1="22" y1="16" x2="22" y2="28" />
-            <line x1="16" y1="22" x2="28" y2="22" />
+            <rect x="9" y="10" width="26" height="24" rx="3" fill={p > 0.5 ? '#F1F5F9' : 'none'} />
+            <circle cx="22" cy="22" r="7" fill={p > 0.5 ? '#FEF08A' : 'none'} strokeWidth="2" />
+            <line x1="22" y1="15" x2="22" y2="29" strokeWidth="2.5" />
+            <line x1="15" y1="22" x2="29" y2="22" strokeWidth="2.5" />
           </>
         )}
         {type === 'crd_gavel' && (
           <>
-            <rect x="14" y="10" width="16" height="8" rx="2" fill={p > 0.5 ? '#FEF08A' : 'none'} />
-            <line x1="22" y1="18" x2="22" y2="31" strokeWidth="2.6" />
-            <line x1="12" y1="33" x2="32" y2="33" strokeWidth="3" />
+            <rect x="13" y="9" width="18" height="9" rx="2" fill={p > 0.5 ? '#78350F' : 'none'} stroke="#451A03" strokeWidth="2" />
+            <line x1="22" y1="18" x2="22" y2="31" strokeWidth="3" stroke="#451A03" />
+            <ellipse cx="22" cy="33" rx="12" ry="2.5" fill="#451A03" stroke="none" />
           </>
         )}
         {(type === 'transparency_pv' || type === 'audit_sigmap' || type === 'legal_codex') && (
           <>
-            <rect x="11" y="9" width="20" height="25" rx="2" fill={p > 0.5 ? `${color}15` : 'none'} />
-            <line x1="15" y1="15" x2="27" y2="15" />
-            <line x1="15" y1="20" x2="27" y2="20" />
-            <circle cx="27" cy="27" r="5" fill="#FEF08A" />
-            <line x1="31" y1="31" x2="35" y2="35" strokeWidth="2.6" />
+            <rect x="10" y="8" width="21" height="27" rx="2" fill={p > 0.5 ? '#FFFFFF' : 'none'} />
+            <line x1="14" y1="14" x2="27" y2="14" strokeWidth="1.8" />
+            <line x1="14" y1="19" x2="27" y2="19" strokeWidth="1.8" />
+            <line x1="14" y1="24" x2="23" y2="24" strokeWidth="1.8" />
+            <circle cx="27" cy="27" r="5" fill="#DCFCE7" stroke="#059669" strokeWidth="1.8" />
+            <polyline points="25,27 26.5,28.5 29,25.5" stroke="#059669" strokeWidth="1.6" strokeLinecap="round" />
           </>
         )}
       </g>
@@ -3131,12 +3157,25 @@ const EssentialVoiceSyncedIllustration: React.FC<{
 }> = React.memo(
   ({ archetype, color, badgeLabel, miniCaption, flowSteps, drawProgress, legalArticle }) => {
     const p = clamp01(drawProgress);
-    const strokeDash = Math.max(0, 520 * (1 - clamp01(p * 1.35)));
-    const fillOpacity = clamp01((p - 0.25) / 0.55);
+    // Smooth cubic easing for organic, high-fidelity drawing animation
+    const smoothP = 0.5 * (1 - Math.cos(p * Math.PI));
+    const strokeDash = Math.max(0, 520 * (1 - clamp01(smoothP * 1.25)));
+    const fillOpacity = clamp01((smoothP - 0.2) / 0.6);
+
+    // Dynamic animated draw-head coordinates for visual feedback during progressive drawing
+    const drawHeadX = 30 + 120 + Math.sin(smoothP * Math.PI * 4) * (40 * (1 - smoothP * 0.5));
+    const drawHeadY = 22 + 90 + Math.cos(smoothP * Math.PI * 3) * (35 * (1 - smoothP * 0.5));
+    const isDrawingActive = p > 0.02 && p < 0.95;
 
     return (
       <g>
-        {/* Clean Light Sketchpad Card */}
+        <defs>
+          <filter id="illustrationGlow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor={color} floodOpacity="0.25" />
+          </filter>
+        </defs>
+
+        {/* Clean Light Sketchpad Card with subtle glow */}
         <rect
           x="0"
           y="0"
@@ -3146,6 +3185,7 @@ const EssentialVoiceSyncedIllustration: React.FC<{
           fill="#FFFFFF"
           stroke={color}
           strokeWidth="3"
+          filter="url(#illustrationGlow)"
         />
 
         {/* Minimalist Header */}
@@ -3179,76 +3219,163 @@ const EssentialVoiceSyncedIllustration: React.FC<{
             strokeLinejoin="round"
             strokeDasharray="520"
             strokeDashoffset={strokeDash}
+            style={{ transition: 'stroke-dashoffset 0.08s ease-out' }}
           >
-            {(archetype === 'citizen_school' || archetype === 'works_crane') && (
+            {archetype === 'citizen_school' && (
               <g>
-                {/* Essential Public Infrastructure Building (Clean & Iconic) */}
-                <polygon
-                  points="120,14 36,64 204,64"
-                  fill={fillOpacity > 0.2 ? '#DBEAFE' : 'none'}
-                />
-                <rect
-                  x="50"
-                  y="64"
-                  width="140"
-                  height="96"
-                  rx="6"
-                  fill={fillOpacity > 0.4 ? '#EFF6FF' : 'none'}
-                />
-                <rect x="72" y="84" width="28" height="26" rx="3" fill={fillOpacity > 0.6 ? '#FDE68A' : 'none'} />
-                <rect x="140" y="84" width="28" height="26" rx="3" fill={fillOpacity > 0.6 ? '#FDE68A' : 'none'} />
-                <rect x="104" y="114" width="32" height="46" rx="3" fill={fillOpacity > 0.7 ? color : 'none'} />
-                <line x1="20" y1="160" x2="220" y2="160" strokeWidth="4" />
+                {/* Classical Pedagogical Academy / Public General Interest */}
+                <rect x="16" y="154" width="208" height="10" rx="2" fill={fillOpacity > 0.2 ? '#E2E8F0' : 'none'} />
+                <rect x="26" y="146" width="188" height="8" rx="2" fill={fillOpacity > 0.3 ? '#CBD5E1' : 'none'} />
+                <rect x="36" y="58" width="168" height="88" rx="4" fill={fillOpacity > 0.15 ? '#F8FAFC' : 'none'} />
+                <polygon points="120,12 24,58 216,58" fill={fillOpacity > 0.3 ? '#EFF6FF' : 'none'} />
+                <polygon points="120,22 42,56 198,56" fill={fillOpacity > 0.45 ? '#DBEAFE' : 'none'} />
+                <circle cx="120" cy="40" r="8" fill={fillOpacity > 0.5 ? '#FBBF24' : 'none'} stroke={color} strokeWidth="2" />
+                <rect x="48" y="58" width="14" height="88" rx="2" fill={fillOpacity > 0.5 ? '#FFFFFF' : 'none'} />
+                <rect x="90" y="58" width="14" height="88" rx="2" fill={fillOpacity > 0.5 ? '#FFFFFF' : 'none'} />
+                <rect x="136" y="58" width="14" height="88" rx="2" fill={fillOpacity > 0.5 ? '#FFFFFF' : 'none'} />
+                <rect x="178" y="58" width="14" height="88" rx="2" fill={fillOpacity > 0.5 ? '#FFFFFF' : 'none'} />
+                <path d="M 68 76 C 68 70 78 70 78 76 L 78 94 L 68 94 Z" fill={fillOpacity > 0.6 ? '#BFDBFE' : 'none'} />
+                <path d="M 156 76 C 156 70 166 70 166 76 L 166 94 L 156 94 Z" fill={fillOpacity > 0.6 ? '#BFDBFE' : 'none'} />
+                <path d="M 108 146 L 108 106 C 108 98 132 98 132 106 L 132 146 Z" fill={fillOpacity > 0.7 ? `${color}33` : 'none'} />
+                <line x1="120" y1="102" x2="120" y2="146" strokeWidth="2" />
+                <circle cx="116" cy="126" r="1.8" fill={color} />
+                <circle cx="124" cy="126" r="1.8" fill={color} />
+              </g>
+            )}
+
+            {archetype === 'works_crane' && (
+              <g>
+                {/* Modern Construction & Articulated Tower Crane */}
+                <rect x="20" y="70" width="80" height="92" rx="3" fill={fillOpacity > 0.2 ? '#EFF6FF' : 'none'} />
+                <line x1="20" y1="100" x2="100" y2="100" strokeWidth="3" />
+                <line x1="20" y1="130" x2="100" y2="130" strokeWidth="3" />
+                <line x1="46" y1="70" x2="46" y2="162" strokeWidth="2.5" />
+                <line x1="74" y1="70" x2="74" y2="162" strokeWidth="2.5" />
+                <line x1="22" y1="72" x2="44" y2="98" strokeWidth="1.6" strokeDasharray="3 2" />
+                <line x1="48" y1="72" x2="72" y2="98" strokeWidth="1.6" strokeDasharray="3 2" />
+                <line x1="76" y1="72" x2="98" y2="98" strokeWidth="1.6" strokeDasharray="3 2" />
+                <line x1="165" y1="20" x2="165" y2="162" strokeWidth="4.5" />
+                <line x1="175" y1="20" x2="175" y2="162" strokeWidth="4.5" />
+                <polyline points="165,160 175,140 165,120 175,100 165,80 175,60 165,40 175,20" strokeWidth="1.8" />
+                <line x1="70" y1="26" x2="220" y2="26" strokeWidth="4" />
+                <polygon points="160,26 170,8 180,26" fill={fillOpacity > 0.4 ? '#FEF08A' : 'none'} />
+                <line x1="170" y1="8" x2="110" y2="26" strokeWidth="1.8" />
+                <line x1="170" y1="8" x2="210" y2="26" strokeWidth="1.8" />
+                <rect x="200" y="22" width="22" height="16" rx="2" fill={fillOpacity > 0.6 ? '#E11D48' : 'none'} />
+                <rect x="116" y="24" width="12" height="8" rx="1.5" fill={color} />
+                <line x1="122" y1="32" x2="122" y2="82" strokeWidth="2" strokeDasharray="4 2" />
+                <polygon points="122,82 118,88 126,88" fill={color} />
+                <rect x="94" y="88" width="56" height="10" rx="2" fill={fillOpacity > 0.6 ? '#FBBF24' : 'none'} strokeWidth="2.5" />
+                <polygon points="135,162 138,144 144,144 147,162" fill="#F97316" stroke="#C2410C" strokeWidth="1.5" />
+                <polygon points="115,162 118,144 124,144 127,162" fill="#F97316" stroke="#C2410C" strokeWidth="1.5" />
               </g>
             )}
 
             {archetype === 'scale_equity' && (
               <g>
-                {/* Essential Balance of Justice & Equality of Bids */}
-                <line x1="120" y1="16" x2="120" y2="156" strokeWidth="4" />
-                <line x1="76" y1="156" x2="164" y2="156" strokeWidth="4.5" />
-                <line x1="36" y1="46" x2="204" y2="46" strokeWidth="3.5" />
-                <polygon points="36,46 14,96 58,96" fill={fillOpacity > 0.4 ? '#DBEAFE' : 'none'} />
-                <polygon points="204,46 182,96 226,96" fill={fillOpacity > 0.4 ? '#D1FAE5' : 'none'} />
-                <circle cx="120" cy="46" r="9" fill="#FBBF24" />
+                {/* Neoclassical Scale of Justice & Equal Treatment */}
+                <rect x="80" y="152" width="80" height="12" rx="3" fill={fillOpacity > 0.3 ? '#E2E8F0' : 'none'} />
+                <rect x="92" y="142" width="56" height="10" rx="2" fill={fillOpacity > 0.4 ? '#CBD5E1' : 'none'} />
+                <line x1="117" y1="26" x2="117" y2="142" strokeWidth="3" />
+                <line x1="123" y1="26" x2="123" y2="142" strokeWidth="3" />
+                <circle cx="120" cy="26" r="10" fill={fillOpacity > 0.5 ? '#FBBF24' : 'none'} strokeWidth="3.2" />
+                <line x1="120" y1="26" x2="120" y2="44" strokeWidth="2.5" stroke="#E11D48" />
+                <line x1="32" y1="36" x2="208" y2="36" strokeWidth="4.5" />
+                <circle cx="32" cy="36" r="4.5" fill={color} />
+                <circle cx="208" cy="36" r="4.5" fill={color} />
+                <line x1="32" y1="36" x2="14" y2="96" strokeWidth="1.8" />
+                <line x1="32" y1="36" x2="32" y2="96" strokeWidth="1.8" />
+                <line x1="32" y1="36" x2="50" y2="96" strokeWidth="1.8" />
+                <path d="M 10 96 Q 32 116 54 96 Z" fill={fillOpacity > 0.45 ? '#FEF08A' : 'none'} strokeWidth="3" />
+                <rect x="20" y="78" width="24" height="18" rx="2" fill={fillOpacity > 0.6 ? '#EFF6FF' : 'none'} strokeWidth="2" />
+                <line x1="24" y1="84" x2="40" y2="84" strokeWidth="1.5" />
+                <line x1="24" y1="89" x2="36" y2="89" strokeWidth="1.5" />
+                <line x1="208" y1="36" x2="190" y2="96" strokeWidth="1.8" />
+                <line x1="208" y1="36" x2="208" y2="96" strokeWidth="1.8" />
+                <line x1="208" y1="36" x2="226" y2="96" strokeWidth="1.8" />
+                <path d="M 186 96 Q 208 116 230 96 Z" fill={fillOpacity > 0.45 ? '#FEF08A' : 'none'} strokeWidth="3" />
+                <rect x="196" y="78" width="24" height="18" rx="2" fill={fillOpacity > 0.6 ? '#DCFCE7' : 'none'} strokeWidth="2" />
+                <line x1="200" y1="84" x2="216" y2="84" strokeWidth="1.5" />
+                <line x1="200" y1="89" x2="212" y2="89" strokeWidth="1.5" />
+                <circle cx="120" cy="26" r="24" stroke="#FBBF24" strokeWidth="1.4" strokeDasharray="3 3" opacity={fillOpacity} />
               </g>
             )}
 
             {archetype === 'open_access' && (
               <g>
-                {/* Essential Public Call Megaphone */}
-                <polygon
-                  points="44,86 116,42 116,130 44,86"
-                  fill={fillOpacity > 0.35 ? '#FEF3C7' : 'none'}
-                />
-                <rect x="24" y="72" width="20" height="28" rx="4" fill={fillOpacity > 0.5 ? color : 'none'} />
-                <path d="M 140 58 Q 168 86 140 114" strokeWidth="3.5" />
-                <path d="M 164 40 Q 204 86 164 132" strokeWidth="3.5" />
+                {/* Grand Open Gateway of Public Competition */}
+                <rect x="20" y="38" width="24" height="124" rx="3" fill={fillOpacity > 0.25 ? '#E2E8F0' : 'none'} />
+                <polygon points="18,38 32,22 46,38" fill={fillOpacity > 0.4 ? '#CBD5E1' : 'none'} />
+                <circle cx="32" cy="18" r="4" fill={color} />
+                <rect x="196" y="38" width="24" height="124" rx="3" fill={fillOpacity > 0.25 ? '#E2E8F0' : 'none'} />
+                <polygon points="194,38 208,22 222,38" fill={fillOpacity > 0.4 ? '#CBD5E1' : 'none'} />
+                <circle cx="208" cy="18" r="4" fill={color} />
+                <line x1="44" y1="56" x2="80" y2="70" strokeWidth="3" />
+                <line x1="44" y1="140" x2="80" y2="154" strokeWidth="3" />
+                <line x1="62" y1="63" x2="62" y2="147" strokeWidth="2" />
+                <line x1="196" y1="56" x2="160" y2="70" strokeWidth="3" />
+                <line x1="196" y1="140" x2="160" y2="154" strokeWidth="3" />
+                <line x1="178" y1="63" x2="178" y2="147" strokeWidth="2" />
+                <path d="M 96 102 L 140 76 L 140 128 L 96 102 Z" fill={fillOpacity > 0.45 ? '#FEF08A' : 'none'} strokeWidth="3.2" />
+                <rect x="80" y="92" width="16" height="20" rx="3" fill={color} />
+                <path d="M 88 112 L 88 126 L 82 134" strokeWidth="3" strokeLinecap="round" />
+                <path d="M 152 86 Q 166 102 152 118" strokeWidth="3.2" />
+                <path d="M 166 74 Q 188 102 166 130" strokeWidth="3.2" />
+                <path d="M 180 62 Q 210 102 180 142" strokeWidth="3.2" strokeDasharray="4 3" />
+                <rect x="76" y="32" width="88" height="24" rx="4" fill={fillOpacity > 0.7 ? '#0F172A' : 'none'} stroke="#FBBF24" strokeWidth="1.8" />
+                <text x="120" y="47" textAnchor="middle" fill="#FFFFFF" fontSize="8" fontWeight="900" stroke="none">
+                  APPEL D&apos;OFFRES OUVERT
+                </text>
               </g>
             )}
 
             {(archetype === 'triad_institutions' || archetype === 'cgpmp_needs') && (
               <g>
-                {/* Essential 3 Institutional Pillars: CGPMP • DGCMP • ARMP */}
-                <g transform="translate(10, 24)">
-                  <polygon points="32,0 4,18 60,18" fill={fillOpacity > 0.3 ? '#DBEAFE' : 'none'} />
-                  <rect x="8" y="18" width="48" height="106" rx="4" fill={fillOpacity > 0.4 ? '#EFF6FF' : 'none'} />
-                  <text x="32" y="76" textAnchor="middle" fill="#1E40AF" fontSize="10" fontWeight="900" stroke="none">
+                {/* Tripartite Institutions: CGPMP • DGCMP • ARMP */}
+                <rect x="12" y="148" width="216" height="14" rx="3" fill={fillOpacity > 0.25 ? '#0F172A' : 'none'} stroke="#334155" strokeWidth="2" />
+                <text x="120" y="159" textAnchor="middle" fill="#FBBF24" fontSize="7.5" fontWeight="900" stroke="none">
+                  LOI N° 10/010 • SYSTÈME NATIONAL RDC
+                </text>
+                <g transform="translate(18, 24)">
+                  <polygon points="30,4 2,24 58,24" fill={fillOpacity > 0.35 ? '#DBEAFE' : 'none'} />
+                  <rect x="6" y="24" width="48" height="100" rx="3" fill={fillOpacity > 0.15 ? '#EFF6FF' : 'none'} stroke="#3B82F6" strokeWidth="2.5" />
+                  <rect x="14" y="32" width="32" height="24" rx="2" fill={fillOpacity > 0.5 ? '#DBEAFE' : 'none'} stroke="none" />
+                  <text x="30" y="48" textAnchor="middle" fill="#1D4ED8" fontSize="8" fontWeight="900" stroke="none">
                     CGPMP
                   </text>
-                </g>
-                <g transform="translate(88, 24)">
-                  <polygon points="32,0 4,18 60,18" fill={fillOpacity > 0.5 ? '#D1FAE5' : 'none'} />
-                  <rect x="8" y="18" width="48" height="106" rx="4" fill={fillOpacity > 0.6 ? '#ECFDF5' : 'none'} />
-                  <text x="32" y="76" textAnchor="middle" fill="#065F46" fontSize="10" fontWeight="900" stroke="none">
-                    DGCMP
+                  <text x="30" y="80" textAnchor="middle" fill="#1E40AF" fontSize="6.5" fontWeight="800" stroke="none">
+                    PASSATION
+                  </text>
+                  <text x="30" y="92" textAnchor="middle" fill="#475569" fontSize="6" fontWeight="700" stroke="none">
+                    Dossiers &amp; DAO
                   </text>
                 </g>
-                <g transform="translate(166, 24)">
-                  <polygon points="32,0 4,18 60,18" fill={fillOpacity > 0.7 ? '#FEF3C7' : 'none'} />
-                  <rect x="8" y="18" width="48" height="106" rx="4" fill={fillOpacity > 0.8 ? '#FFFBEB' : 'none'} />
-                  <text x="32" y="76" textAnchor="middle" fill="#92400E" fontSize="10" fontWeight="900" stroke="none">
+                <g transform="translate(90, 16)">
+                  <polygon points="30,4 2,24 58,24" fill={fillOpacity > 0.4 ? '#D1FAE5' : 'none'} />
+                  <rect x="6" y="24" width="48" height="108" rx="3" fill={fillOpacity > 0.2 ? '#ECFDF5' : 'none'} stroke="#059669" strokeWidth="2.8" />
+                  <rect x="14" y="32" width="32" height="24" rx="2" fill={fillOpacity > 0.55 ? '#A7F3D0' : 'none'} stroke="none" />
+                  <text x="30" y="48" textAnchor="middle" fill="#047857" fontSize="8.5" fontWeight="900" stroke="none">
+                    DGCMP
+                  </text>
+                  <text x="30" y="82" textAnchor="middle" fill="#065F46" fontSize="6.5" fontWeight="800" stroke="none">
+                    CONTRÔLE
+                  </text>
+                  <text x="30" y="94" textAnchor="middle" fill="#047857" fontSize="6" fontWeight="800" stroke="none">
+                    Visa / A.N.O.
+                  </text>
+                </g>
+                <g transform="translate(162, 24)">
+                  <polygon points="30,4 2,24 58,24" fill={fillOpacity > 0.35 ? '#FEF3C7' : 'none'} />
+                  <rect x="6" y="24" width="48" height="100" rx="3" fill={fillOpacity > 0.15 ? '#FFFBEB' : 'none'} stroke="#D97706" strokeWidth="2.5" />
+                  <rect x="14" y="32" width="32" height="24" rx="2" fill={fillOpacity > 0.5 ? '#FDE68A' : 'none'} stroke="none" />
+                  <text x="30" y="48" textAnchor="middle" fill="#B45309" fontSize="8" fontWeight="900" stroke="none">
                     ARMP
+                  </text>
+                  <text x="30" y="80" textAnchor="middle" fill="#92400E" fontSize="6.5" fontWeight="800" stroke="none">
+                    RÉGULATION
+                  </text>
+                  <text x="30" y="92" textAnchor="middle" fill="#78350F" fontSize="6" fontWeight="700" stroke="none">
+                    Audits &amp; CRD
                   </text>
                 </g>
               </g>
@@ -3256,77 +3383,296 @@ const EssentialVoiceSyncedIllustration: React.FC<{
 
             {archetype === 'thresholds_nosplit' && (
               <g>
-                {/* Essential Anti-Saucissonnage Symbol */}
-                <circle
-                  cx="120"
-                  cy="86"
-                  r="64"
-                  fill={fillOpacity > 0.35 ? '#FEE2E2' : 'none'}
-                  stroke="#E11D48"
-                  strokeWidth="4"
-                />
-                <line x1="84" y1="64" x2="156" y2="108" stroke="#991B1B" strokeWidth="3.5" />
-                <line x1="84" y1="108" x2="156" y2="64" stroke="#991B1B" strokeWidth="3.5" />
-                <line x1="74" y1="40" x2="166" y2="132" stroke="#E11D48" strokeWidth="5" />
+                {/* Semicircular Thresholds Gauge & Strict Anti-Saucissonnage */}
+                <path d="M 40 120 A 80 80 0 0 1 200 120" strokeWidth="8" stroke="#E2E8F0" />
+                <path d="M 40 120 A 80 80 0 0 1 90 56" strokeWidth="8" stroke="#10B981" />
+                <path d="M 90 56 A 80 80 0 0 1 150 56" strokeWidth="8" stroke="#3B82F6" />
+                <path d="M 150 56 A 80 80 0 0 1 200 120" strokeWidth="8" stroke="#F59E0B" />
+                <line x1="120" y1="120" x2="160" y2="70" strokeWidth="4" stroke="#DC2626" />
+                <circle cx="120" cy="120" r="10" fill="#0F172A" stroke="#FFFFFF" strokeWidth="2" />
+                <circle cx="120" cy="95" r="46" fill={fillOpacity > 0.35 ? '#FEE2E2' : 'none'} stroke="#DC2626" strokeWidth="4.5" />
+                <line x1="88" y1="63" x2="152" y2="127" stroke="#DC2626" strokeWidth="5" />
+                <rect x="94" y="80" width="22" height="14" rx="2" fill="#FFFFFF" stroke="#991B1B" strokeWidth="1.8" />
+                <rect x="124" y="80" width="22" height="14" rx="2" fill="#FFFFFF" stroke="#991B1B" strokeWidth="1.8" />
+                <rect x="44" y="142" width="152" height="22" rx="6" fill="#DC2626" stroke="none" />
+                <text x="120" y="157" textAnchor="middle" fill="#FFFFFF" fontSize="8.5" fontWeight="900" stroke="none">
+                  ANTI-SAUCISSONNAGE
+                </text>
               </g>
             )}
 
             {archetype === 'dgcmp_ano' && (
               <g>
-                {/* Essential Conformity Shield & ANO Checkmark */}
+                {/* Regal Security Shield & DGCMP Autorisation de Non-Objection */}
                 <path
-                  d="M 120 14 L 194 40 L 194 94 C 194 140 120 168 120 168 C 120 168 46 140 46 94 L 46 40 Z"
-                  fill={fillOpacity > 0.4 ? '#D1FAE5' : 'none'}
+                  d="M 120 16 L 196 46 L 196 102 C 196 150 120 174 120 174 C 120 174 44 150 44 102 L 44 46 Z"
+                  fill={fillOpacity > 0.25 ? '#ECFDF5' : 'none'}
                   stroke="#059669"
                   strokeWidth="4"
                 />
-                <polyline points="88,92 112,116 156,66" stroke="#059669" strokeWidth="5" />
+                <path
+                  d="M 120 28 L 184 52 L 184 100 C 184 140 120 160 120 160 C 120 160 56 100 56 100 L 56 52 Z"
+                  fill={fillOpacity > 0.4 ? '#D1FAE5' : 'none'}
+                  stroke="#10B981"
+                  strokeWidth="2"
+                />
+                <rect x="74" y="52" width="92" height="58" rx="4" fill="#FFFFFF" stroke="#059669" strokeWidth="2" />
+                <line x1="84" y1="64" x2="156" y2="64" strokeWidth="2" stroke="#059669" />
+                <line x1="84" y1="74" x2="148" y2="74" strokeWidth="2" stroke="#059669" />
+                <line x1="84" y1="84" x2="136" y2="84" strokeWidth="2" stroke="#059669" />
+                <circle cx="148" cy="90" r="10" fill="#059669" />
+                <polyline points="92,106 114,128 164,74" stroke="#059669" strokeWidth="6.5" strokeLinecap="round" strokeLinejoin="round" />
+                <rect x="68" y="142" width="104" height="20" rx="4" fill="#059669" stroke="none" />
+                <text x="120" y="156" textAnchor="middle" fill="#FFFFFF" fontSize="8.5" fontWeight="900" stroke="none">
+                  VISA A.N.O. ACCORDÉ
+                </text>
               </g>
             )}
 
             {archetype === 'sealed_bids' && (
               <g>
-                {/* Essential Sealed Bid Envelope */}
-                <rect
-                  x="36"
-                  y="36"
-                  width="168"
-                  height="108"
-                  rx="10"
-                  fill={fillOpacity > 0.4 ? '#FEF3C7' : 'none'}
-                />
-                <polyline points="36,36 120,98 204,36" strokeWidth="3.5" />
-                <circle cx="120" cy="92" r="14" fill="#E11D48" />
+                {/* Official Sealed Tender Envelope & Red Wax Stamp */}
+                <rect x="28" y="44" width="184" height="114" rx="8" fill={fillOpacity > 0.35 ? '#FFFBEB' : 'none'} stroke={color} strokeWidth="3.5" />
+                <polyline points="28,44 120,112 212,44" strokeWidth="3" />
+                <line x1="28" y1="158" x2="94" y2="98" strokeWidth="2.5" />
+                <line x1="212" y1="158" x2="146" y2="98" strokeWidth="2.5" />
+                <path d="M 112 118 L 102 148 L 114 142 L 126 148 L 118 118 Z" fill="#DC2626" stroke="none" />
+                <circle cx="120" cy="112" r="18" fill="#DC2626" stroke="#B91C1C" strokeWidth="2.5" />
+                <polygon points="120,100 123,109 132,109 125,115 128,124 120,118 112,124 115,115 108,109 117,109" fill="#FEF08A" stroke="none" />
+                <rect x="180" y="120" width="22" height="20" rx="3" fill="#FBBF24" stroke="#D97706" strokeWidth="2" />
+                <path d="M 186 120 L 186 112 C 186 106 196 106 196 112 L 196 120" stroke="#D97706" strokeWidth="2.5" />
+                <rect x="42" y="60" width="82" height="20" rx="2" fill="none" stroke="#DC2626" strokeWidth="1.8" strokeDasharray="4 2" />
+                <text x="83" y="74" textAnchor="middle" fill="#DC2626" fontSize="7.5" fontWeight="900" stroke="none">
+                  PLI SCELLÉ / SECRET
+                </text>
               </g>
             )}
 
-            {archetype !== 'citizen_school' &&
-              archetype !== 'works_crane' &&
-              archetype !== 'scale_equity' &&
-              archetype !== 'open_access' &&
-              archetype !== 'triad_institutions' &&
-              archetype !== 'cgpmp_needs' &&
-              archetype !== 'thresholds_nosplit' &&
-              archetype !== 'dgcmp_ano' &&
-              archetype !== 'sealed_bids' && (
-                <g>
-                  {/* Essential Official Document & Validation Checkmark */}
-                  <rect
-                    x="56"
-                    y="16"
-                    width="128"
-                    height="148"
-                    rx="10"
-                    fill={fillOpacity > 0.35 ? '#EFF6FF' : 'none'}
-                  />
-                  <line x1="80" y1="50" x2="160" y2="50" strokeWidth="3.5" />
-                  <line x1="80" y1="78" x2="160" y2="78" strokeWidth="3.5" />
-                  <line x1="80" y1="106" x2="132" y2="106" strokeWidth="3.5" />
-                  <circle cx="156" cy="132" r="24" fill={fillOpacity > 0.6 ? '#DCFCE7' : 'none'} stroke="#059669" />
-                  <polyline points="145,132 153,140 169,122" stroke="#059669" strokeWidth="3.5" />
+            {archetype === 'ppm_calendar' && (
+              <g>
+                {/* Annual Procurement Plan (PPM) Desk Binder */}
+                <rect x="36" y="32" width="168" height="126" rx="8" fill={fillOpacity > 0.25 ? '#FFFFFF' : 'none'} stroke={color} strokeWidth="3.2" />
+                <rect x="36" y="32" width="168" height="24" rx="6" fill="#0F172A" />
+                {[54, 76, 98, 120, 142, 164, 186].map((rx, ri) => (
+                  <rect key={ri} x={rx - 4} y="24" width="8" height="16" rx="3" fill="#94A3B8" stroke="#334155" strokeWidth="1.5" />
+                ))}
+                <text x="120" y="48" textAnchor="middle" fill="#FBBF24" fontSize="8.5" fontWeight="900" stroke="none">
+                  PLAN ANNUEL DE PASSATION (PPM)
+                </text>
+                {[
+                  { q: 'T1', x: 44, color: '#3B82F6' },
+                  { q: 'T2', x: 82, color: '#10B981' },
+                  { q: 'T3', x: 120, color: '#F59E0B' },
+                  { q: 'T4', x: 158, color: '#8B5CF6' }
+                ].map((col, ci) => (
+                  <g key={ci} transform={`translate(${col.x}, 64)`}>
+                    <rect x="0" y="0" width="34" height="60" rx="4" fill={fillOpacity > 0.4 ? `${col.color}15` : 'none'} stroke={col.color} strokeWidth="1.8" />
+                    <text x="17" y="14" textAnchor="middle" fill={col.color} fontSize="8" fontWeight="900" stroke="none">
+                      {col.q}
+                    </text>
+                    <line x1="6" y1="22" x2="28" y2="22" strokeWidth="1.5" stroke={col.color} />
+                    <line x1="6" y1="30" x2="28" y2="30" strokeWidth="1.5" stroke={col.color} />
+                    <circle cx="17" cy="44" r="8" fill={col.color} />
+                    <polyline points="13,44 16,47 21,41" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                  </g>
+                ))}
+                <rect x="54" y="132" width="132" height="18" rx="4" fill="#059669" stroke="none" />
+                <text x="120" y="144" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontWeight="900" stroke="none">
+                  ✓ VALIDÉ &amp; PUBLIÉ OBLIGATOIREMENT
+                </text>
+              </g>
+            )}
+
+            {archetype === 'supplies_truck' && (
+              <g>
+                {/* Heavy Supplies Freight Truck & Inspection Checklist */}
+                <path d="M 126 64 L 176 64 L 194 88 L 194 136 L 126 136 Z" fill={fillOpacity > 0.35 ? '#EFF6FF' : 'none'} stroke={color} strokeWidth="3" />
+                <path d="M 152 72 L 180 72 L 190 92 L 152 92 Z" fill={fillOpacity > 0.6 ? '#BFDBFE' : 'none'} strokeWidth="2" />
+                <circle cx="188" cy="116" r="4" fill="#FBBF24" />
+                <rect x="24" y="44" width="102" height="92" rx="4" fill={fillOpacity > 0.25 ? '#FEF3C7' : 'none'} stroke={color} strokeWidth="3" />
+                <line x1="50" y1="44" x2="50" y2="136" strokeWidth="2" />
+                <line x1="76" y1="44" x2="76" y2="136" strokeWidth="2" />
+                <line x1="102" y1="44" x2="102" y2="136" strokeWidth="2" />
+                <rect x="36" y="74" width="28" height="24" rx="2" fill="#D97706" stroke="#92400E" strokeWidth="1.5" />
+                <rect x="68" y="74" width="28" height="24" rx="2" fill="#D97706" stroke="#92400E" strokeWidth="1.5" />
+                <circle cx="56" cy="136" r="16" fill="#1E293B" stroke="#64748B" strokeWidth="3" />
+                <circle cx="56" cy="136" r="6" fill="#94A3B8" />
+                <circle cx="166" cy="136" r="16" fill="#1E293B" stroke="#64748B" strokeWidth="3" />
+                <circle cx="166" cy="136" r="6" fill="#94A3B8" />
+                <g transform="translate(142, 28)">
+                  <rect x="0" y="0" width="70" height="34" rx="4" fill="#FFFFFF" stroke="#059669" strokeWidth="2" />
+                  <text x="35" y="14" textAnchor="middle" fill="#059669" fontSize="6.5" fontWeight="900" stroke="none">
+                    RÉCEPTION
+                  </text>
+                  <polyline points="20,24 25,28 32,20" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" />
+                  <text x="44" y="26" fill="#0F172A" fontSize="7" fontWeight="800" stroke="none">
+                    CONFORME
+                  </text>
                 </g>
-              )}
+              </g>
+            )}
+
+            {archetype === 'intellectual_tdr' && (
+              <g>
+                {/* Intellectual Services, Blueprint Grid & Drafting Compass */}
+                <rect x="28" y="32" width="184" height="126" rx="8" fill={fillOpacity > 0.2 ? '#F8FAFC' : 'none'} stroke={color} strokeWidth="3" />
+                <rect x="42" y="44" width="156" height="80" rx="4" fill={fillOpacity > 0.4 ? '#1E3A8A' : 'none'} stroke="#3B82F6" strokeWidth="2" />
+                <line x1="42" y1="64" x2="198" y2="64" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="42" y1="84" x2="198" y2="84" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="42" y1="104" x2="198" y2="104" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="82" y1="44" x2="82" y2="124" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="122" y1="44" x2="122" y2="124" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1="162" y1="44" x2="162" y2="124" stroke="#60A5FA" strokeWidth="1" strokeDasharray="3 3" />
+                <circle cx="120" cy="54" r="5" fill="#FBBF24" />
+                <line x1="120" y1="54" x2="98" y2="108" stroke="#FBBF24" strokeWidth="3" strokeLinecap="round" />
+                <line x1="120" y1="54" x2="142" y2="108" stroke="#FBBF24" strokeWidth="3" strokeLinecap="round" />
+                <path d="M 98 108 Q 120 120 142 108" stroke="#FBBF24" strokeWidth="2" strokeDasharray="3 2" />
+                <rect x="42" y="132" width="156" height="18" rx="4" fill="#0F172A" stroke="none" />
+                <text x="120" y="144" textAnchor="middle" fill="#FFFFFF" fontSize="8" fontWeight="900" stroke="none">
+                  TDR • EXPERTISE &amp; LIVRABLES
+                </text>
+              </g>
+            )}
+
+            {archetype === 'pme_allotment' && (
+              <g>
+                {/* SME Allotment: Partitioned Lots for Congolese Businesses */}
+                <rect x="24" y="28" width="192" height="132" rx="8" fill={fillOpacity > 0.2 ? '#F8FAFC' : 'none'} stroke={color} strokeWidth="3" />
+                <rect x="24" y="28" width="192" height="26" rx="6" fill="#0F172A" />
+                <text x="120" y="45" textAnchor="middle" fill="#FBBF24" fontSize="8.5" fontWeight="900" stroke="none">
+                  ALLOTISSEMENT • ACCÈS AUX PME LOCALES
+                </text>
+                <g transform="translate(36, 64)">
+                  <rect x="0" y="0" width="50" height="54" rx="4" fill={fillOpacity > 0.4 ? '#DBEAFE' : 'none'} stroke="#2563EB" strokeWidth="2" />
+                  <text x="25" y="18" textAnchor="middle" fill="#1D4ED8" fontSize="8" fontWeight="900" stroke="none">
+                    LOT 1
+                  </text>
+                  <text x="25" y="32" textAnchor="middle" fill="#1E3A8A" fontSize="6.5" fontWeight="800" stroke="none">
+                    Génie Civil
+                  </text>
+                  <rect x="8" y="38" width="34" height="10" rx="2" fill="#2563EB" />
+                  <text x="25" y="46" textAnchor="middle" fill="#FFFFFF" fontSize="6" fontWeight="900" stroke="none">
+                    PME RDC
+                  </text>
+                </g>
+                <g transform="translate(95, 64)">
+                  <rect x="0" y="0" width="50" height="54" rx="4" fill={fillOpacity > 0.4 ? '#D1FAE5' : 'none'} stroke="#059669" strokeWidth="2" />
+                  <text x="25" y="18" textAnchor="middle" fill="#047857" fontSize="8" fontWeight="900" stroke="none">
+                    LOT 2
+                  </text>
+                  <text x="25" y="32" textAnchor="middle" fill="#065F46" fontSize="6.5" fontWeight="800" stroke="none">
+                    Fournitures
+                  </text>
+                  <rect x="8" y="38" width="34" height="10" rx="2" fill="#059669" />
+                  <text x="25" y="46" textAnchor="middle" fill="#FFFFFF" fontSize="6" fontWeight="900" stroke="none">
+                    PME RDC
+                  </text>
+                </g>
+                <g transform="translate(154, 64)">
+                  <rect x="0" y="0" width="50" height="54" rx="4" fill={fillOpacity > 0.4 ? '#FEF3C7' : 'none'} stroke="#D97706" strokeWidth="2" />
+                  <text x="25" y="18" textAnchor="middle" fill="#B45309" fontSize="8" fontWeight="900" stroke="none">
+                    LOT 3
+                  </text>
+                  <text x="25" y="32" textAnchor="middle" fill="#92400E" fontSize="6.5" fontWeight="800" stroke="none">
+                    Entretien
+                  </text>
+                  <rect x="8" y="38" width="34" height="10" rx="2" fill="#D97706" />
+                  <text x="25" y="46" textAnchor="middle" fill="#FFFFFF" fontSize="6" fontWeight="900" stroke="none">
+                    PME RDC
+                  </text>
+                </g>
+                <rect x="44" y="128" width="152" height="22" rx="4" fill="#1E293B" stroke="none" />
+                <text x="120" y="142" textAnchor="middle" fill="#38BDF8" fontSize="7.5" fontWeight="900" stroke="none">
+                  SOUS-TRAITANCE RÉSERVÉE AUX NATIONAUX
+                </text>
+              </g>
+            )}
+
+            {archetype === 'finance_vault' && (
+              <g>
+                {/* Heavy Bank Vault & Bid Guarantee */}
+                <rect x="36" y="28" width="168" height="132" rx="8" fill={fillOpacity > 0.25 ? '#F1F5F9' : 'none'} stroke={color} strokeWidth="3.2" />
+                <circle cx="120" cy="94" r="54" fill={fillOpacity > 0.4 ? '#E2E8F0' : 'none'} stroke="#475569" strokeWidth="3.5" />
+                <circle cx="120" cy="94" r="44" fill={fillOpacity > 0.5 ? '#CBD5E1' : 'none'} stroke="#334155" strokeWidth="2" />
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((ang, ai) => {
+                  const rad = (ang * Math.PI) / 180;
+                  return (
+                    <circle
+                      key={ai}
+                      cx={120 + Math.cos(rad) * 44}
+                      cy={94 + Math.sin(rad) * 44}
+                      r="3.5"
+                      fill="#0F172A"
+                    />
+                  );
+                })}
+                <circle cx="120" cy="94" r="16" fill="#FBBF24" stroke="#D97706" strokeWidth="2.5" />
+                <line x1="120" y1="74" x2="120" y2="114" strokeWidth="4" stroke="#D97706" />
+                <line x1="100" y1="94" x2="140" y2="94" strokeWidth="4" stroke="#D97706" />
+                <g transform="translate(44, 110)">
+                  <ellipse cx="14" cy="24" rx="14" ry="6" fill="#FBBF24" stroke="#D97706" strokeWidth="1.5" />
+                  <ellipse cx="14" cy="18" rx="14" ry="6" fill="#FBBF24" stroke="#D97706" strokeWidth="1.5" />
+                  <ellipse cx="14" cy="12" rx="14" ry="6" fill="#FDE047" stroke="#D97706" strokeWidth="1.5" />
+                </g>
+                <rect x="48" y="138" width="144" height="18" rx="4" fill="#0F172A" stroke="none" />
+                <text x="120" y="150" textAnchor="middle" fill="#FDE047" fontSize="7.5" fontWeight="900" stroke="none">
+                  GARANTIE DE SOUMISSION BANCAIRE
+                </text>
+              </g>
+            )}
+
+            {archetype === 'crd_gavel' && (
+              <g>
+                {/* Judicial Gavel of Dispute Settlement (CRD - ARMP) */}
+                <ellipse cx="120" cy="144" rx="64" ry="18" fill={fillOpacity > 0.35 ? '#78350F' : 'none'} stroke="#451A03" strokeWidth="3" />
+                <ellipse cx="120" cy="138" rx="54" ry="14" fill={fillOpacity > 0.5 ? '#92400E' : 'none'} stroke="#451A03" strokeWidth="2" />
+                <circle cx="120" cy="138" r="80" stroke="#FBBF24" strokeWidth="1.2" strokeDasharray="4 4" opacity={fillOpacity} />
+                <g transform="translate(90, 50) rotate(-22)">
+                  <rect x="0" y="14" width="60" height="28" rx="4" fill={fillOpacity > 0.7 ? '#451A03' : 'none'} stroke="#B45309" strokeWidth="3" />
+                  <rect x="6" y="14" width="8" height="28" fill="#FBBF24" stroke="none" />
+                  <rect x="46" y="14" width="8" height="28" fill="#FBBF24" stroke="none" />
+                  <path d="M 30 42 L 30 114" stroke="#451A03" strokeWidth="7" strokeLinecap="round" />
+                  <circle cx="30" cy="114" r="6" fill="#FBBF24" />
+                </g>
+                <rect x="36" y="24" width="168" height="22" rx="4" fill="#0F172A" stroke="#B45309" strokeWidth="1.8" />
+                <text x="120" y="38" textAnchor="middle" fill="#FFFFFF" fontSize="8" fontWeight="900" stroke="none">
+                  ⚖️ COMITÉ DE RÈGLEMENT DES DIFFÉRENDS (CRD)
+                </text>
+              </g>
+            )}
+
+            {(archetype === 'transparency_pv' || archetype === 'audit_sigmap' || archetype === 'legal_codex') && (
+              <g>
+                {/* Monumental Legal Codex & Official Procès-Verbal */}
+                <rect x="32" y="28" width="176" height="132" rx="8" fill={fillOpacity > 0.25 ? '#FFFFFF' : 'none'} stroke={color} strokeWidth="3.2" />
+                <rect x="32" y="28" width="22" height="132" rx="4" fill="#0F172A" stroke="#B45309" strokeWidth="2" />
+                <line x1="36" y1="54" x2="50" y2="54" stroke="#FBBF24" strokeWidth="2" />
+                <line x1="36" y1="94" x2="50" y2="94" stroke="#FBBF24" strokeWidth="2" />
+                <line x1="36" y1="134" x2="50" y2="134" stroke="#FBBF24" strokeWidth="2" />
+                <path d="M 120 28 L 120 148 L 128 140 L 136 148 L 136 28 Z" fill="#DC2626" stroke="none" />
+                <text x="130" y="50" textAnchor="middle" fill="#0F172A" fontSize="9" fontWeight="900" stroke="none">
+                  LOI N° 10/010 • MARCHÉS PUBLICS
+                </text>
+                <line x1="64" y1="58" x2="196" y2="58" strokeWidth="2" stroke="#CBD5E1" />
+                <line x1="64" y1="72" x2="190" y2="72" strokeWidth="2.5" stroke="#475569" />
+                <line x1="64" y1="84" x2="180" y2="84" strokeWidth="2.5" stroke="#475569" />
+                <line x1="64" y1="96" x2="194" y2="96" strokeWidth="2.5" stroke="#475569" />
+                <line x1="64" y1="108" x2="160" y2="108" strokeWidth="2.5" stroke="#475569" />
+                <g transform="translate(154, 114)">
+                  <circle cx="16" cy="16" r="16" fill={fillOpacity > 0.6 ? '#DCFCE7' : 'none'} stroke="#059669" strokeWidth="2.5" />
+                  <polyline points="9,16 14,21 23,12" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+              </g>
+            )}
           </g>
+
+          {/* Luminous dynamic drawing pen tip sparkle while drawing */}
+          {isDrawingActive && (
+            <g transform={`translate(${drawHeadX}, ${drawHeadY})`}>
+              <circle cx="0" cy="0" r="4.5" fill="#FBBF24" />
+              <circle cx="0" cy="0" r="9" fill="none" stroke="#F59E0B" strokeWidth="1.5" opacity="0.8" />
+            </g>
+          )}
         </g>
 
         {/* Bottom 3 Essential Keywords Flow (Clean & Easy to Read) */}
@@ -3730,6 +4076,8 @@ export const ProfessorContextualStage: React.FC<{
             const rowY = 64 + nIdx * 82;
             const isStarted = ratio > 0.005;
             const isActive = ratio > 0.005 && ratio < 0.995;
+            const writeX = 68 + Math.min(410, (node.line2 && ratio > 0.55 ? 260 : 380) * (ratio > 0.55 && node.line2 ? (ratio - 0.55) / 0.45 : ratio / 0.55));
+            const writeY = ratio > 0.55 && node.line2 ? 53 : 34;
 
             return (
               <g key={node.stepNum} transform={`translate(14, ${rowY})`}>
@@ -3743,6 +4091,7 @@ export const ProfessorContextualStage: React.FC<{
                   stroke={isActive ? node.color : isStarted ? '#CBD5E1' : '#E2E8F0'}
                   strokeWidth={isActive ? '2.8' : '1.6'}
                   strokeDasharray={isStarted ? undefined : '6 4'}
+                  filter={isActive ? 'drop-shadow(0 0 7px rgba(245, 158, 11, 0.4))' : undefined}
                 />
 
                 {!isStarted && (
@@ -3785,6 +4134,14 @@ export const ProfessorContextualStage: React.FC<{
                         </text>
                       </g>
                     )}
+
+                    {/* Active Real-Time Writing Cursor */}
+                    {isActive && ratio > 0.08 && ratio < 0.98 && (
+                      <g transform={`translate(${writeX}, ${writeY})`}>
+                        <circle cx="0" cy="0" r="3.5" fill="#F59E0B" />
+                        <circle cx="0" cy="0" r="7" fill="none" stroke="#FBBF24" strokeWidth="1.2" opacity="0.8" />
+                      </g>
+                    )}
                   </g>
                 )}
               </g>
@@ -3802,6 +4159,7 @@ export const ProfessorContextualStage: React.FC<{
               fill={fieldTotalRatio > 0.01 ? '#FEF3C7' : '#FFFBEB'}
               stroke="#D97706"
               strokeWidth="2"
+              filter={fieldTotalRatio > 0.01 ? 'drop-shadow(0 0 8px rgba(217, 119, 6, 0.25))' : undefined}
             />
             <text x="16" y="18" fill="#92400E" fontSize="8.5" fontWeight="900">
               ⚡ À RETENIR SUR LE TERRAIN (RÈGLE FONDAMENTALE) :
@@ -3809,7 +4167,7 @@ export const ProfessorContextualStage: React.FC<{
 
             {fieldTotalRatio > 0.01 && (
               <g>
-                <circle cx="26" cy="48" r="14" fill="#059669" />
+                <circle cx="26" cy="48" r="14" fill="#059669" filter="drop-shadow(0 0 6px rgba(5, 150, 105, 0.45))" />
                 <polyline
                   points="19,48 24,53 33,42"
                   fill="none"

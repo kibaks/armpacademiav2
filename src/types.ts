@@ -210,6 +210,13 @@ export interface CourseModule {
     visioLink?: string;
     visioDate?: string;
     visioPlatform?: 'zoom' | 'teams' | 'meet' | 'jitsi';
+    requiresValidationQuiz?: boolean;
+    quiz?: {
+      question: string;
+      options: string[];
+      correctIndex: number;
+      explanation: string;
+    }[];
   }[];
   quiz: {
     question: string;

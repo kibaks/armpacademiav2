@@ -17,7 +17,9 @@ import {
   Video,
   Award,
   RefreshCw,
-  Music
+  Music,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { CourseModule, UserProfile } from '../types';
 import {
@@ -55,6 +57,14 @@ interface AnimatedLessonPlayerProps {
   compactPreview?: boolean;
   requestedScreenIndex?: { idx: number; ts: number } | null;
   onActiveScreenChange?: (screenIdx: number) => void;
+  // Navigation & Validation Test Props
+  onNextLesson?: () => void;
+  onPrevLesson?: () => void;
+  hasNextLesson?: boolean;
+  hasPrevLesson?: boolean;
+  isLessonValidated?: boolean;
+  requiresValidationTest?: boolean;
+  onOpenValidationTest?: () => void;
 }
 
 export const ANIMATION_TEMPLATE_META: {
@@ -114,7 +124,14 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   isPreloading: isCoursePreloading = false,
   currentProfile,
   requestedScreenIndex,
-  onActiveScreenChange
+  onActiveScreenChange,
+  onNextLesson,
+  onPrevLesson,
+  hasNextLesson = false,
+  hasPrevLesson = false,
+  isLessonValidated = false,
+  requiresValidationTest = false,
+  onOpenValidationTest
 }) => {
   const lesson = course.lessons?.[lessonIndex] || course.lessons?.[0];
   const safeTitle = lesson?.title || course.title || 'Module Marchés Publics RDC';
@@ -147,9 +164,12 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [voiceMuted, setVoiceMuted] = useState<boolean>(!autoPlayVoice);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
-  const [voicePersona, setVoicePersona] = useState<VoicePersona>('vivienne');
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(0.90);
+  const [voicePersona, setVoicePersona] = useState<VoicePersona>('denise');
 
+  // Miniature Avatar inside Course Screen state
+  const [avatarInCoursePosition, setAvatarInCoursePosition] = useState<'top-right' | 'top-left' | 'minimized'>('top-right');
+  const [avatarMiniatureSize, setAvatarMiniatureSize] = useState<'miniature' | 'compact' | 'expanded'>('miniature');
   const [pipExpanded, setPipExpanded] = useState<boolean>(false);
   const [manualWinkUntil, setManualWinkUntil] = useState<number>(0);
 
@@ -512,8 +532,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const handleCycleSpeed = () => {
     speechService.unlockAudio();
-    const speeds = [1.0, 1.1, 0.92];
-    const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 1.0;
+    const speeds = [0.90, 0.85, 1.0];
+    const nextSpeed = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length] || 0.90;
     setPlaybackSpeed(nextSpeed);
     if (isPlaying && !voiceMuted) startVoiceAtProgress(filmProgress, nextSpeed);
   };
@@ -655,31 +675,20 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       return 0.0;
     }
 
-    // High-contrast syllabic articulation envelope:
-    // Dips to 0.0 on consonant closures between syllables and rises to 0.95 on vowel peaks!
-    const rawSyllable =
-      Math.sin(tickCount * 0.78) * 0.56 +
-      Math.sin(tickCount * 0.47) * 0.34 +
-      Math.cos(tickCount * 1.15) * 0.22;
-    const crispSyllabicPulse = Math.max(0, Math.min(1, (rawSyllable + 0.16) / 0.92));
-
-    // Brief natural inter-word / breathing closures so the mouth visibly closes between words
-    const wordPauseGate = Math.sin(tickCount * 0.15) < -0.82 ? 0.02 : 1;
-
-    if (isSpeaking && typeof playbackState?.mouthOpenness === 'number' && playbackState.mouthOpenness > 0.02) {
-      const srvBoost = Math.max(0.3, playbackState.mouthOpenness * 1.25);
-      const combined =
-        crispSyllabicPulse * 0.72 * wordPauseGate +
-        srvBoost * 0.35 * crispSyllabicPulse +
-        filmDerivedPhoneme.mouthOpenness * 0.18 * crispSyllabicPulse;
-      return Math.min(0.98, Math.max(0, combined));
+    if (isSpeaking && typeof playbackState?.mouthOpenness === 'number') {
+      if (playbackState.mouthOpenness <= 0.03) return 0.0;
+      return Math.min(0.96, Math.max(0.18, playbackState.mouthOpenness));
     }
 
+    // Composed, poised French pedagogical rhythm in fallback / muted mode (~3.0 syllables/sec)
+    const calmRhythm = 0.52 + 0.38 * Math.abs(Math.sin(tickCount * 0.18));
+    const wordPauseGate = Math.sin(tickCount * 0.06) < -0.88 ? 0.0 : 1;
+
     return Math.min(
-      0.96,
+      0.92,
       Math.max(
         0,
-        (filmDerivedPhoneme.mouthOpenness * 0.45 + 0.65) * crispSyllabicPulse * wordPauseGate
+        (filmDerivedPhoneme.mouthOpenness * 0.55 + 0.45) * calmRhythm * wordPauseGate
       )
     );
   }, [
@@ -966,183 +975,169 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   return (
     <div className="rounded-3xl overflow-hidden border-2 border-amber-500/40 bg-slate-950 shadow-2xl select-none">
       {/* =========================================================================== */}
-      {/* 1. ENTÊTE DU BLOC — STUDIO VIDÉO D'AÏSHA (SANS SOUS-TITRES) & PRÉSÉANCES    */}
+      {/* 1. COMPACT EXECUTIVE TOOLBAR — PROTOCOLE DE PRÉSÉANCE & CONTRÔLE DU COURS    */}
       {/* =========================================================================== */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b-2 border-amber-500/30 p-3 sm:p-4">
-        <div className="flex flex-col md:flex-row items-stretch gap-3.5 sm:gap-4">
-          {/* A. PORTRAIT STUDIO ANIMÉ HAUTE FIDÉLITÉ D'AÏSHA (GROS PLAN VISAGE, DÉCOR STATIQUE & POTS DE FLEURS) */}
-          <div
-            className={`relative shrink-0 rounded-2xl overflow-hidden transition-all duration-300 bg-slate-950 shadow-2xl border-2 border-amber-500/50 ${
-              pipExpanded
-                ? 'w-full md:w-[420px] xl:w-[470px] h-[340px] sm:h-[375px]'
-                : 'w-full md:w-[350px] lg:w-[385px] xl:w-[420px] h-[300px] sm:h-[330px]'
-            } mx-auto md:mx-0 group`}
-          >
-            {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer (Décor Statique + Pots de Fleurs) */}
-            <canvas
-              ref={headerWav2LipCanvasRef}
-              width={720}
-              height={620}
-              className="w-full h-full block object-cover opacity-100"
-            />
-
-            {/* Badges de Cadrage Caméra Gros Plan & Décor Statique */}
-            <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 pointer-events-none">
-              <span className="px-2 py-0.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-amber-400/50 text-[10px] font-black text-amber-300 flex items-center gap-1 shadow-md">
-                <span>🎥</span>
-                <span>GROS PLAN HD</span>
-              </span>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-950/85 backdrop-blur-md border border-emerald-400/50 text-[10px] font-bold text-emerald-300 flex items-center gap-1 shadow-md">
-                <span>🪴</span>
-                <span>DÉCOR FIXE</span>
-              </span>
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-amber-500/30 px-3 sm:px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* A. Learner Precedence & Course Info */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative shrink-0">
+              <img
+                src={effectiveUserProfile?.avatarUrl || imgTutrice}
+                alt={userPrecedence.displayFullName}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border-2 border-amber-400"
+                referrerPolicy="no-referrer"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-950" />
             </div>
-
-            {/* Sélecteur de Zoom Caméra (Gros Plan vs Plan Buste) */}
-            <div className="absolute bottom-2.5 right-2.5 z-20 flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setCameraZoomMode('close_up')}
-                className={`px-2 py-1 rounded-lg text-[10px] font-black border transition cursor-pointer shadow-md ${
-                  cameraZoomMode === 'close_up'
-                    ? 'bg-amber-400 text-slate-950 border-amber-300'
-                    : 'bg-slate-950/85 hover:bg-slate-900 text-slate-200 border-white/20'
-                }`}
-                title="Cadrage Gros Plan : Focus sur le visage, le sourire et la parole"
-              >
-                Gros Plan
-              </button>
-              <button
-                type="button"
-                onClick={() => setCameraZoomMode('cinematic')}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shadow-md ${
-                  cameraZoomMode === 'cinematic'
-                    ? 'bg-amber-400 text-slate-950 border-amber-300'
-                    : 'bg-slate-950/85 hover:bg-slate-900 text-slate-200 border-white/20'
-                }`}
-                title="Cadrage Plan Buste : Vue plus large sur les épaules et le studio"
-              >
-                Plan Buste
-              </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-black uppercase">
+                  {userPrecedence.roleBadgeLabel}
+                </span>
+                <span className="text-[10px] font-semibold text-cyan-300 truncate">
+                  {userPrecedence.precedenceTitle}
+                </span>
+                <span className="text-slate-600">·</span>
+                <span className="text-[10px] font-bold text-amber-400/90">
+                  {course.code || 'MARCHÉS PUBLICS'} • {course.legalRef || 'Loi n° 10/010'}
+                </span>
+              </div>
+              <div className="text-xs sm:text-sm font-black text-white truncate">
+                {userPrecedence.displayFullName} • <span className="text-slate-300 font-medium">{safeTitle}</span>
+              </div>
             </div>
           </div>
 
-          {/* B. PROTOCOLE DE PRÉSÉANCE, RÔLE DE L'APPRENANT & NAVIGATION D'ÉCRAN */}
-          <div className="flex-1 min-w-0 flex flex-col justify-between gap-2.5 bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4">
-            {/* Top Row: Connected User Precedence Protocol & Role */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="relative shrink-0">
-                  <img
-                    src={effectiveUserProfile?.avatarUrl || imgTutrice}
-                    alt={userPrecedence.displayFullName}
-                    className="w-10 h-10 rounded-xl object-cover border-2 border-amber-400"
-                    referrerPolicy="no-referrer"
-                  />
-                  <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-950" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">
-                      {userPrecedence.roleBadgeLabel}
-                    </span>
-                    <span className="text-slate-600">·</span>
-                    <span className="text-[10px] font-semibold text-cyan-300 truncate">
-                      {userPrecedence.precedenceTitle}
-                    </span>
-                  </div>
-                  <div className="text-xs sm:text-sm font-black text-white truncate">
-                    Apprenant honoré : {userPrecedence.displayFullName}{' '}
-                    <span className="text-[11px] font-normal text-slate-400">
-                      ({userPrecedence.institutionName})
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* B. Screen Planches 1..5 Quick Navigation */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => handleJumpToScreen(activeAct.index - 1)}
+              disabled={activeAct.index <= 0}
+              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 text-[10px] font-bold flex items-center gap-0.5 border border-slate-700 transition cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Préc.</span>
+            </button>
 
-            {/* Middle Row: Interactive Wav2Lip Emotion, Smile & Full-Image Gesture Selector */}
-            <div className="flex flex-wrap items-center gap-1.5 py-1 border-y border-slate-800/80">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 mr-1 flex items-center gap-1">
-                <span>😊</span>
-                <span>Expressions &amp; Sourire Wav2Lip :</span>
-              </span>
-              {(
-                [
-                  { id: 'auto', icon: '✨', label: 'Auto Voix' },
-                  { id: 'smiling', icon: '😊', label: 'Sourire' },
-                  { id: 'pedagogical', icon: '🎓', label: 'Éloquence' },
-                  { id: 'empathetic', icon: '💛', label: 'Empathie' },
-                  { id: 'curious', icon: '🤔', label: 'Réflexion' },
-                  { id: 'enthusiastic', icon: '🌟', label: 'Joie' },
-                  { id: 'astonished', icon: '😲', label: 'Alerte' },
-                  { id: 'solemn', icon: '⚖️', label: 'Rigueur' },
-                ] as Array<{ id: AvatarEmotion | 'auto'; icon: string; label: string }>
-              ).map((preset) => {
-                const active = manualStudioEmotion === preset.id;
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
+              {calibratedLesson.acts.map((act, idx) => {
+                const isCur = idx === activeAct.index;
+                const isPassed = idx < activeAct.index;
                 return (
                   <button
-                    key={preset.id}
+                    key={idx}
                     type="button"
-                    onClick={() => handleSelectStudioEmotion(preset.id)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
-                      active
-                        ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-xs'
-                        : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
+                    onClick={() => handleJumpToScreen(idx)}
+                    className={`px-2 py-1 rounded-md text-[10px] font-black transition cursor-pointer ${
+                      isCur
+                        ? 'bg-amber-400 text-slate-950 shadow-xs'
+                        : isPassed
+                        ? 'bg-slate-800 text-emerald-400 hover:bg-slate-700'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                     }`}
+                    title={`Planche ${idx + 1}/5 : ${act.zoneTitle}`}
                   >
-                    <span>{preset.icon}</span>
-                    <span>{preset.label}</span>
+                    Planche {idx + 1}
                   </button>
                 );
               })}
             </div>
 
-            {/* Bottom Row in Header Block: Screen Navigation & Engine Status */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 truncate">
-                <Video className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span className="truncate">{flowStatusMessage}</span>
-              </div>
+            <button
+              type="button"
+              onClick={() => handleJumpToScreen(activeAct.index + 1)}
+              disabled={activeAct.index >= 4}
+              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 text-[10px] font-bold flex items-center gap-0.5 border border-slate-700 transition cursor-pointer"
+            >
+              <span className="hidden sm:inline">Suiv.</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
 
-              <div className="flex items-center gap-1.5 ml-auto">
+            {/* Navigation Inter-Chapitres Haut de Page */}
+            <div className="flex items-center gap-1 pl-1.5 border-l border-slate-800 ml-1">
+              <button
+                type="button"
+                disabled={!hasPrevLesson}
+                onClick={onPrevLesson}
+                className="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-200 text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
+                title="Chapitre précédent"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden xl:inline">Précédent</span>
+              </button>
+
+              {requiresValidationTest && (
                 <button
                   type="button"
-                  onClick={() => handleJumpToScreen(activeAct.index - 1)}
-                  disabled={activeAct.index <= 0}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
+                  onClick={onOpenValidationTest}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 border transition cursor-pointer ${
+                    isLessonValidated
+                      ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                      : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-300 animate-pulse'
+                  }`}
+                  title={isLessonValidated ? 'Test d’assimilation validé' : 'Test obligatoire pour débloquer le chapitre suivant'}
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>Écran préc.</span>
+                  {isLessonValidated ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <ShieldCheck className="w-3 h-3 text-amber-400" />}
+                  <span>{isLessonValidated ? 'Test validé' : 'Test requis'}</span>
                 </button>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-400/20 border border-amber-400/50 text-amber-300 text-[10px] font-black">
-                  Écran {activeAct.index + 1} / 5
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (requiresValidationTest && !isLessonValidated) {
+                    onOpenValidationTest?.();
+                  } else {
+                    onNextLesson?.();
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition cursor-pointer shadow-sm ${
+                  requiresValidationTest && !isLessonValidated
+                    ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-300 font-black'
+                    : 'bg-[#0866FF] hover:bg-blue-600 text-white border-blue-400 font-bold'
+                }`}
+                title={
+                  requiresValidationTest && !isLessonValidated
+                    ? 'Passer le test de validation requis'
+                    : 'Passer au chapitre suivant'
+                }
+              >
+                <span>
+                  {requiresValidationTest && !isLessonValidated ? 'Valider par Test →' : 'Suivant'}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleJumpToScreen(activeAct.index + 1)}
-                  disabled={activeAct.index >= 4}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-                >
-                  <span>Écran suiv.</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-                {uploadedVideoUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setShowRawVideo((v) => !v)}
-                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-600 text-white whitespace-nowrap ml-1"
-                  >
-                    {showRawVideo ? 'Film Pédagogique' : 'Fichier MP4'}
-                  </button>
-                )}
-              </div>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Avatar Position / Visibility Toggle in Course Screen */}
+            <div className="flex items-center gap-1 pl-1 border-l border-slate-800 ml-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setAvatarInCoursePosition((pos) =>
+                    pos === 'top-right' ? 'top-left' : pos === 'top-left' ? 'minimized' : 'top-right'
+                  )
+                }
+                className="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
+                title="Position de l'avatar Aïsha dans l'écran (Haut-Droit / Haut-Gauche / Réduire en badge)"
+              >
+                <span>👩🏽‍🏫</span>
+                <span className="hidden md:inline">
+                  {avatarInCoursePosition === 'top-right'
+                    ? 'Avatar Haut-Droit'
+                    : avatarInCoursePosition === 'top-left'
+                    ? 'Avatar Haut-Gauche'
+                    : 'Avatar Réduit'}
+                </span>
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. WIDESCREEN 16:9 FULL-HEIGHT WHITEBOARD STAGE WITH HAND DRAWING EXPLANATIONS */}
+      {/* 2. WIDESCREEN 16:9 FULL-HEIGHT WHITEBOARD STAGE WITH AVATAR IN MINIATURE ABOVE THE SCREEN */}
       {showRawVideo && uploadedVideoUrl ? (
         <div className="relative aspect-video w-full bg-black">
           <video
@@ -1155,6 +1150,149 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         </div>
       ) : (
         <div className="relative w-full aspect-video min-h-[380px] sm:min-h-[480px] lg:min-h-[560px] xl:min-h-[640px] bg-slate-950 overflow-hidden">
+          {/* ========================================================================= */}
+          {/* A. AVATAR D'AÏSHA EN MINIATURE AU DESSUS DE L'ÉCRAN DU COURS (PICTURE-IN-PICTURE) */}
+          {/* ========================================================================= */}
+          {avatarInCoursePosition !== 'minimized' ? (
+            <div
+              className={`absolute z-30 transition-all duration-300 group select-none ${
+                avatarInCoursePosition === 'top-left' ? 'top-3 left-4' : 'top-3 right-4'
+              } ${
+                avatarMiniatureSize === 'compact'
+                  ? 'w-36 sm:w-44 h-[110px] sm:h-[130px]'
+                  : avatarMiniatureSize === 'expanded'
+                  ? 'w-72 sm:w-80 md:w-96 h-[225px] sm:h-[260px] md:h-[305px]'
+                  : 'w-48 sm:w-56 md:w-64 h-[145px] sm:h-[168px] md:h-[192px]'
+              }`}
+            >
+              <div
+                className={`relative w-full h-full rounded-2xl overflow-hidden bg-slate-950/95 border-2 transition-all duration-300 shadow-2xl backdrop-blur-md ${
+                  isActivelySpeaking
+                    ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.35)] ring-2 ring-amber-400/50'
+                    : 'border-slate-700/80 shadow-[0_8px_30px_rgba(0,0,0,0.8)]'
+                }`}
+              >
+                {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer inside Miniature Course Screen */}
+                <canvas
+                  ref={headerWav2LipCanvasRef}
+                  width={720}
+                  height={620}
+                  className="w-full h-full block object-cover"
+                />
+
+                {/* Top Badge: En Direct / Live Status */}
+                <div className="absolute top-2 left-2 z-20 flex items-center gap-1 pointer-events-none">
+                  <span className="px-1.5 py-0.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-amber-400/60 text-[9px] font-black text-amber-300 flex items-center gap-1 shadow-md">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>PROF. AÏSHA</span>
+                  </span>
+                  {isActivelySpeaking && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-amber-950/85 backdrop-blur-md border border-amber-500/50 text-[9px] font-bold text-amber-200 hidden sm:flex items-center gap-0.5">
+                      <span>🎙️</span>
+                      <span>PARLE</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Micro Action Buttons on Hover/Visible */}
+                <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition">
+                  {/* Switch Position (Gauche / Droite) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAvatarInCoursePosition((p) => (p === 'top-right' ? 'top-left' : 'top-right'));
+                    }}
+                    className="p-1 rounded-md bg-slate-950/85 hover:bg-slate-900 border border-white/20 text-slate-300 text-[10px] cursor-pointer shadow-md"
+                    title={avatarInCoursePosition === 'top-right' ? 'Déplacer à gauche' : 'Déplacer à droite'}
+                  >
+                    ⇄
+                  </button>
+                  {/* Toggle Zoom Mode (Gros Plan / Plan Buste) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCameraZoomMode((m) => (m === 'close_up' ? 'cinematic' : 'close_up'));
+                    }}
+                    className="px-1.5 py-0.5 rounded-md bg-slate-950/85 hover:bg-slate-900 border border-white/20 text-slate-200 text-[9px] font-bold cursor-pointer shadow-md"
+                    title="Cadrage Caméra (Gros Plan / Plan Buste)"
+                  >
+                    {cameraZoomMode === 'close_up' ? 'Zoom' : 'Buste'}
+                  </button>
+                  {/* Toggle Miniature Size */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAvatarMiniatureSize((s) => (s === 'miniature' ? 'expanded' : s === 'expanded' ? 'compact' : 'miniature'));
+                    }}
+                    className="p-1 rounded-md bg-slate-950/85 hover:bg-slate-900 border border-white/20 text-slate-300 text-[10px] cursor-pointer shadow-md"
+                    title="Changer taille miniature"
+                  >
+                    {avatarMiniatureSize === 'expanded' ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+                  </button>
+                  {/* Minimize to Badge */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAvatarInCoursePosition('minimized');
+                    }}
+                    className="p-1 rounded-md bg-slate-950/85 hover:bg-rose-950 border border-white/20 text-slate-300 hover:text-rose-300 text-[10px] cursor-pointer shadow-md"
+                    title="Réduire l'avatar en badge audio discret"
+                  >
+                    _
+                  </button>
+                </div>
+
+                {/* Bottom Soundwave Equalizer strip inside miniature */}
+                {isActivelySpeaking && (
+                  <div className="absolute bottom-1.5 left-2 right-2 z-20 flex items-center justify-between px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-xs border border-amber-400/30">
+                    <span className="text-[8.5px] font-bold text-amber-300 truncate">
+                      {gestureKinematics.gestureName.slice(0, 32)}
+                    </span>
+                    <div className="flex items-center gap-0.5">
+                      {[0.4, 0.9, 0.6, 1.0, 0.5, 0.8].map((h, i) => (
+                        <div
+                          key={i}
+                          className="w-0.5 bg-amber-400 rounded-full animate-pulse"
+                          style={{
+                            height: `${Math.round(4 + h * 8 * Math.max(0.2, dampedFace.mouth))}px`,
+                            animationDelay: `${i * 120}ms`
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Minimized Pill Badge in top corner */
+            <div className="absolute top-3 right-4 z-30">
+              <button
+                type="button"
+                onClick={() => setAvatarInCoursePosition('top-right')}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/90 border-2 border-amber-400 text-white shadow-xl hover:bg-slate-900 transition cursor-pointer"
+                title="Cliquer pour réafficher l'avatar miniature d'Aïsha"
+              >
+                <div className="relative w-6 h-6 rounded-full overflow-hidden border border-amber-300">
+                  <img src={imgTutrice} alt="Aïsha" className="w-full h-full object-cover" />
+                  {isActivelySpeaking && (
+                    <span className="absolute inset-0 bg-amber-400/20 animate-pulse" />
+                  )}
+                </div>
+                <span className="text-[10px] font-bold text-amber-300 flex items-center gap-1">
+                  <span>Prof. Aïsha</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </span>
+                <span className="text-[9px] text-slate-400 border-l border-slate-700 pl-1.5">
+                  Afficher miniature ↗
+                </span>
+              </button>
+            </div>
+          )}
           <svg
             viewBox="0 0 960 540"
             className="w-full h-full block"
@@ -1375,7 +1513,84 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
           </div>
         </div>
 
-        {/* Bandeau d'adaptation personnalisée au profil connecté (comme avec la Tutrice Virtuelle) */}
+        {/* =========================================================================== */}
+        {/* NOUVELLE BARRE DE NAVIGATION INTER-CHAPITRES & VALIDATION DU TEST DE LEÇON */}
+        {/* =========================================================================== */}
+        <div className="pt-2.5 pb-1 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          {/* Bouton Précédent */}
+          <button
+            type="button"
+            disabled={!hasPrevLesson}
+            onClick={onPrevLesson}
+            className="px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none text-slate-200 text-xs font-bold flex items-center gap-2 border border-slate-700 transition cursor-pointer shadow-sm"
+            title="Revenir au chapitre précédent"
+          >
+            <ChevronLeft className="w-4 h-4 text-amber-400" />
+            <span>Chapitre précédent</span>
+          </button>
+
+          {/* Statut & Bouton de Test de Validation lié à la Leçon */}
+          <div className="flex items-center gap-2">
+            {requiresValidationTest ? (
+              isLessonValidated ? (
+                <button
+                  type="button"
+                  onClick={onOpenValidationTest}
+                  className="px-3 sm:px-4 py-2 rounded-xl bg-emerald-950/70 border border-emerald-500/50 hover:bg-emerald-900/60 text-emerald-300 text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-sm"
+                  title="Revoir le test d’assimilation (réussi à 100%)"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Test d’assimilation : Validé ✓</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenValidationTest}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-black flex items-center gap-2 transition cursor-pointer shadow-lg shadow-amber-500/20 animate-pulse border border-amber-300"
+                  title="Ce chapitre requiert de réussir un test de 2 questions pour débloquer la suite"
+                >
+                  <ShieldCheck className="w-4 h-4 text-slate-950" />
+                  <span>Valider par le test (Requis) 📝</span>
+                </button>
+              )
+            ) : (
+              <span className="text-[11px] text-slate-400 font-medium">
+                Chapitre {lessonIndex + 1} / {course.lessons?.length || 1}
+              </span>
+            )}
+          </div>
+
+          {/* Bouton Suivant */}
+          <button
+            type="button"
+            onClick={() => {
+              if (requiresValidationTest && !isLessonValidated) {
+                onOpenValidationTest?.();
+              } else {
+                onNextLesson?.();
+              }
+            }}
+            className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow-md ${
+              requiresValidationTest && !isLessonValidated
+                ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 ring-2 ring-amber-400/40'
+                : 'bg-[#0866FF] hover:bg-blue-600 text-white'
+            }`}
+            title={
+              requiresValidationTest && !isLessonValidated
+                ? 'Vous devez réussir le test de validation pour passer'
+                : 'Passer au chapitre suivant'
+            }
+          >
+            <span>
+              {requiresValidationTest && !isLessonValidated
+                ? 'Valider par le Test pour passer →'
+                : hasNextLesson
+                ? 'Chapitre suivant'
+                : 'Passer à l’examen final'}
+            </span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
         {profileAdaptation && (
           <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-start sm:items-center gap-2 min-w-0">

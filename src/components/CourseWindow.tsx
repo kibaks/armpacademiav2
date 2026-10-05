@@ -56,6 +56,7 @@ import {
 import { saveCourseQAToFirestore, fetchCourseQAFromFirestore } from '../firebase';
 import { AnimatedLessonPlayer } from './AnimatedLessonPlayer';
 import { StructuredChapterArchitecture } from './StructuredChapterArchitecture';
+import { LessonValidationModal, isLessonRequiringValidationTest } from './LessonValidationModal';
 import {
   getPersonalizedLessonAdaptation,
   getProfilePedagogicalConfig
@@ -119,7 +120,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [requestedScreenJump, setRequestedScreenJump] = useState<{ idx: number; ts: number } | null>(null);
   const [openSummaryVideoNow, setOpenSummaryVideoNow] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechRate, setSpeechRate] = useState<number>(1.0);
+  const [speechRate, setSpeechRate] = useState<number>(0.90);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
   const [autoReadLessons, setAutoReadLessons] = useState<boolean>(() => {
     try {
@@ -142,6 +143,19 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       return new Set([0]);
     }
   });
+
+  // Validation Test per Lesson state (persisted in localStorage)
+  const [isValidatingLessonModalOpen, setIsValidatingLessonModalOpen] = useState(false);
+  const [validatingLessonIndex, setValidatingLessonIndex] = useState<number>(0);
+  const [validatedLessonIndexes, setValidatedLessonIndexes] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+      return saved ? new Set<number>(JSON.parse(saved)) : new Set<number>();
+    } catch {
+      return new Set<number>();
+    }
+  });
+  const [validationToast, setValidationToast] = useState<string | null>(null);
 
   // Notes state
   const [notes, setNotes] = useState<string>('');
@@ -347,7 +361,48 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     onUpdateCourseProgress?.(course.id, pct, arr, undefined, nextActiveIndex ?? index);
   };
 
+  const handleOpenValidationTest = (lessonIdx = activeLessonIndex) => {
+    setValidatingLessonIndex(lessonIdx);
+    setIsValidatingLessonModalOpen(true);
+  };
+
+  const handlePassLessonValidation = (lessonIdx: number) => {
+    setValidatedLessonIndexes((prev) => {
+      const next = new Set(prev);
+      next.add(lessonIdx);
+      try {
+        localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+    handleMarkAsCompleted(lessonIdx);
+    setValidationToast(`🎉 Félicitations ! Le test du Chapitre ${lessonIdx + 1} est validé avec succès.`);
+    setTimeout(() => setValidationToast(null), 4000);
+  };
+
+  const handlePassAndNextLesson = (lessonIdx: number) => {
+    handlePassLessonValidation(lessonIdx);
+    if (lessonIdx < safeLessons.length - 1) {
+      const nextIdx = lessonIdx + 1;
+      setActiveLessonIndex(nextIdx);
+      setMode('reading');
+      stopSpeech();
+    } else {
+      setMode('quiz');
+      stopSpeech();
+    }
+  };
+
   const handleNextLesson = () => {
+    const isCurrentRequiringTest = isLessonRequiringValidationTest(course, activeLessonIndex);
+    const isCurrentValidated = validatedLessonIndexes.has(activeLessonIndex);
+
+    // Si le chapitre actuel requiert un test d'assimilation non encore validé, afficher le test
+    if (isCurrentRequiringTest && !isCurrentValidated) {
+      handleOpenValidationTest(activeLessonIndex);
+      return;
+    }
+
     if (activeLessonIndex < safeLessons.length - 1) {
       const nextIdx = activeLessonIndex + 1;
       handleMarkAsCompleted(activeLessonIndex, nextIdx);
@@ -1036,9 +1091,23 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
                       {!isSidebarCollapsed && (
                         <div className="min-w-0 flex-1">
-                          <h4 className={`text-xs font-bold leading-snug line-clamp-2 ${isActive ? 'text-white' : ''}`}>
-                            {lesson.title}
-                          </h4>
+                          <div className="flex items-start justify-between gap-1.5">
+                            <h4 className={`text-xs font-bold leading-snug line-clamp-2 ${isActive ? 'text-white' : ''}`}>
+                              {lesson.title}
+                            </h4>
+                            {isLessonRequiringValidationTest(course, idx) && (
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0 border ${
+                                  validatedLessonIndexes.has(idx)
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+                                }`}
+                                title={validatedLessonIndexes.has(idx) ? 'Test d’assimilation réussi' : 'Test obligatoire requis pour ce chapitre'}
+                              >
+                                {validatedLessonIndexes.has(idx) ? '✓ Test' : '🛡️ Test'}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center space-x-2 mt-1 text-[10px] opacity-75">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
@@ -1107,6 +1176,13 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   currentProfile={currentProfile}
                   requestedScreenIndex={requestedScreenJump}
                   onActiveScreenChange={setActiveCardScreenIdx}
+                  onNextLesson={handleNextLesson}
+                  onPrevLesson={handlePrevLesson}
+                  hasNextLesson={activeLessonIndex < safeLessons.length - 1}
+                  hasPrevLesson={activeLessonIndex > 0}
+                  isLessonValidated={validatedLessonIndexes.has(activeLessonIndex)}
+                  requiresValidationTest={isLessonRequiringValidationTest(course, activeLessonIndex)}
+                  onOpenValidationTest={() => handleOpenValidationTest(activeLessonIndex)}
                 />
 
                 {/* STRUCTURED 5-PILLAR CHAPTER ARCHITECTURE + COURSE SUMMARY VIDEO */}
@@ -1218,30 +1294,66 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     <button
                       disabled={activeLessonIndex === 0}
                       onClick={handlePrevLesson}
-                      className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white font-bold text-xs flex items-center space-x-2 transition cursor-pointer"
+                      className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white font-bold text-xs flex items-center space-x-2 transition cursor-pointer"
+                      title="Chapitre précédent"
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="w-4 h-4 text-amber-400" />
                       <span>Chapitre précédent</span>
                     </button>
 
-                    <button
-                      onClick={() => handleMarkAsCompleted(activeLessonIndex)}
-                      className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
-                        completedLessons.has(activeLessonIndex)
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                      }`}
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Assimilé</span>
-                    </button>
+                    {isLessonRequiringValidationTest(course, activeLessonIndex) ? (
+                      validatedLessonIndexes.has(activeLessonIndex) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenValidationTest(activeLessonIndex)}
+                          className="px-3.5 py-2.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/50 hover:bg-emerald-900/60 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 transition cursor-pointer shadow-md"
+                          title="Revoir le test validé avec succès (100%)"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Test Validé ✓</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenValidationTest(activeLessonIndex)}
+                          className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center space-x-1.5 transition cursor-pointer animate-pulse border border-amber-300"
+                          title="Réussir le test pour valider ce chapitre et débloquer la suite"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-slate-950" />
+                          <span>Valider par le Test (Requis) 📝</span>
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        onClick={() => handleMarkAsCompleted(activeLessonIndex)}
+                        className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                          completedLessons.has(activeLessonIndex)
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Assimilé</span>
+                      </button>
+                    )}
 
                     <button
                       onClick={handleNextLesson}
-                      className="px-5 py-2.5 rounded-2xl bg-[#0866FF] hover:bg-blue-600 text-white font-bold text-xs shadow-md transition flex items-center space-x-2 cursor-pointer"
+                      className={`px-5 py-2.5 rounded-2xl text-xs font-black shadow-md transition flex items-center space-x-2 cursor-pointer ${
+                        isLessonRequiringValidationTest(course, activeLessonIndex) && !validatedLessonIndexes.has(activeLessonIndex)
+                          ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 ring-2 ring-amber-400/40'
+                          : 'bg-[#0866FF] hover:bg-blue-600 text-white'
+                      }`}
+                      title={
+                        isLessonRequiringValidationTest(course, activeLessonIndex) && !validatedLessonIndexes.has(activeLessonIndex)
+                          ? 'Ce chapitre requiert de réussir le test pour passer au suivant'
+                          : 'Passer au chapitre suivant'
+                      }
                     >
                       <span>
-                        {activeLessonIndex < safeLessons.length - 1
+                        {isLessonRequiringValidationTest(course, activeLessonIndex) && !validatedLessonIndexes.has(activeLessonIndex)
+                          ? 'Valider par le Test pour passer →'
+                          : activeLessonIndex < safeLessons.length - 1
                           ? 'Chapitre suivant'
                           : 'Passer à l’examen final'}
                       </span>
@@ -1739,6 +1851,26 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
         </div>
 
       </div>
+
+      {/* Toast de validation de test d'assimilation */}
+      {validationToast && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-emerald-600 border border-emerald-400 text-white font-bold text-xs shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300">
+          <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
+          <span>{validationToast}</span>
+        </div>
+      )}
+
+      {/* Modal de Validation de Leçon par Test Lié */}
+      <LessonValidationModal
+        isOpen={isValidatingLessonModalOpen}
+        onClose={() => setIsValidatingLessonModalOpen(false)}
+        course={course}
+        lesson={safeLessons[validatingLessonIndex]}
+        lessonIndex={validatingLessonIndex}
+        onPassValidation={handlePassLessonValidation}
+        onPassAndNextLesson={handlePassAndNextLesson}
+        isAlreadyValidated={validatedLessonIndexes.has(validatingLessonIndex)}
+      />
     </>
   );
 };

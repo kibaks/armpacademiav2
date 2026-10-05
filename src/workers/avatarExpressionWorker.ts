@@ -1265,11 +1265,11 @@ function samplePhonemeAtTime(timeMs: number): SampledArticulatoryTarget | null {
     };
   }
 
-  // 4. Vowel Nucleus: high-contrast syllabic arch (0.20 at edges -> 1.00 at peak -> 0.20)
-  // so every syllable inside multi-syllable words clearly opens and closes the mouth!
+  // 4. Vowel Nucleus: smooth natural articulatory arch maintaining open vowel fullness
+  // so the mouth stays open steadily during the syllable rather than fluttering mid-word!
   const tokenSpan = Math.max(0.05, activeToken.endRatio - activeToken.startRatio);
   const tokenLocal = Math.max(0, Math.min(1, (wordRatio - activeToken.startRatio) / tokenSpan));
-  const vowelArch = 0.20 + 0.84 * Math.sin(tokenLocal * Math.PI);
+  const vowelArch = 0.58 + 0.42 * Math.sin(tokenLocal * Math.PI);
 
   return {
     openness: Math.min(0.98, activeToken.openness * vowelArch),
@@ -1388,12 +1388,14 @@ export function stepAvatarExpressionFrame(
   let targetTongueLift = 0.0;
   let viseme: WorkerViseme = 'closed';
 
-  // Natural 4.3 Hz French syllabic articulation wave (alternating between consonant closures 0.0 and vowel peaks 1.0)
-  const rawSyllableOsc =
-    Math.sin(nowMs * 0.0265) * 0.55 +
-    Math.sin(nowMs * 0.0172) * 0.32 +
-    Math.cos(nowMs * 0.0410) * 0.22;
-  const livelySyllablePulse = Math.max(0, Math.min(1, (rawSyllableOsc + 0.22) / 0.95));
+  // Calm, composed French pedagogical syllabic cadence (~3.0 to 3.2 syllables/sec)
+  // Perfectly locked to the audio stream elapsed time (not artificial wall-clock time)
+  const timeAudioMs = streamElapsedMs > 0 ? streamElapsedMs : nowMs * 0.88;
+  const calmCadenceOsc =
+    Math.sin(timeAudioMs * 0.0185) * 0.55 +
+    Math.sin(timeAudioMs * 0.0125) * 0.28 +
+    Math.cos(timeAudioMs * 0.0245) * 0.17;
+  const livelySyllablePulse = Math.max(0, Math.min(1, (calmCadenceOsc + 0.24) / 0.94));
 
   if (isSpeaking) {
     const coart = streamElapsedMs > 0 ? lookupCoarticulatedPhoneme(streamElapsedMs) : null;
@@ -1404,11 +1406,10 @@ export function stepAvatarExpressionFrame(
       targetUpperLipLift = coart.upperLipLift;
       targetTongueLift = coart.tongueLift;
 
-      // 1. Acoustic silence or inter-word pause -> close lips immediately when voice drops
+      // 1. Acoustic silence or genuine inter-word pause -> close lips calmly only when voice truly rests
       if (
-        coart.isPause ||
-        isPauseHint ||
-        (streamElapsedMs > 0 && rawRms > 0.001 && rawRms < 0.020 && pose.smoothRms < 0.024)
+        (coart.isPause && (rawRms < 0.015 || isPauseHint)) ||
+        (streamElapsedMs > 0 && rawRms > 0.001 && rawRms < 0.009 && pose.smoothRms < 0.012 && isPauseHint)
       ) {
         targetOpen = 0.0;
         targetRoundness = 0.05;
@@ -1427,23 +1428,23 @@ export function stepAvatarExpressionFrame(
         viseme = 'narrow';
       } else if (coart.openness <= 0.24) {
         // 4. Dental, alveolar, sibilant, postalveolar & velar consonants (T, D, S, Z, L, N, CH, J, R, K):
-        // Distinct consonant constriction between vowels so every syllable articulates!
-        targetOpen = Math.min(0.16, coart.openness);
+        // Distinct consonant constriction between vowels matching the voice cadence
+        targetOpen = Math.min(0.18, Math.max(0.08, coart.openness));
         viseme = coart.viseme;
       } else {
-        // 5. Vowel nucleus: directly locked to real instantaneous voice energy (zero drift!)
+        // 5. Vowel nucleus: directly locked to real instantaneous voice energy with composed delivery
         const instantVoice = Math.max(rawRms, pose.smoothRms);
         const envFactor =
-          instantVoice > 0.018
-            ? 0.38 + Math.min(0.72, Math.pow(instantVoice, 0.45) * 0.95)
-            : 0.78 + livelySyllablePulse * 0.22;
-        targetOpen = Math.min(1.0, Math.max(0.28, coart.openness * envFactor));
+          instantVoice > 0.014
+            ? 0.44 + Math.min(0.66, Math.pow(instantVoice, 0.42) * 0.90)
+            : 0.80 + livelySyllablePulse * 0.20;
+        targetOpen = Math.min(1.0, Math.max(0.32, coart.openness * envFactor));
         viseme = coart.viseme;
       }
     } else {
       // Lively French syllabic speech articulation when speaking in fallback / muted film mode
-      const phrasePause = Math.sin(nowMs * 0.0038) < -0.84;
-      if (isPauseHint || phrasePause || (pose.smoothRms > 0 && pose.smoothRms < 0.015)) {
+      const phrasePause = Math.sin(timeAudioMs * 0.0028) < -0.88;
+      if (isPauseHint || phrasePause || (pose.smoothRms > 0 && pose.smoothRms < 0.012)) {
         targetOpen = 0.0;
         targetRoundness = 0.05;
         targetSpread = 0.05;
@@ -1451,20 +1452,20 @@ export function stepAvatarExpressionFrame(
         viseme = 'closed';
       } else {
         const baseEnergy =
-          pose.smoothRms > 0.018
-            ? Math.min(1.0, 0.55 + Math.pow(pose.smoothRms, 0.45) * 0.52)
-            : Math.max(0.86, fallbackOpen);
-        // Cycle through natural French visemes (bilabial closure -> open 'A' -> round 'O/OU' -> narrow 'T/S' -> wide 'É/I')
-        const syllablePhase = Math.floor(nowMs / 155) % 6;
-        if (livelySyllablePulse < 0.18 || syllablePhase === 0) {
+          pose.smoothRms > 0.015
+            ? Math.min(1.0, 0.55 + Math.pow(pose.smoothRms, 0.42) * 0.50)
+            : Math.max(0.84, fallbackOpen);
+        // Cycle through natural French visemes at calm steady cadence (~280ms per phase)
+        const syllablePhase = Math.floor(timeAudioMs / 240) % 6;
+        if (livelySyllablePulse < 0.16 || syllablePhase === 0) {
           targetOpen = 0.0;
           targetRoundness = 0.12;
           targetSpread = 0.0;
           targetUpperLipLift = -0.90;
           viseme = 'closed';
         } else if (syllablePhase === 2) {
-          targetOpen = Math.min(0.84, Math.max(0.52, baseEnergy * (0.55 + livelySyllablePulse * 0.45)));
-          targetRoundness = 0.90;
+          targetOpen = Math.min(0.82, Math.max(0.48, baseEnergy * (0.55 + livelySyllablePulse * 0.45)));
+          targetRoundness = 0.88;
           targetSpread = 0.0;
           targetUpperLipLift = -0.42;
           viseme = 'round';
@@ -1476,14 +1477,14 @@ export function stepAvatarExpressionFrame(
           targetTongueLift = 0.95;
           viseme = 'narrow';
         } else if (syllablePhase === 4) {
-          targetOpen = Math.min(0.88, Math.max(0.56, baseEnergy * (0.58 + livelySyllablePulse * 0.42)));
+          targetOpen = Math.min(0.86, Math.max(0.52, baseEnergy * (0.58 + livelySyllablePulse * 0.42)));
           targetRoundness = 0.0;
-          targetSpread = 0.84;
+          targetSpread = 0.82;
           targetUpperLipLift = 0.68;
           targetTongueLift = 0.45;
           viseme = 'wide';
         } else {
-          targetOpen = Math.min(0.98, Math.max(0.64, baseEnergy * (0.62 + livelySyllablePulse * 0.38)));
+          targetOpen = Math.min(0.96, Math.max(0.60, baseEnergy * (0.62 + livelySyllablePulse * 0.38)));
           targetRoundness = 0.08;
           targetSpread = 0.25;
           targetUpperLipLift = 0.72;

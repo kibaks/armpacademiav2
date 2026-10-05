@@ -742,8 +742,8 @@ class SpeechService {
         const baseOpen = st.mouthOpenness ?? 0.68;
         const syllabicWave =
           0.58 +
-          Math.sin(nowMs * 0.028) * 0.24 +
-          Math.cos(nowMs * 0.019) * 0.18;
+          Math.sin(nowMs * 0.018) * 0.24 +
+          Math.cos(nowMs * 0.012) * 0.16;
         acousticRms = Math.min(0.95, Math.max(0.18, baseOpen * syllabicWave));
       } else {
         acousticRms = 0;
@@ -751,7 +751,7 @@ class SpeechService {
     }
 
     const isQuietPause = Boolean(
-      st.isPauseBetweenWords || (hasHardwareTelemetry && this.currentEnvelope5ms && acousticRms < 0.020)
+      st.isPauseBetweenWords || (hasHardwareTelemetry && this.currentEnvelope5ms && acousticRms < 0.012)
     );
 
     return {
@@ -1422,6 +1422,7 @@ class SpeechService {
       if (wordBoundaries && wordBoundaries.length > 0) {
         let currentWb: TtsWordBoundary | undefined;
         let prevWb: TtsWordBoundary | undefined;
+        let nextWb: TtsWordBoundary | undefined;
 
         for (let i = 0; i < wordBoundaries.length; i++) {
           const wb = wordBoundaries[i];
@@ -1430,19 +1431,31 @@ class SpeechService {
           }
           if (
             !currentWb &&
-            streamElapsedMs >= wb.offsetMs - 8 &&
-            streamElapsedMs <= wb.offsetMs + wb.durationMs + 12
+            streamElapsedMs >= wb.offsetMs - 22 &&
+            streamElapsedMs <= wb.offsetMs + wb.durationMs + 32
           ) {
             currentWb = wb;
+          }
+          if (wb.offsetMs > streamElapsedMs && !nextWb) {
+            nextWb = wb;
           }
         }
 
         const phoneme = analyzeFrenchPhonemeAt(sentence, leadCharIdx, streamElapsedMs);
-        if (currentWb && boostedRms > 0.018) {
+        const gapToNextMs = nextWb && prevWb ? nextWb.offsetMs - (prevWb.offsetMs + prevWb.durationMs) : 999;
+        const isShortIntraPhraseGap = !currentWb && prevWb && nextWb && gapToNextMs < 180 && boostedRms > 0.012;
+
+        if (currentWb && boostedRms > 0.012) {
           activeWord = currentWb.text;
           const phonemeScale = phoneme.viseme === 'closed' ? 0.0 : (phoneme.mouthOpenness || 0.65);
-          mouthOpenness = Math.min(1, Math.max(0.12, boostedRms * 0.84 + 0.14) * (0.35 + phonemeScale * 0.65));
+          mouthOpenness = Math.min(1, Math.max(0.16, boostedRms * 0.82 + 0.14) * (0.35 + phonemeScale * 0.65));
           viseme = phoneme.viseme || (mouthOpenness < 0.04 ? 'closed' : 'open');
+          isPauseBetweenWords = false;
+        } else if (isShortIntraPhraseGap && prevWb) {
+          // Coarticulated liaison / breathing continuation between close words
+          activeWord = prevWb.text;
+          mouthOpenness = Math.max(0.14, boostedRms * 0.65);
+          viseme = phoneme.viseme !== 'closed' ? phoneme.viseme : 'narrow';
           isPauseBetweenWords = false;
         } else {
           isPauseBetweenWords = true;
@@ -1806,7 +1819,7 @@ class SpeechService {
     this.queue = sentences;
     this.currentSentenceIndex = startIdx;
     this.currentPlayingId = id;
-    this.currentOptions = options;
+    this.currentOptions = { ...options, speed: options?.speed ?? 0.90 };
 
     const firstPhoneme = analyzeFrenchPhonemeAt(sentences[startIdx], 0);
     const firstEmotion = detectSentenceEmotion(sentences[startIdx]);
@@ -1853,7 +1866,7 @@ class SpeechService {
     const sentenceIdx = this.currentSentenceIndex;
     const sentence = this.queue[sentenceIdx];
     const voiceName = this.currentOptions?.voice || this.preferredPersona;
-    const userSpeed = this.currentOptions?.speed || 1.0;
+    const userSpeed = this.currentOptions?.speed ?? 0.90;
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if (this.neuralTtsAvailable) {
@@ -1885,9 +1898,9 @@ class SpeechService {
 
       if (neuralEntry) {
         const ctx = this.getAudioContext();
-        // Natural, eloquent & clear pedagogical playback rate perfectly synchronized with video
+        // Natural, serene & calm pedagogical playback rate matching composed French delivery
         const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
-        const playbackRate = userSpeed <= 0.88 ? 0.92 : userSpeed >= 1.08 ? 1.08 : 1.0;
+        const playbackRate = Math.max(0.82, Math.min(1.04, userSpeed * 0.96));
         let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
 
         if (ctx && ctx.state === 'suspended') {
@@ -1943,6 +1956,7 @@ class SpeechService {
             const sourceNode = ctx.createBufferSource();
             sourceNode.buffer = audioBuffer;
             sourceNode.playbackRate.value = playbackRate;
+            this.currentPlaybackRate = playbackRate;
 
             // 1. Transparent Studio Condenser Warmth (195 Hz) preserving VivienneMultilingualNeural's natural timbre
             const warmthFilter = ctx.createBiquadFilter();
@@ -2246,7 +2260,7 @@ class SpeechService {
 
     const utterance = new SpeechSynthesisUtterance(sentence);
     utterance.lang = 'fr-FR';
-    const effectiveRate = Math.max(0.84, Math.min(0.98, 0.90 * userSpeed));
+    const effectiveRate = Math.max(0.78, Math.min(0.90, 0.86 * (userSpeed / 0.90)));
     utterance.rate = effectiveRate;
     utterance.pitch = 1.0;
 

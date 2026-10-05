@@ -179,29 +179,29 @@ export class AvatarKalmanTemporalSmoother {
     velocityDecay: 0.90,
   });
 
-  // Voice-Locked Articulatory Kalman Filters (snappy zero-lag tracking matching French syllable speed)
+  // Voice-Locked Articulatory Kalman Filters (poised, steady biomechanical tracking matching calm French syllable cadence)
   public readonly mouthOpen = new KalmanFilter1D(0.04, {
-    processNoiseAccel: 650.0,
-    measurementNoise: 0.001,
-    velocityDecay: 0.50,
-    adaptiveInnovationGate: 0.03,
+    processNoiseAccel: 110.0,
+    measurementNoise: 0.016,
+    velocityDecay: 0.82,
+    adaptiveInnovationGate: 0.05,
   });
   public readonly mouthRound = new KalmanFilter1D(0.0, {
-    processNoiseAccel: 380.0,
-    measurementNoise: 0.004,
-    velocityDecay: 0.60,
+    processNoiseAccel: 90.0,
+    measurementNoise: 0.020,
+    velocityDecay: 0.82,
     adaptiveInnovationGate: 0.06,
   });
   public readonly mouthSpread = new KalmanFilter1D(0.22, {
-    processNoiseAccel: 380.0,
-    measurementNoise: 0.004,
-    velocityDecay: 0.60,
+    processNoiseAccel: 90.0,
+    measurementNoise: 0.020,
+    velocityDecay: 0.82,
     adaptiveInnovationGate: 0.06,
   });
   public readonly tongueLift = new KalmanFilter1D(0.0, {
-    processNoiseAccel: 420.0,
-    measurementNoise: 0.003,
-    velocityDecay: 0.58,
+    processNoiseAccel: 100.0,
+    measurementNoise: 0.018,
+    velocityDecay: 0.82,
     adaptiveInnovationGate: 0.06,
   });
 }
