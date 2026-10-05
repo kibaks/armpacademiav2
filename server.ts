@@ -1359,13 +1359,28 @@ function humanizeTextForNaturalEloquenceServer(text: string): string {
 async function synthesizeWithStudioNeuralHD(
   text: string,
   _voiceOption?: string,
-  _emotionOption?: string
+  _emotionOption?: string,
+  preferredVoice?: NeuralVoicePref
 ): Promise<CachedTtsPayload | null> {
   const candidateVoices: Array<{ voice: string; tag: CachedTtsPayload['provider'] }> = [
     { voice: 'fr-FR-DeniseNeural', tag: 'neural-denise-hd' },
     { voice: 'fr-FR-VivienneMultilingualNeural', tag: 'neural-vivienne-hd' },
     { voice: 'fr-FR-VivienneNeural', tag: 'neural-vivienne-hd' },
   ];
+
+  // Voix préférée du paramétrage (tts-settings.json) placée en tête de la cascade
+  const preferredMap: Record<NeuralVoicePref, string> = {
+    denise: 'fr-FR-DeniseNeural',
+    'vivienne-multilingual': 'fr-FR-VivienneMultilingualNeural',
+    vivienne: 'fr-FR-VivienneNeural',
+  };
+  const preferred = preferredVoice ? preferredMap[preferredVoice] : undefined;
+  if (preferred) {
+    const idx = candidateVoices.findIndex((c) => c.voice === preferred);
+    if (idx > 0) {
+      candidateVoices.unshift(candidateVoices.splice(idx, 1)[0]);
+    }
+  }
 
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
     const { voice, tag } = candidateVoices[attempt];
@@ -1529,6 +1544,97 @@ function normalizeCongoleseProperNounsServer(text: string): string {
     .replace(/\bTsh([a-zàâéèêëîïôùû]+)/g, 'Tch$1');
 }
 
+// ============================================================================
+// TTS PROVIDER SETTINGS — paramétrage temps réel (fichier tts-settings.json)
+// Ordre + activation des fournisseurs de voix, lu à chaque synthèse (aucun
+// redémarrage). Par défaut: ElevenLabs d'abord, voix Neural Studio ensuite,
+// Gemini TTS désactivé (remplacé par la chaîne ElevenLabs/Neural).
+// ============================================================================
+type TtsProviderId = 'elevenlabs' | 'neural' | 'gemini';
+type NeuralVoicePref = 'denise' | 'vivienne-multilingual' | 'vivienne';
+
+interface TtsSettings {
+  order: Array<{ id: TtsProviderId; enabled: boolean }>;
+  neuralVoice: NeuralVoicePref;
+}
+
+const TTS_SETTINGS_FILE = path.join(process.cwd(), 'tts-settings.json');
+const TTS_PROVIDER_IDS: TtsProviderId[] = ['elevenlabs', 'neural', 'gemini'];
+const NEURAL_VOICE_PREFS: NeuralVoicePref[] = ['denise', 'vivienne-multilingual', 'vivienne'];
+const DEFAULT_TTS_SETTINGS: TtsSettings = {
+  order: [
+    { id: 'elevenlabs', enabled: true },
+    { id: 'neural', enabled: true },
+    { id: 'gemini', enabled: false },
+  ],
+  neuralVoice: 'denise',
+};
+
+function normalizeTtsSettings(raw: any): TtsSettings {
+  const order = Array.isArray(raw?.order) ? raw.order : [];
+  const ids = order.map((e: any) => e?.id);
+  const valid =
+    order.length === TTS_PROVIDER_IDS.length &&
+    TTS_PROVIDER_IDS.every((id) => ids.includes(id)) &&
+    new Set(ids).size === TTS_PROVIDER_IDS.length;
+  return {
+    order: valid
+      ? order.map((e: any) => ({ id: e.id as TtsProviderId, enabled: !!e.enabled }))
+      : DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })),
+    neuralVoice: (NEURAL_VOICE_PREFS as string[]).includes(raw?.neuralVoice)
+      ? (raw.neuralVoice as NeuralVoicePref)
+      : DEFAULT_TTS_SETTINGS.neuralVoice,
+  };
+}
+
+function loadTtsSettings(): TtsSettings {
+  try {
+    if (!fs.existsSync(TTS_SETTINGS_FILE)) {
+      return { order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })), neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice };
+    }
+    return normalizeTtsSettings(JSON.parse(fs.readFileSync(TTS_SETTINGS_FILE, 'utf8')));
+  } catch {
+    return { order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })), neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice };
+  }
+}
+
+function ttsAvailability() {
+  return {
+    elevenlabs: !!process.env.ELEVENLABS_API_KEY,
+    neural: true, // edge-tts: aucune clé requise
+    gemini: !!(process.env.API_KEY || process.env.GEMINI_API_KEY),
+  };
+}
+
+app.get('/api/tts/settings', (_req, res) => {
+  res.json({
+    ...loadTtsSettings(),
+    availability: ttsAvailability(),
+    elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
+  });
+});
+
+app.post('/api/tts/settings', (req, res) => {
+  try {
+    const body = req.body || {};
+    const ids = Array.isArray(body.order) ? body.order.map((e: any) => e?.id) : [];
+    const shapeOk =
+      Array.isArray(body.order) &&
+      body.order.length === TTS_PROVIDER_IDS.length &&
+      TTS_PROVIDER_IDS.every((id) => ids.includes(id)) &&
+      new Set(ids).size === TTS_PROVIDER_IDS.length;
+    if (!shapeOk) {
+      return res.status(400).json({ ok: false, error: 'order invalide: les 3 fournisseurs doivent être présents' });
+    }
+    const settings = normalizeTtsSettings(body);
+    fs.writeFileSync(TTS_SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    console.log('[TTS Settings] sauvegardé:', JSON.stringify(settings));
+    res.json({ ok: true, ...settings, availability: ttsAvailability() });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || 'erreur inconnue' });
+  }
+});
+
 // Unified server-side synthesis with caching & in-flight deduplication (100% Vivienne HD)
 async function getOrSynthesizeTtsPayload(
   rawText: string,
@@ -1578,55 +1684,72 @@ async function getOrSynthesizeTtsPayload(
         return enrichedPayload;
       };
 
-      // 1. ElevenLabs first (most human voice — breaths, exclamations, emotion)
-      //    behind a soft monthly budget guard: free tier = 10k chars/month, so we
-      //    reserve the neural HD fallback (edge-tts) for bulk lesson content.
-      const elevenPayload = await synthesizeWithElevenLabsBudgeted(cleanText, voiceKey, emoKey);
-      if (elevenPayload) {
-        return storeInCache(elevenPayload);
-      }
+      // Chaîne vocale pilotée par tts-settings.json (GET/POST /api/tts/settings):
+      // ordre + activation choisis dans le panneau de paramétrage, relu à chaque synthèse.
+      const ttsSettings = loadTtsSettings();
+      for (const tier of ttsSettings.order) {
+        if (!tier.enabled) continue;
 
-      // 2. Expressive Studio Neural HD (edge-tts Vivienne/Denise)
-      const studioNeuralPayload = await synthesizeWithStudioNeuralHD(cleanText, voiceKey, emoKey);
-      if (studioNeuralPayload) {
-        return storeInCache(studioNeuralPayload);
-      }
-
-      // 3. Fallback to Gemini TTS (gemini-3.8-flash-lite-tts) if available
-      const ai = getAIClient();
-      if (ai && Date.now() > geminiTtsCooldownUntil) {
-        try {
-          const geminiVoiceMap: Record<string, string> = {
-            denise: 'Kore',
-            charline: 'Zephyr',
-            vivienne: 'Aoede',
-            eloise: 'Leda',
-          };
-          const geminiVoice = geminiVoiceMap[voiceKey] || 'Kore';
-          const ttsRes = await ai.models.generateContent({
-            model: 'gemini-3.8-flash-lite-tts',
-            contents: [{ role: 'user', parts: [{ text: cleanText }] }],
-            config: {
-              responseModalities: ['AUDIO'],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: { voiceName: geminiVoice },
-                },
-              },
-            },
-          });
-          const b64 = ttsRes.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-          if (b64) {
-            const wavBuf = ensureWavBuffer(Buffer.from(b64, 'base64'));
-            return storeInCache({
-              audioData: wavBuf.toString('base64'),
-              mimeType: 'audio/wav',
-              provider: 'gemini-tts',
-              wordBoundaries: buildEstimatedWordBoundaries(cleanText),
-            });
+        // 1. ElevenLabs — voix la plus humaine (souffles, exclamations, émotion),
+        //    protégée par un garde-mensuel doux (free tier = 10k caractères/mois).
+        if (tier.id === 'elevenlabs' && process.env.ELEVENLABS_API_KEY) {
+          const elevenPayload = await synthesizeWithElevenLabsBudgeted(cleanText, voiceKey, emoKey);
+          if (elevenPayload) {
+            return storeInCache(elevenPayload);
           }
-        } catch {
-          geminiTtsCooldownUntil = Date.now() + 60_000;
+        }
+
+        // 2. Voix Neural Studio HD expressives (edge-tts Denise/Vivienne — sans clé)
+        if (tier.id === 'neural') {
+          const studioNeuralPayload = await synthesizeWithStudioNeuralHD(
+            cleanText,
+            voiceKey,
+            emoKey,
+            ttsSettings.neuralVoice
+          );
+          if (studioNeuralPayload) {
+            return storeInCache(studioNeuralPayload);
+          }
+        }
+
+        // 3. Gemini TTS — optionnel, désactivé par défaut (nécessite une clé Google)
+        if (tier.id === 'gemini') {
+          const ai = getAIClient();
+          if (ai && Date.now() > geminiTtsCooldownUntil) {
+            try {
+              const geminiVoiceMap: Record<string, string> = {
+                denise: 'Kore',
+                charline: 'Zephyr',
+                vivienne: 'Aoede',
+                eloise: 'Leda',
+              };
+              const geminiVoice = geminiVoiceMap[voiceKey] || 'Kore';
+              const ttsRes = await ai.models.generateContent({
+                model: 'gemini-3.8-flash-lite-tts',
+                contents: [{ role: 'user', parts: [{ text: cleanText }] }],
+                config: {
+                  responseModalities: ['AUDIO'],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: geminiVoice },
+                    },
+                  },
+                },
+              });
+              const b64 = ttsRes.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+              if (b64) {
+                const wavBuf = ensureWavBuffer(Buffer.from(b64, 'base64'));
+                return storeInCache({
+                  audioData: wavBuf.toString('base64'),
+                  mimeType: 'audio/wav',
+                  provider: 'gemini-tts',
+                  wordBoundaries: buildEstimatedWordBoundaries(cleanText),
+                });
+              }
+            } catch {
+              geminiTtsCooldownUntil = Date.now() + 60_000;
+            }
+          }
         }
       }
 

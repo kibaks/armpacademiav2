@@ -29,7 +29,10 @@ import {
   BookOpen,
   MessageSquarePlus,
   ChevronRight,
-  Sliders
+  ChevronUp,
+  ChevronDown,
+  Sliders,
+  Settings
 } from 'lucide-react';
 import { ChatMessage, UserProfile } from '../types';
 import { saveTutorHistoryToFirestore, fetchTutorHistoryFromFirestore } from '../firebase';
@@ -515,6 +518,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [manualTutorEmotion, setManualTutorEmotion] = useState<AvatarEmotion | 'auto'>('smiling');
   const [detectedSpeechEmotion, setDetectedSpeechEmotion] = useState<AvatarEmotion>('smiling');
   const [isListening, setIsListening] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState<{
+    order: Array<{ id: 'elevenlabs' | 'neural' | 'gemini'; enabled: boolean }>;
+    neuralVoice: 'denise' | 'vivienne-multilingual' | 'vivienne';
+    availability?: { elevenlabs?: boolean; neural?: boolean; gemini?: boolean };
+    elevenlabsVoiceId?: string;
+  } | null>(null);
+  const [voiceSettingsMsg, setVoiceSettingsMsg] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCallActive, setIsCallActive] = useState(false);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
@@ -1349,6 +1360,63 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     }
   };
 
+  // ---- Paramétrage chaîne vocale (GET/POST /api/tts/settings) ----
+  const toggleVoiceSettings = async () => {
+    const next = !showVoiceSettings;
+    setShowVoiceSettings(next);
+    setVoiceSettingsMsg('');
+    if (next && !voiceSettings) {
+      try {
+        const res = await fetch('/api/tts/settings');
+        if (res.ok) setVoiceSettings(await res.json());
+        else setVoiceSettingsMsg('Impossible de charger les réglages');
+      } catch {
+        setVoiceSettingsMsg('Serveur injoignable');
+      }
+    }
+  };
+
+  const moveVoiceTier = (idx: number, dir: -1 | 1) => {
+    setVoiceSettings((s) => {
+      if (!s) return s;
+      const order = [...s.order];
+      const j = idx + dir;
+      if (j < 0 || j >= order.length) return s;
+      const tmp = order[idx];
+      order[idx] = order[j];
+      order[j] = tmp;
+      return { ...s, order };
+    });
+  };
+
+  const toggleVoiceTier = (idx: number) => {
+    setVoiceSettings((s) => {
+      if (!s) return s;
+      return { ...s, order: s.order.map((t, i) => (i === idx ? { ...t, enabled: !t.enabled } : t)) };
+    });
+  };
+
+  const saveVoiceSettings = async () => {
+    if (!voiceSettings) return;
+    setVoiceSettingsMsg('Enregistrement…');
+    try {
+      const res = await fetch('/api/tts/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: voiceSettings.order, neuralVoice: voiceSettings.neuralVoice }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setVoiceSettings((s) => (s ? { ...s, ...data } : s));
+        setVoiceSettingsMsg('✓ Enregistré — appliqué à la prochaine synthèse');
+      } else {
+        setVoiceSettingsMsg(`✗ ${data.error || 'erreur'}`);
+      }
+    } catch {
+      setVoiceSettingsMsg('✗ Serveur injoignable');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 lg:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 w-full max-w-6xl h-[100dvh] sm:h-[92vh] sm:max-h-[840px] rounded-none sm:rounded-3xl shadow-2xl flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 overflow-hidden relative">
@@ -1425,6 +1493,19 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             </button>
 
             <button
+              onClick={toggleVoiceSettings}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                showVoiceSettings
+                  ? 'bg-amber-400/90 border-amber-300/60 text-slate-950'
+                  : 'bg-white/10 border-white/15 text-white/80 hover:bg-white/15'
+              }`}
+              title="Paramètres Voix — ordre et fournisseurs de synthèse (ElevenLabs / Neural / Gemini)"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Voix</span>
+            </button>
+
+            <button
               onClick={() => startCall()}
               className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-black text-xs border transition shadow-sm ${
                 isCallActive
@@ -1479,6 +1560,141 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* PANNEAU — PARAMÉTRAGE CHAÎNE VOCALE (ElevenLabs / Neural / Gemini) */}
+        {showVoiceSettings && (
+          <div className="px-4 sm:px-6 py-3 bg-gradient-to-r from-slate-950 via-blue-950/95 to-indigo-950 border-b border-white/10 text-white shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-300">
+                <Settings className="w-4 h-4" />
+                Paramètres Voix — chaîne de synthèse
+              </div>
+              <button
+                onClick={() => setShowVoiceSettings(false)}
+                className="p-1 rounded-lg hover:bg-white/10 text-white/70"
+                title="Fermer les paramètres"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!voiceSettings ? (
+              <p className="text-white/60 text-xs py-2">{voiceSettingsMsg || 'Chargement des réglages…'}</p>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  {voiceSettings.order.map((tier, idx) => {
+                    const meta =
+                      tier.id === 'elevenlabs'
+                        ? {
+                            label: 'ElevenLabs — Rachel (voix humaine)',
+                            hint: 'Souffles, émotion, exclamations • garde-mensuel protégé (10k car.)',
+                            ok: !!voiceSettings.availability?.elevenlabs,
+                            okText: 'clé API ✓',
+                            koText: 'clé manquante',
+                          }
+                        : tier.id === 'neural'
+                          ? {
+                              label: `Voix Neural Studio (${
+                                voiceSettings.neuralVoice === 'denise'
+                                  ? 'Denise'
+                                  : voiceSettings.neuralVoice === 'vivienne-multilingual'
+                                    ? 'Vivienne Multilingue'
+                                    : 'Vivienne'
+                              })`,
+                              hint: 'edge-tts HD — sans clé, repli illimité',
+                              ok: true,
+                              okText: 'prêt',
+                              koText: '',
+                            }
+                          : {
+                              label: 'Gemini TTS (Google)',
+                              hint: 'Optionnel — nécessite une clé API Google',
+                              ok: !!voiceSettings.availability?.gemini,
+                              okText: 'clé ✓',
+                              koText: 'aucune clé',
+                            };
+                    return (
+                      <div
+                        key={tier.id}
+                        className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs ${
+                          tier.enabled ? 'bg-white/10 border-white/20' : 'bg-black/25 border-white/10 opacity-60'
+                        }`}
+                      >
+                        <span className="w-5 h-5 shrink-0 rounded-md bg-amber-400/90 text-slate-950 font-black flex items-center justify-center text-[10px]">
+                          {idx + 1}
+                        </span>
+                        <label className="flex items-center gap-1.5 shrink-0 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={tier.enabled}
+                            onChange={() => toggleVoiceTier(idx)}
+                            className="accent-amber-400"
+                          />
+                          <span className="font-bold text-white/90">Actif</span>
+                        </label>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-white truncate">{meta.label}</div>
+                          <div className="text-white/55 text-[10px] truncate">{meta.hint}</div>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
+                            meta.ok ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                          }`}
+                        >
+                          {meta.ok ? meta.okText : meta.koText}
+                        </span>
+                        <div className="flex flex-col shrink-0 gap-0.5">
+                          <button
+                            onClick={() => moveVoiceTier(idx, -1)}
+                            disabled={idx === 0}
+                            className="p-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30"
+                            title="Monter dans la chaîne"
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => moveVoiceTier(idx, 1)}
+                            disabled={idx === voiceSettings.order.length - 1}
+                            className="p-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30"
+                            title="Descendre dans la chaîne"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px]">
+                  <label className="flex items-center gap-1.5 text-white/80">
+                    <span className="font-bold">Voix Neural préférée :</span>
+                    <select
+                      value={voiceSettings.neuralVoice}
+                      onChange={(e) =>
+                        setVoiceSettings({ ...voiceSettings, neuralVoice: e.target.value as typeof voiceSettings.neuralVoice })
+                      }
+                      className="bg-slate-800 border border-white/15 rounded-lg px-2 py-1 text-white text-[11px]"
+                    >
+                      <option value="denise">Denise (recommandée)</option>
+                      <option value="vivienne-multilingual">Vivienne Multilingue</option>
+                      <option value="vivienne">Vivienne</option>
+                    </select>
+                  </label>
+                  <span className="text-white/50">ElevenLabs : {voiceSettings.elevenlabsVoiceId}</span>
+                  <button
+                    onClick={saveVoiceSettings}
+                    className="ml-auto px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition"
+                  >
+                    Enregistrer
+                  </button>
+                  {voiceSettingsMsg && <span className="text-cyan-200 font-bold">{voiceSettingsMsg}</span>}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* =================================================================== */}
         {/* MAIN BODY — SPLIT STUDIO (LEFT: AÏSHA LIVE STAGE | RIGHT: Q&A CHAT) */}
