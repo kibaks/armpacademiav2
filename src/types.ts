@@ -1,8 +1,12 @@
 export type UserRole = 
-  | 'cgpmp_member' 
+  | 'cgpmp_member'       // Autorité Contractante — Membre de la cellule
+  | 'ac_agent'           // Autorité Contractante — Autre agent
+  | 'pme'                // Opérateurs Économiques — PME
+  | 'grande_entreprise'  // Opérateurs Économiques — Grandes entreprises
+  | 'societe_civile'     // Sociétés civiles
+  | 'independant'        // Indépendant
   | 'armp_agent' 
   | 'dgcmp_agent' 
-  | 'pme'
   | 'particulier' 
   | 'dfat_admin' 
   | 'formateur';

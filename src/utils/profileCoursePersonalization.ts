@@ -173,6 +173,86 @@ export const PROFILE_PEDAGOGICAL_CONFIGS: Record<UserRole, ProfilePedagogicalCon
       'Adéquation des plans de formation CGPMP avec les faiblesses relevées lors des audits annuels ARMP',
       'Traçabilité et authenticité des scores d’examen QCM avant délivrance du certificat officiel'
     ]
+  },
+  ac_agent: {
+    role: 'ac_agent',
+    shortLabel: 'Autre Agent (Autorité Contractante)',
+    catalogFilterLabel: 'Autorités Contractantes',
+    legalBasisFocus: 'Loi n° 10/010 (Règles générales des marchés) & Règlement financier public',
+    mandateSummary: "Assurer la conformité budgétaire, l'engagement comptable, l'ordonnancement régulier et le suivi de l'exécution des contrats de l'Autorité Contractante.",
+    defaultCategoryLock: 'Tous',
+    defaultLevelLock: 'Tous',
+    defaultStatusLock: 'Certifiant',
+    operationalPosture: 'Cadre administratif, financier ou technique de l’Autorité Contractante',
+    documentaryDeliverables: [
+      'Bons d’engagement et attestations de disponibilité des crédits budgétaires',
+      'Ordres de service (OS), procès-verbaux de réception et décomptes certifiés',
+      'Dossier de mandatement et de paiement des prestataires'
+    ],
+    auditAndRiskFocus: [
+      'Dépassement d’avenants (> 15-20%) sans autorisation préalable',
+      'Engagements de dépenses sans réservation de crédits au PPM'
+    ]
+  },
+  grande_entreprise: {
+    role: 'grande_entreprise',
+    shortLabel: 'Grandes Entreprises (BTP / Industrie)',
+    catalogFilterLabel: 'Opérateurs Économiques',
+    legalBasisFocus: 'Loi n° 10/010 (Marchés publics d’envergure) & Décret sur les seuils d’appel d’offres',
+    mandateSummary: 'Maîtriser les procédures internationales et nationales d’appel d’offres ouvert, piloter les grands groupements d’entreprises et sécuriser l’exécution contractuelle.',
+    defaultCategoryLock: 'Tous',
+    defaultLevelLock: 'Tous',
+    defaultStatusLock: 'Certifiant',
+    operationalPosture: 'Grande entreprise adjudicataire de marchés publics complexes',
+    documentaryDeliverables: [
+      'Cautions bancaires de soumission, de bonne fin et de restitution d’avance',
+      'Mémoire technique complet, planning prévisionnel d’exécution et plan HSE',
+      'Propositions financières détaillées et décomptes mensuels'
+    ],
+    auditAndRiskFocus: [
+      'Respect strict des clauses contractuelles (CCAG / CCAP)',
+      'Gestion des litiges, réclamations et recours auprès du CRD'
+    ]
+  },
+  societe_civile: {
+    role: 'societe_civile',
+    shortLabel: 'Société Civile & Observateur Citoyen',
+    catalogFilterLabel: 'Société Civile',
+    legalBasisFocus: 'Loi n° 10/010 (Transparence et égalité d’accès) & Principes de bonne gouvernance',
+    mandateSummary: 'Exercer une veille citoyenne indépendante sur la passation et l’exécution des marchés publics, promouvoir la transparence et alerter les organes de régulation.',
+    defaultCategoryLock: 'Tous',
+    defaultLevelLock: 'Tous',
+    defaultStatusLock: 'Certifiant',
+    operationalPosture: 'Observateur citoyen indépendant de la commande publique',
+    documentaryDeliverables: [
+      'Rapports d’observation indépendante des séances publiques d’ouverture des plis',
+      'Notes de plaidoyer citoyen et d’alerte sur la transparence des marchés',
+      'Fiches de suivi physique et financier citoyen des chantiers publics'
+    ],
+    auditAndRiskFocus: [
+      'Vérification de la publicité effective des avis d’appel d’offres',
+      'Contrôle citoyen de la réalité des livraisons et des réalisations sur le terrain'
+    ]
+  },
+  independant: {
+    role: 'independant',
+    shortLabel: 'Indépendant & Consultant',
+    catalogFilterLabel: 'Indépendants & Consultants',
+    legalBasisFocus: 'Loi n° 10/010 & Décrets d’application (Prestations intellectuelles)',
+    mandateSummary: 'Renforcer son expertise en conseil, élaboration de DAO/TDR, audit indépendant et accompagnement technique des acteurs de la commande publique.',
+    defaultCategoryLock: 'Tous',
+    defaultLevelLock: 'Tous',
+    defaultStatusLock: 'Certifiant',
+    operationalPosture: 'Expert indépendant, consultant individuel ou chercheur',
+    documentaryDeliverables: [
+      'Termes de Référence (TDR) et propositions techniques de prestations intellectuelles',
+      'Rapports d’expertise, d’audit ou d’évaluation indépendante',
+      'Grilles d’évaluation et guides méthodologiques'
+    ],
+    auditAndRiskFocus: [
+      'Déontologie, indépendance et prévention des conflits d’intérêts',
+      'Conformité des livrables intellectuels aux standards ARMP'
+    ]
   }
 };
 

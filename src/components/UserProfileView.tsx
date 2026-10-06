@@ -85,7 +85,7 @@ import imgCoverSeminar from '../assets/images/marches_publics_seminar_1789983166
 import imgCoverFormation from '../assets/images/formation_numerique_1789983181347.jpg';
 import imgCoverAudit from '../assets/images/expert_audit_cgpmp_1789983194702.jpg';
 
-export type ProfileTab = 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications';
+export type ProfileTab = 'suivi' | 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications';
 
 interface UserProfileViewProps {
   currentProfile: UserProfile;
@@ -161,7 +161,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   onTabChange
 }) => {
   // Navigation tabs (Facebook menus)
-  const [currentTab, setCurrentTab] = useState<ProfileTab>(activeTab || initialTab || 'publications');
+  const [currentTab, setCurrentTab] = useState<ProfileTab>(activeTab || initialTab || 'suivi');
 
   // Sync prop changes
   React.useEffect(() => {
@@ -1202,432 +1202,13 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
           </div>
 
-          {/* Niveau d'évolution — ProgressBar + Graphique du cours lu + Dernière lecture & Récentes lectures */}
-          <div className="mt-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 relative overflow-hidden shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight">
-                    Niveau d’évolution & Graphique de Lecture des Cours
-                  </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                    {currentProfile.level} • Score moyen : {avgScoreDisplay}% • +{monthlyDeltaPct}% ce trimestre
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                  <Activity className="w-3.5 h-3.5" /> {inProgressCount > 0 ? `${inProgressCount} cours en lecture` : `${completedCount} cours lus`}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleLogStudySession}
-                  className="px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold transition flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>+1h30 d'étude</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 1. ProgressBar Globale + Indicateurs clés */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-bold">
-                <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-                  <Target className="w-3.5 h-3.5 text-blue-600" /> Progression globale du cursus ({completedCount}/{totalCourses} modules validés)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-black">{overallProgress}%</span>
-              </div>
-              <div
-                className="h-3.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden relative p-0.5"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={overallProgress}
-              >
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 relative overflow-hidden transition-all duration-[1.2s] ease-out"
-                  style={{ width: `${Math.min(100, Math.max(0, overallProgress))}%` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[shimmer_1.6s_ease-in-out_infinite]" />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 text-center">
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{completedCount}/{totalCourses} modules</div>
-                  <div className="text-xs font-black text-slate-900 dark:text-white">{overallProgress}% du cursus</div>
-                </div>
-                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 text-center">
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-center gap-1"><Timer className="w-3 h-3" /> {totalStudyHours.toFixed(1)}h</div>
-                  <div className="text-xs font-black text-slate-900 dark:text-white">temps de lecture</div>
-                </div>
-                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
-                  <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-center gap-1"><Flame className="w-3 h-3" /> {currentStreak} j</div>
-                  <div className="text-xs font-black text-emerald-700 dark:text-emerald-300">série active</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. GRAPHIQUE DU COURS LU (Chapitre par Chapitre + Courbe SVG + Sélecteur de cours lu) */}
-            {activeGraphEntry && (
-              <div className="rounded-2xl bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/30 dark:from-slate-800/80 dark:via-slate-800/60 dark:to-slate-900 border border-blue-200/80 dark:border-blue-900/60 p-3.5 sm:p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-700/70 pb-2.5">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-mono font-black uppercase flex items-center gap-1">
-                        <BarChart3 className="w-3 h-3" /> Graphique du cours lu
-                      </span>
-                      <span className="text-[11px] font-mono font-bold text-blue-700 dark:text-blue-300">
-                        {activeGraphEntry.code} • {activeGraphEntry.category}
-                      </span>
-                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Lu : {activeGraphEntry.readAtLabel}
-                      </span>
-                    </div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white mt-1 truncate">
-                      {activeGraphEntry.title}
-                    </h4>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
-                      activeGraphEntry.progressPct >= 100
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-blue-600 text-white'
-                    }`}>
-                      {activeGraphEntry.progressPct}% lu ({activeGraphEntry.completedChapters}/{activeGraphEntry.totalChapters} chap.)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCoursePlayer(activeGraphEntry.course)}
-                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                    >
-                      <Play className="w-3 h-3 fill-white" />
-                      <span>{activeGraphEntry.progressPct >= 100 ? 'Relire' : 'Continuer'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* ProgressBar dédiée au cours lu */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <span className="text-slate-600 dark:text-slate-300">
-                      Avancement de lecture du cours • {activeGraphEntry.lastLessonTitle}
-                    </span>
-                    <span className="font-mono text-blue-600 dark:text-blue-400 font-black">
-                      {activeGraphEntry.progressPct}%
-                    </span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ${
-                        activeGraphEntry.progressPct >= 100
-                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                          : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500'
-                      }`}
-                      style={{ width: `${activeGraphEntry.progressPct}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Graphique visuel Chapitre par Chapitre + Examen QCM du cours lu */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch pt-1">
-                  {/* Histogramme & Courbe des chapitres du cours sélectionné */}
-                  <div className="md:col-span-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-3 flex flex-col justify-between">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-2">
-                      <span>Progression par chapitre du cours ({activeGraphEntry.code})</span>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500" /> Lu (100%)
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                          <span className="w-2 h-2 rounded-full bg-blue-600" /> En lecture
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 items-end pt-2">
-                      {activeGraphEntry.chapterGraph.map((ch) => (
-                        <div
-                          key={ch.index}
-                          onClick={() => handleOpenCoursePlayer(activeGraphEntry.course)}
-                          className="group cursor-pointer rounded-xl p-2 bg-slate-50 hover:bg-blue-50/70 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition flex flex-col justify-between"
-                          title={`${ch.shortLabel} : ${ch.title} (${ch.progressPct}%)`}
-                        >
-                          <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1.5">
-                            <span className="text-slate-700 dark:text-slate-200">{ch.shortLabel}</span>
-                            <span className={ch.isCompleted ? 'text-emerald-600 dark:text-emerald-400' : ch.isCurrent ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}>
-                              {ch.progressPct}%
-                            </span>
-                          </div>
-
-                          {/* Barre verticale du graphique */}
-                          <div className="w-full h-16 bg-slate-200/80 dark:bg-slate-700 rounded-lg overflow-hidden flex items-end p-0.5">
-                            <div
-                              className={`w-full rounded-md transition-all duration-700 ${
-                                ch.isCompleted
-                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
-                                  : ch.isCurrent
-                                  ? 'bg-gradient-to-t from-blue-700 to-cyan-400 animate-pulse'
-                                  : 'bg-slate-300 dark:bg-slate-600'
-                              }`}
-                              style={{ height: `${Math.max(15, ch.progressPct)}%` }}
-                            />
-                          </div>
-
-                          <div className="mt-1.5">
-                            <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate">
-                              {ch.title}
-                            </div>
-                            <div className="text-[9px] text-slate-400 flex items-center justify-between mt-0.5">
-                              <span>{ch.duration}</span>
-                              <span>{ch.isCompleted ? '✓ Lu' : ch.isCurrent ? '● Actif' : 'À lire'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Colonne Examen QCM Certifiant du cours */}
-                      <div
-                        onClick={() => handleOpenCoursePlayer(activeGraphEntry.course)}
-                        className="group cursor-pointer rounded-xl p-2 bg-amber-50/70 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/60 transition flex flex-col justify-between"
-                      >
-                        <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1.5">
-                          <span className="text-amber-800 dark:text-amber-300">QCM</span>
-                          <span className="text-amber-700 dark:text-amber-400">
-                            {currentProfile.quizScoresByCourse?.[activeGraphEntry.courseId] ?? (activeGraphEntry.progressPct >= 100 ? 88 : 0)}%
-                          </span>
-                        </div>
-                        <div className="w-full h-16 bg-amber-200/50 dark:bg-slate-700 rounded-lg overflow-hidden flex items-end p-0.5">
-                          <div
-                            className="w-full rounded-md bg-gradient-to-t from-amber-600 to-amber-400 transition-all duration-700"
-                            style={{
-                              height: `${Math.max(
-                                18,
-                                currentProfile.quizScoresByCourse?.[activeGraphEntry.courseId] ??
-                                  (activeGraphEntry.progressPct >= 100 ? 88 : Math.round(activeGraphEntry.progressPct * 0.5))
-                              )}%`
-                            }}
-                          />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-[10px] font-bold text-amber-900 dark:text-amber-200 truncate">
-                            Examen Certifiant
-                          </div>
-                          <div className="text-[9px] text-amber-700 dark:text-amber-400 mt-0.5">
-                            {activeGraphEntry.progressPct >= 100 ? '✓ Validé' : 'Objectif 70%'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Comparatif graphique des cours lus récemment */}
-                  <div className="md:col-span-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-3 flex flex-col justify-between space-y-2">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                      <span>Comparatif des cours lus</span>
-                      <span className="font-mono text-[9px] text-blue-600">Cliquez pour afficher</span>
-                    </div>
-                    <div className="space-y-2 flex-1 flex flex-col justify-center">
-                      {recentReadEntries.slice(0, 4).map((entry) => {
-                        const isSelected = activeGraphEntry.courseId === entry.courseId;
-                        return (
-                          <button
-                            key={entry.courseId}
-                            type="button"
-                            onClick={() => setSelectedGraphCourseId(entry.courseId)}
-                            className={`w-full text-left p-1.5 rounded-lg border transition ${
-                              isSelected
-                                ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/50'
-                                : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/70'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-[10px] font-bold mb-1">
-                              <span className="truncate text-slate-800 dark:text-slate-200">
-                                {entry.isLastRead ? '★ ' : ''}{entry.code}
-                              </span>
-                              <span className={`font-mono ${entry.progressPct >= 100 ? 'text-emerald-600' : 'text-blue-600'}`}>
-                                {entry.progressPct}%
-                              </span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  entry.progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'
-                                }`}
-                                style={{ width: `${entry.progressPct}%` }}
-                              />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. DERNIÈRE LECTURE & RÉCENTES LECTURES (Côte à côte dans le bloc d'évolution) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-1">
-              {/* Carte Dernière Lecture */}
-              {lastReadEntry && (
-                <div className="lg:col-span-5 rounded-2xl border-2 border-blue-500/80 dark:border-blue-500/60 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 dark:from-blue-950/30 dark:via-slate-900 dark:to-slate-900 p-3.5 shadow-xs flex flex-col justify-between space-y-3">
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                        <BookOpen className="w-3 h-3" /> Dernière lecture
-                      </span>
-                      <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-blue-600" /> {lastReadEntry.readAtLabel}
-                      </span>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <img
-                        src={lastReadEntry.course.coverImage}
-                        alt={lastReadEntry.title}
-                        className="w-16 h-16 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
-                          {lastReadEntry.code} • {lastReadEntry.category}
-                        </div>
-                        <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-snug line-clamp-2">
-                          {lastReadEntry.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 truncate font-medium">
-                          Chapitre {lastReadEntry.lessonIndex + 1}/{lastReadEntry.totalChapters} : {lastReadEntry.lastLessonTitle}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-bold">
-                        <span className="text-slate-500">Progression de cette lecture</span>
-                        <span className="text-blue-600 dark:text-blue-400 font-mono">
-                          {lastReadEntry.progressPct}% ({lastReadEntry.completedChapters}/{lastReadEntry.totalChapters} chapitres)
-                        </span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all"
-                          style={{ width: `${lastReadEntry.progressPct}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCoursePlayer(lastReadEntry.course)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>Reprendre ma dernière lecture</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedGraphCourseId(lastReadEntry.courseId)}
-                      className="py-2 px-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-bold text-[11px] hover:bg-blue-50 transition"
-                      title="Afficher le graphique de ce cours"
-                    >
-                      <BarChart3 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Liste des Récentes Lectures */}
-              <div className="lg:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Récentes lectures ({recentReadEntries.length} cours consultés)</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onNavigateToCourses()}
-                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
-                  >
-                    <span>Tout le catalogue</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {recentReadEntries.slice(0, 4).map((item, idx) => {
-                    const isGraphSelected = activeGraphEntry?.courseId === item.courseId;
-                    return (
-                      <div
-                        key={item.courseId}
-                        onClick={() => setSelectedGraphCourseId(item.courseId)}
-                        className={`p-2.5 rounded-xl border transition cursor-pointer flex flex-col justify-between gap-2 ${
-                          isGraphSelected
-                            ? 'bg-white dark:bg-slate-900 border-blue-500 ring-1 ring-blue-500/30 shadow-xs'
-                            : 'bg-white/90 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-700/80 hover:border-blue-400'
-                        }`}
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
-                              {idx === 0 ? 'Dernier lu • ' : `Lecture #${idx + 1} • `}{item.code}
-                            </span>
-                            <span className="text-[9px] font-mono text-slate-400">
-                              {item.readAtLabel}
-                            </span>
-                          </div>
-                          <div className="text-xs font-extrabold text-slate-900 dark:text-white line-clamp-1">
-                            {item.title}
-                          </div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                            Ch. {item.lessonIndex + 1}/{item.totalChapters} : {item.lastLessonTitle}
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-[10px] font-bold">
-                            <span className={item.progressPct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}>
-                              {item.progressPct >= 100 ? '✓ Cours lu (100%)' : `${item.progressPct}% lu (${item.completedChapters}/${item.totalChapters} chap.)`}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenCoursePlayer(item.course);
-                              }}
-                              className="px-2 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center gap-1"
-                            >
-                              <Play className="w-2.5 h-2.5 fill-white" />
-                              <span>{item.progressPct >= 100 ? 'Relire' : 'Lire'}</span>
-                            </button>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                item.progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'
-                              }`}
-                              style={{ width: `${item.progressPct}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <style>{`@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}`}</style>
-          </div>
 
           {/* ========================================================================= */}
           {/* 2. FACEBOOK SUB-NAVBAR MENUS (TABS)                                      */}
           {/* ========================================================================= */}
           <div className="mt-4 pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar">
             {[
+              { id: 'suivi' as const, label: 'Suivi', icon: TrendingUp },
               { id: 'publications' as const, label: 'Publications', icon: FileText },
               { id: 'apropos' as const, label: 'À propos', icon: User },
               { id: 'forum' as const, label: 'Attestations & Diplômes', icon: Award },
@@ -1667,6 +1248,433 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       <div className="w-full px-4 sm:px-8 lg:px-12">
 
       {/* ------------------------------------------------------------------------- */}
+      {/* ONGLET 0: SUIVI (TABLEAU DE BORD, GRAPHIQUES & STATISTIQUES D'APPRENTISSAGE) */}
+      {/* ------------------------------------------------------------------------- */}
+      {currentTab === 'suivi' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Tableau de suivi — Progression globale + Graphique du cours lu + Comparatif & Récentes lectures */}
+            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 relative overflow-hidden shadow-sm space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white leading-tight">
+                      Niveau d’évolution & Graphique de Lecture des Cours
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      {currentProfile.level} • Score moyen : {avgScoreDisplay}% • +{monthlyDeltaPct}% ce trimestre
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <Activity className="w-3.5 h-3.5" /> {inProgressCount > 0 ? `${inProgressCount} cours en lecture` : `${completedCount} cours lus`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleLogStudySession}
+                    className="px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold transition flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+1h30 d'étude</span>
+                  </button>
+                </div>
+              </div>
+  
+              {/* 1. ProgressBar Globale + Indicateurs clés */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold">
+                  <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-blue-600" /> Progression globale du cursus ({completedCount}/{totalCourses} modules validés)
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-black">{overallProgress}%</span>
+                </div>
+                <div
+                  className="h-3.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden relative p-0.5"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={overallProgress}
+                >
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 relative overflow-hidden transition-all duration-[1.2s] ease-out"
+                    style={{ width: `${Math.min(100, Math.max(0, overallProgress))}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[shimmer_1.6s_ease-in-out_infinite]" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{completedCount}/{totalCourses} modules</div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white">{overallProgress}% du cursus</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-center gap-1"><Timer className="w-3 h-3" /> {totalStudyHours.toFixed(1)}h</div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white">temps de lecture</div>
+                  </div>
+                  <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
+                    <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-center gap-1"><Flame className="w-3 h-3" /> {currentStreak} j</div>
+                    <div className="text-xs font-black text-emerald-700 dark:text-emerald-300">série active</div>
+                  </div>
+                </div>
+              </div>
+  
+              {/* 2. GRAPHIQUE DU COURS LU (Chapitre par Chapitre + Courbe SVG + Sélecteur de cours lu) */}
+              {activeGraphEntry && (
+                <div className="rounded-2xl bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/30 dark:from-slate-800/80 dark:via-slate-800/60 dark:to-slate-900 border border-blue-200/80 dark:border-blue-900/60 p-3.5 sm:p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-700/70 pb-2.5">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-mono font-black uppercase flex items-center gap-1">
+                          <BarChart3 className="w-3 h-3" /> Graphique du cours lu
+                        </span>
+                        <span className="text-[11px] font-mono font-bold text-blue-700 dark:text-blue-300">
+                          {activeGraphEntry.code} • {activeGraphEntry.category}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Lu : {activeGraphEntry.readAtLabel}
+                        </span>
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white mt-1 truncate">
+                        {activeGraphEntry.title}
+                      </h4>
+                    </div>
+  
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                        activeGraphEntry.progressPct >= 100
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-blue-600 text-white'
+                      }`}>
+                        {activeGraphEntry.progressPct}% lu ({activeGraphEntry.completedChapters}/{activeGraphEntry.totalChapters} chap.)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCoursePlayer(activeGraphEntry.course)}
+                        className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <Play className="w-3 h-3 fill-white" />
+                        <span>{activeGraphEntry.progressPct >= 100 ? 'Relire' : 'Continuer'}</span>
+                      </button>
+                    </div>
+                  </div>
+  
+                  {/* ProgressBar dédiée au cours lu */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        Avancement de lecture du cours • {activeGraphEntry.lastLessonTitle}
+                      </span>
+                      <span className="font-mono text-blue-600 dark:text-blue-400 font-black">
+                        {activeGraphEntry.progressPct}%
+                      </span>
+                    </div>
+                    <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${
+                          activeGraphEntry.progressPct >= 100
+                            ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                            : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500'
+                        }`}
+                        style={{ width: `${activeGraphEntry.progressPct}%` }}
+                      />
+                    </div>
+                  </div>
+  
+                  {/* Graphique visuel Chapitre par Chapitre + Examen QCM du cours lu */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch pt-1">
+                    {/* Histogramme & Courbe des chapitres du cours sélectionné */}
+                    <div className="md:col-span-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-3 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-2">
+                        <span>Progression par chapitre du cours ({activeGraphEntry.code})</span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Lu (100%)
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                            <span className="w-2 h-2 rounded-full bg-blue-600" /> En lecture
+                          </span>
+                        </div>
+                      </div>
+  
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 items-end pt-2">
+                        {activeGraphEntry.chapterGraph.map((ch) => (
+                          <div
+                            key={ch.index}
+                            onClick={() => handleOpenCoursePlayer(activeGraphEntry.course)}
+                            className="group cursor-pointer rounded-xl p-2 bg-slate-50 hover:bg-blue-50/70 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition flex flex-col justify-between"
+                            title={`${ch.shortLabel} : ${ch.title} (${ch.progressPct}%)`}
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1.5">
+                              <span className="text-slate-700 dark:text-slate-200">{ch.shortLabel}</span>
+                              <span className={ch.isCompleted ? 'text-emerald-600 dark:text-emerald-400' : ch.isCurrent ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}>
+                                {ch.progressPct}%
+                              </span>
+                            </div>
+  
+                            {/* Barre verticale du graphique */}
+                            <div className="w-full h-16 bg-slate-200/80 dark:bg-slate-700 rounded-lg overflow-hidden flex items-end p-0.5">
+                              <div
+                                className={`w-full rounded-md transition-all duration-700 ${
+                                  ch.isCompleted
+                                    ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
+                                    : ch.isCurrent
+                                    ? 'bg-gradient-to-t from-blue-700 to-cyan-400 animate-pulse'
+                                    : 'bg-slate-300 dark:bg-slate-600'
+                                }`}
+                                style={{ height: `${Math.max(15, ch.progressPct)}%` }}
+                              />
+                            </div>
+  
+                            <div className="mt-1.5">
+                              <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {ch.title}
+                              </div>
+                              <div className="text-[9px] text-slate-400 flex items-center justify-between mt-0.5">
+                                <span>{ch.duration}</span>
+                                <span>{ch.isCompleted ? '✓ Lu' : ch.isCurrent ? '● Actif' : 'À lire'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+  
+                        {/* Colonne Examen QCM Certifiant du cours */}
+                        <div
+                          onClick={() => handleOpenCoursePlayer(activeGraphEntry.course)}
+                          className="group cursor-pointer rounded-xl p-2 bg-amber-50/70 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/60 transition flex flex-col justify-between"
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1.5">
+                            <span className="text-amber-800 dark:text-amber-300">QCM</span>
+                            <span className="text-amber-700 dark:text-amber-400">
+                              {currentProfile.quizScoresByCourse?.[activeGraphEntry.courseId] ?? (activeGraphEntry.progressPct >= 100 ? 88 : 0)}%
+                            </span>
+                          </div>
+                          <div className="w-full h-16 bg-amber-200/50 dark:bg-slate-700 rounded-lg overflow-hidden flex items-end p-0.5">
+                            <div
+                              className="w-full rounded-md bg-gradient-to-t from-amber-600 to-amber-400 transition-all duration-700"
+                              style={{
+                                height: `${Math.max(
+                                  18,
+                                  currentProfile.quizScoresByCourse?.[activeGraphEntry.courseId] ??
+                                    (activeGraphEntry.progressPct >= 100 ? 88 : Math.round(activeGraphEntry.progressPct * 0.5))
+                                )}%`
+                              }}
+                            />
+                          </div>
+                          <div className="mt-1.5">
+                            <div className="text-[10px] font-bold text-amber-900 dark:text-amber-200 truncate">
+                              Examen Certifiant
+                            </div>
+                            <div className="text-[9px] text-amber-700 dark:text-amber-400 mt-0.5">
+                              {activeGraphEntry.progressPct >= 100 ? '✓ Validé' : 'Objectif 70%'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+  
+                    {/* Comparatif graphique des cours lus récemment */}
+                    <div className="md:col-span-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-3 flex flex-col justify-between space-y-2">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                        <span>Comparatif des cours lus</span>
+                        <span className="font-mono text-[9px] text-blue-600">Cliquez pour afficher</span>
+                      </div>
+                      <div className="space-y-2 flex-1 flex flex-col justify-center">
+                        {recentReadEntries.slice(0, 4).map((entry) => {
+                          const isSelected = activeGraphEntry.courseId === entry.courseId;
+                          return (
+                            <button
+                              key={entry.courseId}
+                              type="button"
+                              onClick={() => setSelectedGraphCourseId(entry.courseId)}
+                              className={`w-full text-left p-1.5 rounded-lg border transition ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/50'
+                                  : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between text-[10px] font-bold mb-1">
+                                <span className="truncate text-slate-800 dark:text-slate-200">
+                                  {entry.isLastRead ? '★ ' : ''}{entry.code}
+                                </span>
+                                <span className={`font-mono ${entry.progressPct >= 100 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                  {entry.progressPct}%
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    entry.progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                                  }`}
+                                  style={{ width: `${entry.progressPct}%` }}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+  
+              {/* 3. DERNIÈRE LECTURE & RÉCENTES LECTURES (Côte à côte dans le bloc d'évolution) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-1">
+                {/* Carte Dernière Lecture */}
+                {lastReadEntry && (
+                  <div className="lg:col-span-5 rounded-2xl border-2 border-blue-500/80 dark:border-blue-500/60 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 dark:from-blue-950/30 dark:via-slate-900 dark:to-slate-900 p-3.5 shadow-xs flex flex-col justify-between space-y-3">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                          <BookOpen className="w-3 h-3" /> Dernière lecture
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-blue-600" /> {lastReadEntry.readAtLabel}
+                        </span>
+                      </div>
+  
+                      <div className="flex items-start gap-3">
+                        <img
+                          src={lastReadEntry.course.coverImage}
+                          alt={lastReadEntry.title}
+                          className="w-16 h-16 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {lastReadEntry.code} • {lastReadEntry.category}
+                          </div>
+                          <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white leading-snug line-clamp-2">
+                            {lastReadEntry.title}
+                          </h4>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 truncate font-medium">
+                            Chapitre {lastReadEntry.lessonIndex + 1}/{lastReadEntry.totalChapters} : {lastReadEntry.lastLessonTitle}
+                          </p>
+                        </div>
+                      </div>
+  
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px] font-bold">
+                          <span className="text-slate-500">Progression de cette lecture</span>
+                          <span className="text-blue-600 dark:text-blue-400 font-mono">
+                            {lastReadEntry.progressPct}% ({lastReadEntry.completedChapters}/{lastReadEntry.totalChapters} chapitres)
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all"
+                            style={{ width: `${lastReadEntry.progressPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+  
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCoursePlayer(lastReadEntry.course)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>Reprendre ma dernière lecture</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGraphCourseId(lastReadEntry.courseId)}
+                        className="py-2 px-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-bold text-[11px] hover:bg-blue-50 transition"
+                        title="Afficher le graphique de ce cours"
+                      >
+                        <BarChart3 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+  
+                {/* Liste des Récentes Lectures */}
+                <div className="lg:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Récentes lectures ({recentReadEntries.length} cours consultés)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToCourses()}
+                      className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                    >
+                      <span>Tout le catalogue</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {recentReadEntries.slice(0, 4).map((item, idx) => {
+                      const isGraphSelected = activeGraphEntry?.courseId === item.courseId;
+                      return (
+                        <div
+                          key={item.courseId}
+                          onClick={() => setSelectedGraphCourseId(item.courseId)}
+                          className={`p-2.5 rounded-xl border transition cursor-pointer flex flex-col justify-between gap-2 ${
+                            isGraphSelected
+                              ? 'bg-white dark:bg-slate-900 border-blue-500 ring-1 ring-blue-500/30 shadow-xs'
+                              : 'bg-white/90 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-700/80 hover:border-blue-400'
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                                {idx === 0 ? 'Dernier lu • ' : `Lecture #${idx + 1} • `}{item.code}
+                              </span>
+                              <span className="text-[9px] font-mono text-slate-400">
+                                {item.readAtLabel}
+                              </span>
+                            </div>
+                            <div className="text-xs font-extrabold text-slate-900 dark:text-white line-clamp-1">
+                              {item.title}
+                            </div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                              Ch. {item.lessonIndex + 1}/{item.totalChapters} : {item.lastLessonTitle}
+                            </div>
+                          </div>
+  
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-bold">
+                              <span className={item.progressPct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}>
+                                {item.progressPct >= 100 ? '✓ Cours lu (100%)' : `${item.progressPct}% lu (${item.completedChapters}/${item.totalChapters} chap.)`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenCoursePlayer(item.course);
+                                }}
+                                className="px-2 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <Play className="w-2.5 h-2.5 fill-white" />
+                                <span>{item.progressPct >= 100 ? 'Relire' : 'Lire'}</span>
+                              </button>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  item.progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                                }`}
+                                style={{ width: `${item.progressPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <style>{`@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}`}</style>
+            </div>
+        </div>
+      )}
+
       {/* TAB A: PUBLICATIONS (CLASSIC FACEBOOK 2-COLUMN LAYOUT)                   */}
       {/* ------------------------------------------------------------------------- */}
       {currentTab === 'publications' && (

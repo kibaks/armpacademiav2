@@ -32,7 +32,9 @@ import {
   TrendingUp,
   Target,
   Play,
-  Clock
+  Clock,
+  Users,
+  Briefcase
 } from 'lucide-react';
 import { UserProfile, UserRole, CourseModule } from '../types';
 import { COURSES_DATA } from '../data/coursesData';
@@ -58,7 +60,7 @@ interface HeaderProps {
   totalCourses?: number;
   courses?: CourseModule[];
   onOpenCourse?: (course: CourseModule) => void;
-  onNavigateProfileTab?: (tab: 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications') => void;
+  onNavigateProfileTab?: (tab: 'suivi' | 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -87,13 +89,17 @@ export const Header: React.FC<HeaderProps> = ({
 
   const RoleIcon = ({ role }: { role: UserRole }) => {
     switch(role) {
-      case 'cgpmp_member': return <Building2 className="w-3.5 h-3.5" />;
-      case 'armp_agent': return <ShieldCheck className="w-3.5 h-3.5" />;
-      case 'dgcmp_agent': return <Eye className="w-3.5 h-3.5" />;
-      case 'pme': return <Building2 className="w-3.5 h-3.5 text-teal-500" />;
-      case 'dfat_admin': return <Crown className="w-3.5 h-3.5" />;
-      case 'formateur': return <GraduationCap className="w-3.5 h-3.5" />;
-      default: return <Building2 className="w-3.5 h-3.5" />;
+      case 'cgpmp_member': return <Building2 className="w-3.5 h-3.5 text-blue-400" />;
+      case 'ac_agent': return <Building2 className="w-3.5 h-3.5 text-indigo-400" />;
+      case 'pme': return <Briefcase className="w-3.5 h-3.5 text-teal-400" />;
+      case 'grande_entreprise': return <Building2 className="w-3.5 h-3.5 text-amber-400" />;
+      case 'societe_civile': return <Users className="w-3.5 h-3.5 text-emerald-400" />;
+      case 'independant': return <User className="w-3.5 h-3.5 text-cyan-400" />;
+      case 'armp_agent': return <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />;
+      case 'dgcmp_agent': return <Eye className="w-3.5 h-3.5 text-purple-400" />;
+      case 'dfat_admin': return <Crown className="w-3.5 h-3.5 text-amber-500" />;
+      case 'formateur': return <GraduationCap className="w-3.5 h-3.5 text-amber-400" />;
+      default: return <User className="w-3.5 h-3.5" />;
     }
   };
 
@@ -268,7 +274,7 @@ export const Header: React.FC<HeaderProps> = ({
                       {/* Autres items — seulement en mode connecté */}
                       <div className="p-2 space-y-1">
                         <p className="px-3 pt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Espace connecté</p>
-                        <button onClick={() => { setActiveTab('profil'); setIsProfileMenuOpen(false); if(onNavigateProfileTab) onNavigateProfileTab('publications'); }} className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#114488] dark:hover:text-blue-300 flex items-center justify-between transition">
+                        <button onClick={() => { setActiveTab('profil'); setIsProfileMenuOpen(false); if(onNavigateProfileTab) onNavigateProfileTab('suivi'); }} className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#114488] dark:hover:text-blue-300 flex items-center justify-between transition">
                           <div className="flex items-center space-x-2.5">
                             <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-700 dark:text-purple-300"><User className="w-4 h-4" /></div>
                             <div><span className="block font-bold">Mon Profil & Habilitations</span><span className="text-[10px] text-slate-500 font-normal">Certificats et suivi</span></div>
@@ -455,54 +461,95 @@ export const Header: React.FC<HeaderProps> = ({
                         )}
                       </div>
 
-                      {/* Sélecteur rapide de profil démo institutionnel */}
-                      <div className="p-2 pt-2 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800">
-                        <p className="px-3 pb-1 text-[10px] font-black uppercase tracking-wide text-slate-400 flex items-center justify-between">
-                          <span>Changer de rôle (Démo)</span>
+                      {/* Sélecteur rapide de profil démo institutionnel selon les 4 catégories */}
+                      <div className="p-2.5 pt-2 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-2 max-h-80 overflow-y-auto">
+                        <p className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400 flex items-center justify-between">
+                          <span>Changer de profil officiel</span>
                           <span className="text-amber-500 font-bold">Instantané</span>
                         </p>
-                        <div className="grid grid-cols-2 gap-1 px-1">
-                          <button
-                            onClick={() => { onSelectRole('formateur'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'formateur' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-amber-50'}`}
-                          >
-                            <GraduationCap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                            <span className="truncate">🎓 Formateur</span>
-                          </button>
-                          <button
-                            onClick={() => { onSelectRole('cgpmp_member'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'cgpmp_member' ? 'bg-purple-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-purple-50'}`}
-                          >
-                            <Building2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                            <span className="truncate">CGPMP</span>
-                          </button>
+
+                        {/* 1. Autorité Contractante */}
+                        <div>
+                          <p className="text-[10px] font-extrabold text-slate-500 px-1 mb-1">🏛️ Autorité Contractante</p>
+                          <div className="grid grid-cols-1 gap-1">
+                            <button
+                              onClick={() => { onSelectRole('cgpmp_member'); setIsProfileMenuOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'cgpmp_member' ? 'bg-[#0C3B7C] text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-blue-50'}`}
+                            >
+                              <span className="truncate">Membre de la cellule (CGPMP)</span>
+                              {currentProfile.role === 'cgpmp_member' && <span className="text-[10px]">✓</span>}
+                            </button>
+                            <button
+                              onClick={() => { onSelectRole('ac_agent'); setIsProfileMenuOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'ac_agent' ? 'bg-[#0C3B7C] text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-blue-50'}`}
+                            >
+                              <span className="truncate">Autre agent AC (DAF / Audit)</span>
+                              {currentProfile.role === 'ac_agent' && <span className="text-[10px]">✓</span>}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 2. Opérateurs Économiques */}
+                        <div>
+                          <p className="text-[10px] font-extrabold text-slate-500 px-1 mb-1">🏢 Opérateurs Économiques</p>
+                          <div className="grid grid-cols-1 gap-1">
+                            <button
+                              onClick={() => { onSelectRole('pme'); setIsProfileMenuOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'pme' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-teal-50'}`}
+                            >
+                              <span className="truncate">PME & Sous-traitant (Loi 17/001)</span>
+                              {currentProfile.role === 'pme' && <span className="text-[10px]">✓</span>}
+                            </button>
+                            <button
+                              onClick={() => { onSelectRole('grande_entreprise'); setIsProfileMenuOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'grande_entreprise' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-teal-50'}`}
+                            >
+                              <span className="truncate">Grandes entreprises (BTP / Travaux)</span>
+                              {currentProfile.role === 'grande_entreprise' && <span className="text-[10px]">✓</span>}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 3 & 4. Sociétés Civiles & Indépendant */}
+                        <div>
+                          <p className="text-[10px] font-extrabold text-slate-500 px-1 mb-1">⚖️ Société Civile & 👤 Indépendant</p>
+                          <div className="grid grid-cols-1 gap-1">
+                            <button
+                              onClick={() => { onSelectRole('societe_civile'); setIsProfileMenuOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'societe_civile' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50'}`}
+                            >
+                              <span className="truncate">Sociétés civiles (Observatoire)</span>
+                              {currentProfile.role === 'societe_civile' && <span className="text-[10px]">✓</span>}
+                            </button>
+                            <button
+                              onClick={() => { onSelectRole('independant'); setIsProfileMenuOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'independant' ? 'bg-cyan-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-cyan-50'}`}
+                            >
+                              <span className="truncate">Indépendant (Consultant & Expert)</span>
+                              {currentProfile.role === 'independant' && <span className="text-[10px]">✓</span>}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Autres : ARMP, DGCMP, Formateur */}
+                        <div className="pt-1 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-1">
                           <button
                             onClick={() => { onSelectRole('armp_agent'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'armp_agent' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-amber-50'}`}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition ${currentProfile.role === 'armp_agent' ? 'bg-amber-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
                           >
-                            <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                            <span className="truncate">ARMP</span>
+                            ⚖️ ARMP
                           </button>
                           <button
                             onClick={() => { onSelectRole('dgcmp_agent'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'dgcmp_agent' ? 'bg-blue-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-blue-50'}`}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition ${currentProfile.role === 'dgcmp_agent' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
                           >
-                            <Eye className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                            <span className="truncate">DGCMP</span>
+                            🛡️ DGCMP
                           </button>
                           <button
-                            onClick={() => { onSelectRole('pme'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'pme' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-teal-50'}`}
+                            onClick={() => { onSelectRole('formateur'); setIsProfileMenuOpen(false); }}
+                            className={`px-2 py-1 rounded text-[10px] font-bold transition ${currentProfile.role === 'formateur' ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
                           >
-                            <Building2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                            <span className="truncate">🏢 PME (Loi 17/001)</span>
-                          </button>
-                          <button
-                            onClick={() => { onSelectRole('particulier'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center gap-1.5 ${currentProfile.role === 'particulier' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50'}`}
-                          >
-                            <User className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span className="truncate">Consultant / Privé</span>
+                            🎓 Formateur
                           </button>
                         </div>
                       </div>
@@ -555,17 +602,18 @@ export const Header: React.FC<HeaderProps> = ({
           {isAuthenticated && (
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1">
               <p className="px-3 py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Espace connecté</p>
-                            <button onClick={() => { setActiveTab('profil'); setIsMobileMenuOpen(false); if(onNavigateProfileTab) onNavigateProfileTab('publications'); }} className={`w-full p-2.5 rounded-xl text-xs font-bold flex items-center justify-between ${activeTab === 'profil' ? 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50'}`}>
-                <div className="flex items-center space-x-2"><User className="w-4 h-4 text-purple-600" /><span>Mon Profil</span></div><ChevronRight className="w-4 h-4 text-slate-400" />
+              <button onClick={() => { setActiveTab('profil'); setIsMobileMenuOpen(false); if(onNavigateProfileTab) onNavigateProfileTab('suivi'); }} className={`w-full p-2.5 rounded-xl text-xs font-bold flex items-center justify-between ${activeTab === 'profil' ? 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50'}`}>
+                <div className="flex items-center space-x-2"><User className="w-4 h-4 text-purple-600" /><span>Mon Profil & Suivi</span></div><ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
-              <div className="grid grid-cols-3 gap-1.5 pt-1">
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
                 {[
+                  { id: 'suivi' as const, label: 'Suivi', icon: TrendingUp },
                   { id: 'publications' as const, label: 'Publications', icon: FileText },
                   { id: 'apropos' as const, label: 'À propos', icon: User },
-                  { id: 'forum' as const, label: 'Forum', icon: MessageSquare },
+                  { id: 'forum' as const, label: 'Diplômes', icon: MessageSquare },
                   { id: 'photos' as const, label: 'Photos', icon: ImageIcon },
                   { id: 'securite' as const, label: 'Sécurité', icon: Shield },
-                  { id: 'notifications' as const, label: 'Notifications', icon: Bell },
+                  { id: 'notifications' as const, label: 'Alertes', icon: Bell },
                 ].map((s) => (
                   <button key={s.id} onClick={() => { setActiveTab('profil'); setIsMobileMenuOpen(false); if(onNavigateProfileTab) onNavigateProfileTab(s.id); }} className="px-2 py-2 rounded-lg bg-white dark:bg-slate-800 border text-[11px] font-bold flex flex-col items-center gap-1 hover:bg-blue-50">
                     <s.icon className="w-4 h-4 text-blue-600" />{s.label}

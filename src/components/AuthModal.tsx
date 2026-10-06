@@ -20,7 +20,11 @@ import {
   Hash,
   Users,
   FileText,
-  UserCheck
+  UserCheck,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Info
 } from 'lucide-react';
 import {
   UserProfile,
@@ -368,8 +372,289 @@ const ROLE_CREATION_CONFIG: Record<UserRole, RoleCreationFieldSpec> = {
     secondaryIdLabel: 'N° Acte d’Habilitation DFAT *',
     secondaryIdPlaceholder: 'ACT-DFAT-2026-01',
     defaultSecondaryId: 'ACT-DFAT-2026-01'
+  },
+  ac_agent: {
+    label: '🏛️ Autorité Contractante — Autre Agent',
+    shortDesc: 'DAF • Contrôle Interne • Technique',
+    badgeText: 'Champs Cadre & Agent de l’Autorité Contractante chargés',
+    institutionLabel: 'Ministère, Gouvernorat ou Autorité Contractante *',
+    institutionPlaceholder: 'ex: Ministère des Infrastructures et Travaux Publics',
+    institutionPresets: [
+      'Ministère des Infrastructures et Travaux Publics (MITP)',
+      'Ministère de la Santé Publique, Hygiène et Prévoyance',
+      'Ministère des Finances — DAF',
+      'Gouvernorat Provincial de Kinshasa',
+      'Office des Routes (Direction Générale)'
+    ],
+    subCategoryLabel: "Direction ou Service d'Affectation *",
+    subCategoryOptions: [
+      'Direction Administrative et Financière (DAF)',
+      'Direction des Études et Planification (DEP)',
+      'Direction de l’Audit Interne & Contrôle de Gestion',
+      'Division Technique & Suivi des Chantiers',
+      'Secrétariat Général'
+    ],
+    specialtyLabel: "Fonction & Responsabilité au sein de l'AC *",
+    specialtyOptions: [
+      'Cadre DAF & Ordonnancement des Dépenses',
+      'Auditeur Interne des Procédures de Marchés',
+      'Ingénieur Suivi Technique & Réception des Ouvrages',
+      'Gestionnaire des Crédits Budgétaires & PPM'
+    ],
+    roleTitleLabel: "Titre du Poste au sein de l'Autorité Contractante *",
+    roleTitlePlaceholder: 'ex: Cadre DAF & Chargé de l’Ordonnancement',
+    roleTitlePresets: [
+      'Cadre DAF & Chargé de l’Ordonnancement',
+      'Auditeur Interne de l’Autorité Contractante',
+      'Chef de Bureau Suivi de l’Exécution Budgétaire',
+      'Ingénieur Chef de Projet Infrastructures'
+    ],
+    matriculeLabel: "N° Matricule Agent de l'État / AC *",
+    matriculePlaceholder: 'AC-RDC-2026-0412',
+    secondaryIdLabel: "Réf. Décision d'Affectation / Commission d'Emploi *",
+    secondaryIdPlaceholder: 'DEC-AFF-AC-2026-08',
+    defaultSecondaryId: 'DEC-AFF-AC-2026-08'
+  },
+  grande_entreprise: {
+    label: '🏢 Opérateur Économique — Grande Entreprise',
+    shortDesc: 'Grands Travaux • BTP • Industrie',
+    badgeText: 'Champs Opérateur Économique — Grande Entreprise chargés',
+    institutionLabel: 'Dénomination Sociale de la Grande Entreprise *',
+    institutionPlaceholder: 'ex: GROUPE KIN-INFRASTRUCTURES SA',
+    institutionPresets: [
+      'GROUPE KIN-INFRASTRUCTURES SA',
+      'CONGO BÂTIMENT & TRAVAUX PUBLICS SA',
+      'KATANGA MINING LOGISTICS SA',
+      'AFRIQUE ÉNERGIE & INFRASTRUCTURES SA'
+    ],
+    subCategoryLabel: "Secteur d'Activité Majeur *",
+    subCategoryOptions: [
+      'BTP, Grands Ouvrages d’Art & Génie Civil',
+      'Énergie, Électrification & Barrages Hydroélectriques',
+      'Infrastructures Ferroviaires & Portuaires',
+      'Télécoms, Réseaux Nationaux & Numérique',
+      'Mines, Métallurgie & Installations Industrielles'
+    ],
+    specialtyLabel: "Forme Juridique & Statut National/International *",
+    specialtyOptions: [
+      'Société Anonyme (SA) de Droit Congolais',
+      'Société par Actions Simplifiée (SAS)',
+      'Consortium International & Succursale RDC',
+      'Groupement Momentané d’Entreprises International (GME)'
+    ],
+    roleTitleLabel: 'Fonction du Dirigeant ou Représentant *',
+    roleTitlePlaceholder: 'ex: Directeur des Grands Marchés Publics & Offres',
+    roleTitlePresets: [
+      'Directeur des Grands Marchés Publics & Offres',
+      'Directeur Général Adjoint — Opérations RDC',
+      'Responsable Département Appels d’Offres Internationaux',
+      'Directeur Juridique & Contrats Publics'
+    ],
+    matriculeLabel: 'N° RCCM Grande Entreprise *',
+    matriculePlaceholder: 'CD/KIN/RCCM/26-B-8800',
+    secondaryIdLabel: 'N° Identification Nationale (ID Nat) & NIF *',
+    secondaryIdPlaceholder: 'IDNAT-01-G4500-NIF-2601',
+    defaultSecondaryId: 'IDNAT-01-G4500-NIF-2601'
+  },
+  societe_civile: {
+    label: '⚖️ Société Civile & Observateur Citoyen',
+    shortDesc: 'Observatoire • Transparence • Contrôle Citoyen',
+    badgeText: 'Champs Société Civile & Observateur Citoyen chargés',
+    institutionLabel: 'Nom de l’Organisation, Observatoire ou ONG *',
+    institutionPlaceholder: 'ex: Observatoire Citoyen des Marchés Publics (OCP RDC)',
+    institutionPresets: [
+      'Observatoire Citoyen des Marchés Publics (OCP RDC)',
+      'Réseau pour la Transparence et la Redevabilité (RTR RDC)',
+      'Coalition Citoyenne Contre la Corruption',
+      'Ligue Congolaise pour l’Éthique et la Commande Publique'
+    ],
+    subCategoryLabel: "Périmètre de Veille & d'Observation Citoyenne *",
+    subCategoryOptions: [
+      'Veille Citoyenne sur les Appels d’Offres Publics',
+      'Observation Indépendante des Séances d’Ouverture des Plis',
+      'Suivi Citoyen de l’Exécution Physique des Chantiers',
+      'Plaidoyer pour la Transparence & l’Accès à l’Information',
+      'Contrôle Budgétaire & Dénonciation des Pratiques Anti-Concurrentielles'
+    ],
+    specialtyLabel: "Statut Juridique & Agrément de l'Organisation *",
+    specialtyOptions: [
+      'Association Sans But Lucratif (ASBL) agréée en RDC',
+      'Observatoire Indépendant des Finances & Marchés Publics',
+      'ONG Nationale de Défense des Droits & Transparence',
+      'Plateforme de la Société Civile Reconnue'
+    ],
+    roleTitleLabel: 'Qualité de l’Observateur Citoyen *',
+    roleTitlePlaceholder: 'ex: Observateur Citoyen & Responsable de Veille',
+    roleTitlePresets: [
+      'Observateur Citoyen & Responsable de Veille',
+      'Coordinateur National de l’Observatoire',
+      'Chargé d’Enquêtes Citoyennes & Plaidoyer',
+      'Juriste Observateur de la Commande Publique'
+    ],
+    matriculeLabel: 'N° Enregistrement / F92 Ministère Justice *',
+    matriculePlaceholder: 'JUST-ASBL-2026-012',
+    secondaryIdLabel: 'N° Carte d’Observateur Citoyen / Accréditation *',
+    secondaryIdPlaceholder: 'OCP-OBS-RDC-2026-042',
+    defaultSecondaryId: 'OCP-OBS-RDC-2026-042'
+  },
+  independant: {
+    label: '👤 Indépendant (Consultant & Expert)',
+    shortDesc: 'Consultant individuel, Expert en passation',
+    badgeText: 'Champs Consultant & Praticien Indépendant chargés',
+    institutionLabel: 'Cabinet Indépendant, Raison Commerciale ou Nom Propre *',
+    institutionPlaceholder: 'ex: Cabinet Indépendant de Conseil & Audit RDC',
+    institutionPresets: [
+      'Cabinet Indépendant de Conseil & Audit RDC',
+      'Consultant Individuel Indépendant (RDC)',
+      'Cabinet Spécialisé en Passation des Marchés',
+      'Bureau d’Études & Expertise Juridique'
+    ],
+    subCategoryLabel: "Domaine de Compétence & d'Appui *",
+    subCategoryOptions: [
+      'Montage et Relecture des DAO & TDR',
+      'Audit Indépendant & Revue des Procédures',
+      'Assistance Technique aux Autorités Contractantes',
+      'Formations Pratiques & Préparation des Soumissionnaires',
+      'Assistance dans les Recours Contentieux (CRD/ARMP)'
+    ],
+    specialtyLabel: "Niveau de Qualification & Ancienneté *",
+    specialtyOptions: [
+      'Expert Senior Indépendant (+10 ans d’expérience)',
+      'Consultant Confirmé en Passation des Marchés (5 à 10 ans)',
+      'Ingénieur-Conseil Indépendant',
+      'Juriste d’Affaires & Spécialiste Commande Publique'
+    ],
+    roleTitleLabel: 'Titre Professionnel *',
+    roleTitlePlaceholder: 'ex: Consultant Indépendant en Marchés Publics',
+    roleTitlePresets: [
+      'Consultant Indépendant en Marchés Publics',
+      'Auditeur Indépendant en Commande Publique',
+      'Ingénieur-Conseil Indépendant',
+      'Expert Juridique en Contentieux des Marchés'
+    ],
+    matriculeLabel: 'N° Identifiant Consultant Indépendant *',
+    matriculePlaceholder: 'IND-RDC-2026-0412',
+    secondaryIdLabel: 'N° NIF, Ordre Professionnel ou Registre National *',
+    secondaryIdPlaceholder: 'NIF-IND-2026-881',
+    defaultSecondaryId: 'NIF-IND-2026-881'
   }
 };
+
+export interface LoginProfileSpec {
+  role: UserRole;
+  category: 'Autorité Contractante' | 'Opérateurs Économiques' | 'Sociétés Civiles' | 'Indépendant';
+  categoryKey: 'ac' | 'oe' | 'sc' | 'ind';
+  categoryIcon: string;
+  title: string;
+  subLabel: string;
+  shortTag: string;
+  demoName: string;
+  demoInstitution: string;
+  demoEmail: string;
+  demoPass: string;
+  matricule: string;
+  description: string;
+  privileges: string[];
+}
+
+export const LOGIN_PROFILES_CATALOG: LoginProfileSpec[] = [
+  {
+    role: 'cgpmp_member',
+    category: 'Autorité Contractante',
+    categoryKey: 'ac',
+    categoryIcon: '🏛️',
+    title: 'Membre de la cellule',
+    subLabel: 'CGPMP • Secrétaire Permanent & CPM',
+    shortTag: 'CGPMP Cellule',
+    demoName: 'Ing. Jean-Paul Mukendi',
+    demoInstitution: 'Ministère des Infrastructures et Travaux Publics (MITP)',
+    demoEmail: 'jp.mukendi@infrastructures.gouv.cd',
+    demoPass: 'CGPMP-2026-BUD1',
+    matricule: 'CGPMP-MITP-2024-042',
+    description: 'Gestion des DAO, séances d’ouverture, analyse des offres et suivi des dossiers de passation de l’Autorité Contractante.',
+    privileges: ['Validation des dossiers CGPMP', 'Soumission de requêtes DFAT', 'Suivi des avis ANO DGCMP']
+  },
+  {
+    role: 'ac_agent',
+    category: 'Autorité Contractante',
+    categoryKey: 'ac',
+    categoryIcon: '🏛️',
+    title: 'Autre agent',
+    subLabel: 'DAF • Contrôle Interne • Technique',
+    shortTag: 'Agent AC',
+    demoName: 'Alain Kalombo Mwanza',
+    demoInstitution: 'Ministère des Infrastructures et Travaux Publics (MITP)',
+    demoEmail: 'alain.kalombo@infrastructures.gouv.cd',
+    demoPass: 'AC-MITP-2026-PASS',
+    matricule: 'AC-MITP-2024-019',
+    description: 'Cadre financier, ordonnancement, gestionnaire des crédits ou ingénieur de suivi au sein de l’Autorité Contractante.',
+    privileges: ['Consultation du PPM', 'Suivi de l’exécution financière', 'Accès aux formations acheteurs']
+  },
+  {
+    role: 'pme',
+    category: 'Opérateurs Économiques',
+    categoryKey: 'oe',
+    categoryIcon: '🏢',
+    title: 'PME',
+    subLabel: 'Loi 17/001 • ARSP • Contenu Local 51%',
+    shortTag: 'PME Soumissionnaire',
+    demoName: 'Mme Grâce Mbuyi Tshiamala',
+    demoInstitution: 'CONGO BÂTI-TECH SARL (PME Agréée ARSP / COPEMECO)',
+    demoEmail: 'grace.mbuyi@congobatitech-pme.cd',
+    demoPass: 'PME-ARSP-2026-PASS',
+    matricule: 'PME-ARSP-2026-412',
+    description: 'Entreprise soumissionnaire éligible à la sous-traitance, à la marge de préférence nationale et au contenu local.',
+    privileges: ['Contenu Local & ARSP 51%', 'Simulateurs de cautions & offres', 'Formations soumissionnaires']
+  },
+  {
+    role: 'grande_entreprise',
+    category: 'Opérateurs Économiques',
+    categoryKey: 'oe',
+    categoryIcon: '🏢',
+    title: 'Grandes entreprises',
+    subLabel: 'BTP • Grands Travaux • Industrie',
+    shortTag: 'Grande Entreprise',
+    demoName: 'Patrick Tshilombo Kabengele',
+    demoInstitution: 'GROUPE KIN-INFRASTRUCTURES SA',
+    demoEmail: 'p.tshilombo@kin-infrastructures.cd',
+    demoPass: 'GE-RDC-2026-PASS',
+    matricule: 'GE-RDC-2026-088',
+    description: 'Société majeure titulaire de marchés d’envergure, marchés internationaux, génie civil et consortiums.',
+    privileges: ['Grands appels d’offres ouverts', 'Conformité DAO & garanties', 'Recours & arbitrage CRD']
+  },
+  {
+    role: 'societe_civile',
+    category: 'Sociétés Civiles',
+    categoryKey: 'sc',
+    categoryIcon: '⚖️',
+    title: 'Sociétés civiles',
+    subLabel: 'Observatoire • Veille • Transparence',
+    shortTag: 'Société Civile',
+    demoName: 'Me Espérance Kabedi Mulumba',
+    demoInstitution: 'Observatoire Citoyen des Marchés Publics (OCP RDC)',
+    demoEmail: 'esperance.kabedi@ocp-rdc.org',
+    demoPass: 'SOC-CIV-2026-PASS',
+    matricule: 'SOC-CIV-2026-012',
+    description: 'Veille citoyenne indépendante, observation publique des séances d’ouverture et redevabilité de la commande publique.',
+    privileges: ['Observatoire citoyen', 'Suivi de la transparence des avis', 'Formations intégrité & éthique']
+  },
+  {
+    role: 'independant',
+    category: 'Indépendant',
+    categoryKey: 'ind',
+    categoryIcon: '👤',
+    title: 'Indépendant',
+    subLabel: 'Consultant & Expert en Marchés Publics',
+    shortTag: 'Expert Indépendant',
+    demoName: 'Dieudonné Mwamba',
+    demoInstitution: 'Cabinet Indépendant de Conseil & Audit RDC',
+    demoEmail: 'dmwamba.consulting@gmail.com',
+    demoPass: 'IND-RDC-2026-PASS',
+    matricule: 'IND-RDC-2026-881',
+    description: 'Consultant individuel, auditeur indépendant ou expert en passation des marchés intervenant en appui technique.',
+    privileges: ['Prestations intellectuelles (TDR)', 'Certification d’expertise ARMP', 'Études de cas & jurisprudence']
+  }
+];
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -405,6 +690,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const courseTitle = pendingCourseTitle || targetCourseTitle;
   const [mode, setMode] = useState<'login' | 'register' | 'forgot_password' | 'armp_admin'>(initialMode);
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
+  const [selectedLoginRole, setSelectedLoginRole] = useState<UserRole>(initialRole || 'cgpmp_member');
+  const [showOtherLoginRoles, setShowOtherLoginRoles] = useState(false);
+  const [showDemoExpandable, setShowDemoExpandable] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
 
@@ -535,6 +824,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const activeLoginSpec =
+    LOGIN_PROFILES_CATALOG.find((p) => p.role === selectedLoginRole) ||
+    LOGIN_PROFILES_CATALOG[0];
+
+  const handleSelectLoginProfile = (spec: LoginProfileSpec) => {
+    setSelectedLoginRole(spec.role);
+    setSelectedRole(spec.role);
+    setEmailInput(spec.demoEmail);
+    setPasswordInput(spec.demoPass);
+    setStepError(null);
+  };
+
+  const handleDirectLoginForRole = (role: UserRole) => {
+    const targetProf = (allProfiles && allProfiles[role]) || DEMO_PROFILES[role];
+    if (targetProf) {
+      onShowToast?.(`Connexion réussie : Bienvenue ${targetProf.name} (${targetProf.roleTitle}).`);
+      onLoginSuccess?.(targetProf);
+      onClose();
+    } else if (onDemoLogin) {
+      onDemoLogin(role);
+      onClose();
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
@@ -545,6 +858,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSubmittedCgpmpRequest(null);
       setLocalCgpmpRequests(getLocalCgpmpAccountRequests());
       applyDynamicFieldsForRole(initialRole);
+
+      const matchedLogin = LOGIN_PROFILES_CATALOG.find((p) => p.role === initialRole) || LOGIN_PROFILES_CATALOG[0];
+      setSelectedLoginRole(matchedLogin.role);
+      if (initialMode === 'login') {
+        setEmailInput(matchedLogin.demoEmail);
+        setPasswordInput(matchedLogin.demoPass);
+      }
     }
   }, [isOpen, initialMode, initialRole]);
 
@@ -1279,112 +1599,248 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {/* MODE 2: LOGIN (RIGHT COLUMN OF 2-COLUMN FULL PAGE) */}
                   {/* ======================================================== */}
                   {mode === 'login' && (
-                    <div className="space-y-5">
+                    <div className="space-y-4">
+                      {/* Entête du formulaire de connexion */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                            <Shield className="w-5 h-5 text-[#0C3B7C] dark:text-blue-400" />
+                            <span>Connexion à votre espace</span>
+                          </h3>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                            Portail Officiel RDC
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Connectez-vous à l'aide de vos identifiants pour accéder aux marchés publics et formations.
+                        </p>
+                      </div>
+
+                      {/* 1. GOOGLE SIGN IN */}
                       <button
                         type="button"
                         onClick={handleGoogleSignIn}
                         disabled={isSubmitting}
-                        className="w-full py-3.5 px-4 rounded-2xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-900 dark:text-white font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-3 shadow-xs cursor-pointer"
+                        className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-800 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2.5 shadow-xs cursor-pointer"
                       >
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
                           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                           <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                         </svg>
-                        <span>Continuer avec Google (Vérification instantanée du profil)</span>
+                        <span>Continuer avec Google</span>
                       </button>
 
-                      <div className="relative my-2">
+                      <div className="relative my-1">
                         <div className="absolute inset-0 flex items-center">
                           <div className="w-full border-t border-slate-200 dark:border-slate-800" />
                         </div>
                         <div className="relative flex justify-center text-[11px]">
-                          <span className="bg-white dark:bg-slate-900 px-3 text-slate-500 font-bold">
-                            ou connexion avec les coordonnées reçues par mail (CGPMP / Officiel)
+                          <span className="bg-white dark:bg-slate-950 px-3 text-slate-500 font-bold">
+                            ou avec vos identifiants officiels
                           </span>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                          Identifiant / Adresse Email officielle *
-                        </label>
-                        <div className="relative">
-                          <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                          <input
-                            type="email"
-                            required
-                            value={emailInput}
-                            onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
-                            placeholder="ex: s.mwanza@budget.gouv.cd"
-                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                            Mot de passe d’authentification (ou mot de passe reçu par mail ARMP) *
+                      {/* 2. FORMULAIRE EMAIL & MOT DE PASSE */}
+                      <div className="space-y-3.5">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                            Adresse Email officielle ou personnelle *
                           </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMode('forgot_password');
-                              setStepError(null);
-                            }}
-                            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            Mot de passe oublié ?
-                          </button>
+                          <div className="relative">
+                            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                            <input
+                              type="email"
+                              required
+                              value={emailInput}
+                              onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
+                              placeholder="ex: s.mwanza@budget.gouv.cd"
+                              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </div>
                         </div>
-                        <div className="relative">
-                          <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                          <input
-                            type="text"
-                            required
-                            value={passwordInput}
-                            onChange={(e) => setPasswordInput(e.target.value)}
-                            placeholder="ex: ARMP-CGPMP-2026-BUD1"
-                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Mot de passe *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMode('forgot_password');
+                                setStepError(null);
+                              }}
+                              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                            >
+                              Mot de passe oublié ?
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              required
+                              value={passwordInput}
+                              onChange={(e) => setPasswordInput(e.target.value)}
+                              placeholder="Votre mot de passe"
+                              className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                              aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                            >
+                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
                         </div>
+
+                        <button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="w-full py-3.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Authentification en cours...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Se connecter à mon espace</span>
+                              <ArrowRight className="w-4 h-4" />
+                            </>
+                          )}
+                        </button>
                       </div>
 
-                      <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="w-full py-3.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                            <span>Vérification de l’habilitation ARMP...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Accéder à mon espace sécurisé</span>
-                            <ArrowRight className="w-4 h-4" />
-                          </>
-                        )}
-                      </button>
+                      {/* Info CGPMP discrète */}
+                      <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-2">
+                        <Info className="w-4 h-4 text-[#0C3B7C] dark:text-blue-400 shrink-0 mt-0.5" />
+                        <p className="leading-relaxed">
+                          <strong>Membres CGPMP :</strong> Utilisez votre adresse email enregistrée et le mot de passe reçu par notification ARMP après validation officielle de la cellule.
+                        </p>
+                      </div>
 
-                      {/* Quick Action Switch & CGPMP Info */}
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      {/* Redirection Création de compte */}
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <p className="text-[11px] leading-relaxed">
-                          <strong>Membre ou Secrétaire Permanent CGPMP :</strong> seul le Secrétaire Permanent crée le compte avec l’acte de création et la liste des membres. Vos coordonnées sont envoyées par mail dès validation par l’Administration ARMP.
+                          Vous n’avez pas encore de compte ? Créez un profil adapté à votre activité.
                         </p>
                         <button
                           type="button"
                           onClick={() => {
                             setMode('register');
+                            setRegisterStep(1);
                             setStepError(null);
                           }}
-                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shrink-0 cursor-pointer"
+                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shrink-0 cursor-pointer"
                         >
                           Créer un compte →
                         </button>
+                      </div>
+
+                      {/* 3. REGROUPEMENT DES COMPTES DÉMOS DANS UN EXPANDABLE POUR ÉVITER LA SURCHARGE */}
+                      <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setShowDemoExpandable((prev) => !prev)}
+                          className="w-full py-2.5 px-3.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 bg-slate-50/70 dark:bg-slate-900/40 hover:bg-amber-50/40 dark:hover:bg-amber-950/20 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between transition cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                            <span>Comptes de démonstration & tests rapides (6 profils prédéfinis)</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
+                            <span>{showDemoExpandable ? 'Masquer' : 'Afficher'}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showDemoExpandable ? 'rotate-180' : ''}`} />
+                          </span>
+                        </button>
+
+                        {showDemoExpandable && (
+                          <div className="mt-2.5 p-3.5 rounded-2xl bg-slate-900 text-white border border-slate-800 space-y-3 shadow-lg animate-in fade-in duration-200">
+                            <div className="flex items-center justify-between pb-1.5 border-b border-white/10 text-xs">
+                              <span className="font-bold text-amber-300">Accès direct en 1-clic :</span>
+                              <span className="text-[10px] text-slate-400">Cliquez pour tester immédiatement</span>
+                            </div>
+
+                            {/* 1. Autorité Contractante */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                🏛️ Autorité Contractante
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {LOGIN_PROFILES_CATALOG.filter((p) => p.categoryKey === 'ac').map((spec) => (
+                                  <button
+                                    key={spec.role}
+                                    type="button"
+                                    onClick={() => handleDirectLoginForRole(spec.role)}
+                                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400 text-left transition flex items-center justify-between group cursor-pointer"
+                                  >
+                                    <div className="min-w-0 pr-1">
+                                      <div className="text-xs font-bold text-white truncate">{spec.title}</div>
+                                      <div className="text-[10px] text-slate-300 truncate">{spec.demoName}</div>
+                                      <div className="text-[9px] text-sky-300 font-mono truncate">{spec.demoEmail}</div>
+                                    </div>
+                                    <ArrowRight className="w-3.5 h-3.5 text-amber-400 shrink-0 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* 2. Opérateurs Économiques */}
+                            <div className="space-y-1 pt-1">
+                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                🏢 Opérateurs Économiques
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {LOGIN_PROFILES_CATALOG.filter((p) => p.categoryKey === 'oe').map((spec) => (
+                                  <button
+                                    key={spec.role}
+                                    type="button"
+                                    onClick={() => handleDirectLoginForRole(spec.role)}
+                                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-teal-400 text-left transition flex items-center justify-between group cursor-pointer"
+                                  >
+                                    <div className="min-w-0 pr-1">
+                                      <div className="text-xs font-bold text-white truncate">{spec.title}</div>
+                                      <div className="text-[10px] text-slate-300 truncate">{spec.demoName}</div>
+                                      <div className="text-[9px] text-teal-300 font-mono truncate">{spec.demoEmail}</div>
+                                    </div>
+                                    <ArrowRight className="w-3.5 h-3.5 text-teal-400 shrink-0 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* 3 & 4. Sociétés Civiles & Indépendant */}
+                            <div className="space-y-1 pt-1">
+                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                ⚖️ Sociétés Civiles & 👤 Indépendant
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {LOGIN_PROFILES_CATALOG.filter((p) => p.categoryKey === 'sc' || p.categoryKey === 'ind').map((spec) => (
+                                  <button
+                                    key={spec.role}
+                                    type="button"
+                                    onClick={() => handleDirectLoginForRole(spec.role)}
+                                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-400 text-left transition flex items-center justify-between group cursor-pointer"
+                                  >
+                                    <div className="min-w-0 pr-1">
+                                      <div className="text-xs font-bold text-white truncate">{spec.title}</div>
+                                      <div className="text-[10px] text-slate-300 truncate">{spec.demoName}</div>
+                                      <div className="text-[9px] text-emerald-300 font-mono truncate">{spec.demoEmail}</div>
+                                    </div>
+                                    <ArrowRight className="w-3.5 h-3.5 text-emerald-400 shrink-0 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1397,21 +1853,153 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {/* STEP 1: ROLE SELECTION + CGPMP PERMANENT SECRETARY CONDITION (SEPARATED FROM NAMES & EMAILS) */}
                       {registerStep === 1 && (
                         <div className="space-y-4">
-                          <div>
-                            <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200 mb-2">
+                          <div className="space-y-3">
+                            <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200">
                               Étape 1/{isCgpmp ? 5 : 4} — Choisissez le profil de compte à créer *
                             </label>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                              {(
-                                [
-                                  'cgpmp_member',
-                                  'pme',
-                                  'particulier',
-                                  'armp_agent',
-                                  'dgcmp_agent',
-                                  'formateur'
-                                ] as UserRole[]
-                              ).map((rKey) => {
+
+                            {/* Catégorie 1 : Autorité Contractante */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                🏛️ Autorité Contractante
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {(['cgpmp_member', 'ac_agent'] as UserRole[]).map((rKey) => {
+                                  const cfg = ROLE_CREATION_CONFIG[rKey];
+                                  const isSelected = selectedRole === rKey;
+                                  return (
+                                    <button
+                                      key={rKey}
+                                      type="button"
+                                      onClick={() => handleSelectRoleInRegistration(rKey)}
+                                      className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                        isSelected
+                                          ? 'border-blue-600 bg-blue-50/90 dark:bg-blue-950/60 ring-2 ring-blue-500/30'
+                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                        {cfg.label}
+                                      </span>
+                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        {cfg.shortDesc}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Catégorie 2 : Opérateurs Économiques */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                🏢 Opérateurs Économiques
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {(['pme', 'grande_entreprise'] as UserRole[]).map((rKey) => {
+                                  const cfg = ROLE_CREATION_CONFIG[rKey];
+                                  const isSelected = selectedRole === rKey;
+                                  return (
+                                    <button
+                                      key={rKey}
+                                      type="button"
+                                      onClick={() => handleSelectRoleInRegistration(rKey)}
+                                      className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                                        isSelected
+                                          ? 'border-teal-600 bg-teal-50/90 dark:bg-teal-950/60 ring-2 ring-teal-500/30'
+                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                        {cfg.label}
+                                      </span>
+                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        {cfg.shortDesc}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Catégorie 3 : Sociétés civiles */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                ⚖️ Sociétés Civiles
+                              </span>
+                              <div>
+                                {(['societe_civile'] as UserRole[]).map((rKey) => {
+                                  const cfg = ROLE_CREATION_CONFIG[rKey];
+                                  const isSelected = selectedRole === rKey;
+                                  return (
+                                    <button
+                                      key={rKey}
+                                      type="button"
+                                      onClick={() => handleSelectRoleInRegistration(rKey)}
+                                      className={`w-full p-3 rounded-xl border text-left transition cursor-pointer ${
+                                        isSelected
+                                          ? 'border-emerald-600 bg-emerald-50/90 dark:bg-emerald-950/60 ring-2 ring-emerald-500/30'
+                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                          {cfg.label}
+                                        </span>
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                                          Contrôle Citoyen
+                                        </span>
+                                      </div>
+                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        {cfg.shortDesc}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Catégorie 4 : Indépendant */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                👤 Indépendant
+                              </span>
+                              <div>
+                                {(['independant'] as UserRole[]).map((rKey) => {
+                                  const cfg = ROLE_CREATION_CONFIG[rKey];
+                                  const isSelected = selectedRole === rKey;
+                                  return (
+                                    <button
+                                      key={rKey}
+                                      type="button"
+                                      onClick={() => handleSelectRoleInRegistration(rKey)}
+                                      className={`w-full p-3 rounded-xl border text-left transition cursor-pointer ${
+                                        isSelected
+                                          ? 'border-cyan-600 bg-cyan-50/90 dark:bg-cyan-950/60 ring-2 ring-cyan-500/30'
+                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                          {cfg.label}
+                                        </span>
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-800 dark:text-cyan-300">
+                                          Expert Libéral
+                                        </span>
+                                      </div>
+                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        {cfg.shortDesc}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Formateur & Régulateurs */}
+                            <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                              <span>Autres habilitations :</span>
+                              {(['armp_agent', 'dgcmp_agent', 'formateur'] as UserRole[]).map((rKey) => {
                                 const cfg = ROLE_CREATION_CONFIG[rKey];
                                 const isSelected = selectedRole === rKey;
                                 return (
@@ -1419,18 +2007,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                     key={rKey}
                                     type="button"
                                     onClick={() => handleSelectRoleInRegistration(rKey)}
-                                    className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
                                       isSelected
-                                        ? 'border-blue-600 bg-blue-50/90 dark:bg-blue-950/60 ring-2 ring-blue-500/30'
-                                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                        ? 'border-amber-500 bg-amber-50 text-amber-900'
+                                        : 'border-slate-200 text-slate-700 hover:bg-slate-100'
                                     }`}
                                   >
-                                    <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
-                                      {cfg.label}
-                                    </span>
-                                    <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                      {cfg.shortDesc}
-                                    </span>
+                                    {cfg.label.split(' ')[0]} {rKey === 'armp_agent' ? 'ARMP' : rKey === 'dgcmp_agent' ? 'DGCMP' : 'Formateur'}
                                   </button>
                                 );
                               })}

@@ -206,7 +206,7 @@ export default function App() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'forgot_password'>('login');
 
   // Profile Facebook SubTab state
-  const [profileSubTab, setProfileSubTab] = useState<'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications'>('publications');
+  const [profileSubTab, setProfileSubTab] = useState<'suivi' | 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications'>('suivi');
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);

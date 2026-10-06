@@ -116,8 +116,16 @@ export function getDefaultMatriculePrefixByRole(role: UserRole): string {
   switch (role) {
     case 'pme':
       return 'ARSP-RDC-2026-';
+    case 'grande_entreprise':
+      return 'GE-RDC-2026-';
     case 'cgpmp_member':
       return 'CGPMP-RDC-';
+    case 'ac_agent':
+      return 'AC-RDC-';
+    case 'societe_civile':
+      return 'SOC-CIV-RDC-';
+    case 'independant':
+      return 'IND-RDC-';
     case 'armp_agent':
       return 'ARMP-DIR-';
     case 'dgcmp_agent':

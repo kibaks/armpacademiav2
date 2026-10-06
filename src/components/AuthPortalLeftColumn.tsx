@@ -14,7 +14,9 @@ import {
   Lock,
   UserPlus,
   ShieldCheck,
-  User
+  User,
+  Sparkles,
+  ChevronDown
 } from 'lucide-react';
 import {
   UserProfile,
@@ -282,53 +284,121 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
             </div>
           </div>
 
-          {/* Fast Institutional Demo Access */}
-          <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 space-y-3">
-            <p className="text-xs font-extrabold text-slate-200">
-              Accès rapide par profil institutionnel :
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => onSelectDemo('cgpmp_member')}
-                className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
-              >
-                🏛️ Cellule CGPMP
-              </button>
+          {/* Fast Institutional Demo Access — Regroupé dans un expandable pour éviter la surcharge */}
+          <details className="group rounded-2xl bg-slate-900/60 border border-white/10 overflow-hidden transition-all">
+            <summary className="p-4 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition list-none">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+                <span className="text-xs font-extrabold text-slate-200">
+                  Comptes de démonstration (6 profils)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold">1-Clic</span>
+                <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+              </div>
+            </summary>
+
+            <div className="p-4 pt-0 space-y-3.5 border-t border-white/5 mt-3">
+
+            {/* 1. Autorité Contractante */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide">
+                🏛️ Autorité Contractante
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSelectDemo('cgpmp_member')}
+                  className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
+                >
+                  <div className="truncate">🏛️ Membre Cellule (CGPMP)</div>
+                  <div className="text-[10px] text-slate-400 font-normal truncate">Secrétaire Permanent / CPM</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectDemo('ac_agent')}
+                  className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
+                >
+                  <div className="truncate">🏛️ Autre Agent AC</div>
+                  <div className="text-[10px] text-slate-400 font-normal truncate">DAF / Contrôle Interne</div>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Opérateurs Économiques */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide">
+                🏢 Opérateurs Économiques
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSelectDemo('pme')}
+                  className="p-2.5 rounded-xl border border-teal-400/40 bg-teal-950/40 hover:border-teal-300 text-left transition text-xs font-extrabold text-teal-200 cursor-pointer"
+                >
+                  <div className="truncate">🏢 PME (Loi 17/001)</div>
+                  <div className="text-[10px] text-teal-300/80 font-normal truncate">ARSP • Contenu Local 51%</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectDemo('grande_entreprise')}
+                  className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
+                >
+                  <div className="truncate">🏢 Grandes Entreprises</div>
+                  <div className="text-[10px] text-slate-400 font-normal truncate">Grands Travaux BTP & Industrie</div>
+                </button>
+              </div>
+            </div>
+
+            {/* 3 & 4. Sociétés Civiles & Indépendant */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide">
+                ⚖️ Sociétés Civiles & 👤 Indépendant
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSelectDemo('societe_civile')}
+                  className="p-2.5 rounded-xl border border-emerald-400/30 bg-emerald-950/30 hover:border-emerald-300 text-left transition text-xs font-extrabold text-emerald-200 cursor-pointer"
+                >
+                  <div className="truncate">⚖️ Sociétés Civiles</div>
+                  <div className="text-[10px] text-emerald-300/80 font-normal truncate">Observatoire & Transparence</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectDemo('independant')}
+                  className="p-2.5 rounded-xl border border-cyan-400/30 bg-cyan-950/30 hover:border-cyan-300 text-left transition text-xs font-extrabold text-cyan-200 cursor-pointer"
+                >
+                  <div className="truncate">👤 Indépendant</div>
+                  <div className="text-[10px] text-cyan-300/80 font-normal truncate">Consultant & Expert Libéral</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Régulateurs & Formateurs (secondaire) */}
+            <div className="pt-2 border-t border-white/10 flex flex-wrap items-center gap-1.5 text-[10px]">
+              <span className="text-slate-400 font-bold">Régulation :</span>
               <button
                 type="button"
                 onClick={() => onSelectDemo('armp_agent')}
-                className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
+                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 cursor-pointer"
               >
-                ⚖️ Régulateur ARMP
+                ⚖️ ARMP
               </button>
               <button
                 type="button"
                 onClick={() => onSelectDemo('dgcmp_agent')}
-                className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
+                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 cursor-pointer"
               >
-                🛡️ Contrôleur DGCMP
-              </button>
-              <button
-                type="button"
-                onClick={() => onSelectDemo('pme')}
-                className="p-2.5 rounded-xl border border-teal-400/40 bg-teal-950/40 hover:border-teal-300 text-left transition text-xs font-extrabold text-teal-200 cursor-pointer"
-              >
-                🏢 PME (Loi 17/001)
-              </button>
-              <button
-                type="button"
-                onClick={() => onSelectDemo('particulier')}
-                className="p-2.5 rounded-xl border border-white/15 bg-white/5 hover:border-amber-400 text-left transition text-xs font-bold text-white cursor-pointer"
-              >
-                👤 Consultant
+                🛡️ DGCMP
               </button>
               <button
                 type="button"
                 onClick={() => onSelectDemo('formateur')}
-                className="p-2.5 rounded-xl border border-amber-400/40 bg-amber-950/40 hover:border-amber-300 text-left transition text-xs font-extrabold text-amber-200 cursor-pointer"
+                className="px-2 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 font-bold cursor-pointer"
               >
-                🎓 Formateur DFAT
+                🎓 Formateur
               </button>
             </div>
 
@@ -357,7 +427,8 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
                 ))}
               </div>
             </div>
-          </div>
+            </div>
+          </details>
         </div>
       )}
 
