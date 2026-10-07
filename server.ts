@@ -1818,7 +1818,10 @@ app.post('/api/ai/tts', async (req, res) => {
 
     const payload = await getOrSynthesizeTtsPayload(text, voice, emotion);
     if (payload) {
-      return res.json(payload);
+      return res.json({
+        ...payload,
+        audioBase64: payload.audioData,
+      });
     }
 
     return res.status(204).end();

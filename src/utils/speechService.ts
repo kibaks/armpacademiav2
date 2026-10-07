@@ -1653,13 +1653,14 @@ class SpeechService {
 
             if (response.ok && response.status !== 204) {
               const data = await response.json();
-              if (data?.audioData) {
+              const rawAudio = data?.audioData || data?.audioBase64;
+              if (rawAudio) {
                 const mimeType = data.mimeType || 'audio/mpeg';
-                const audioDataUrl = `data:${mimeType};base64,${data.audioData}`;
+                const audioDataUrl = `data:${mimeType};base64,${rawAudio}`;
                 let decoded: AudioBuffer | null = null;
 
                 try {
-                  const rawBuf = base64ToArrayBuffer(data.audioData);
+                  const rawBuf = base64ToArrayBuffer(rawAudio);
                   const ctx = this.getAudioContext();
                   if (ctx && ctx.state === 'running') {
                     decoded = await ctx.decodeAudioData(rawBuf.slice(0));

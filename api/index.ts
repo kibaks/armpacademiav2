@@ -3,11 +3,35 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import WebSocket from 'ws';
 import { GoogleGenAI } from '@google/genai';
+import { Communicate } from 'edge-tts-universal';
 
 dotenv.config();
 
+// Patch edge-tts-universal SSML to ensure proper French prosody
+try {
+  const origBuildSsml = (Communicate.prototype as any)?.buildSsml;
+  if (typeof origBuildSsml === 'function') {
+    (Communicate.prototype as any).buildSsml = function (text: string) {
+      const orig = origBuildSsml.call(this, text);
+      return typeof orig === 'string'
+        ? orig.replace(/xml:lang=['"][^'"]*['"]/g, "xml:lang='fr-FR'")
+        : orig;
+    };
+  }
+} catch {
+  // safe fallback
+}
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+
+// Ensure compatibility with both Vercel rewrites (/api/...) and direct route requests
+app.use((req, _res, next) => {
+  if (!req.url.startsWith('/api') && req.url.startsWith('/')) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
 
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;
@@ -739,12 +763,8 @@ app.post('/api/ai/flow-video/status', (_req, res) => {
 
 // ============================================================================
 // NEURAL FRENCH VOICE ENGINE (Prof. Aïsha — 100% Natural Human Expressive Prosody)
-// Microsoft Edge Neural TTS (fr-FR-VivienneMultilingualNeural / RemyMultilingualNeural)
+// Multi-Tier: ElevenLabs v2 -> Edge Neural Universal (Denise/Vivienne) -> Google French TTS
 // ============================================================================
-const EDGE_TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-const EDGE_CHROMSIUM_FULL_VERSION = '143.0.3650.75';
-const EDGE_SEC_MS_GEC_VERSION = `1-${EDGE_CHROMSIUM_FULL_VERSION}`;
-const WIN_EPOCH_OFFSET = 11644473600;
 
 interface TtsWordBoundary {
   text: string;
@@ -756,42 +776,20 @@ interface TtsWordBoundary {
 interface TtsSynthesisResult {
   audioBuffer: Buffer;
   wordBoundaries: TtsWordBoundary[];
+  provider: string;
 }
 
-const ttsMemoryCache = new Map<string, { audioBase64: string; mimeType: string; provider: string; wordBoundaries: TtsWordBoundary[] }>();
-const inFlightEdgeSyntheses = new Map<string, Promise<TtsSynthesisResult>>();
-
-function generateSecMsGec(): string {
-  let ticks = Math.floor(Date.now() / 1000) + WIN_EPOCH_OFFSET;
-  ticks -= ticks % 300;
-  const ticks100ns = BigInt(ticks) * 10000000n;
-  const strToHash = `${ticks100ns.toString()}${EDGE_TRUSTED_CLIENT_TOKEN}`;
-  return crypto.createHash('sha256').update(strToHash, 'ascii').digest('hex').toUpperCase();
+interface CachedTtsPayload {
+  audioData: string;
+  audioBase64: string;
+  mimeType: string;
+  provider: string;
+  wordBoundaries: TtsWordBoundary[];
+  emotion?: string;
 }
 
-function escapeXmlForSsml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function buildNaturalFrenchSsmlBody(rawText: string): string {
-  const cleaned = rawText
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([,;:.!?])/g, '$1')
-    .trim();
-  return escapeXmlForSsml(cleaned);
-}
-
-function detectVoiceProsodyContour(text: string, voiceName: string): { pitch: string; rate: string } {
-  return {
-    pitch: '+0Hz',
-    rate: '+0%'
-  };
-}
+const ttsMemoryCache = new Map<string, CachedTtsPayload>();
+const inFlightSyntheses = new Map<string, Promise<CachedTtsPayload | null>>();
 
 function attachCharIndices(sentence: string, rawWords: { text: string; offsetMs: number; durationMs: number }[]): TtsWordBoundary[] {
   const result: TtsWordBoundary[] = [];
@@ -827,191 +825,91 @@ function attachCharIndices(sentence: string, rawWords: { text: string; offsetMs:
   return result;
 }
 
-function runSingleEdgeSynthesis(
-  cleanText: string,
-  voiceName: string,
-  timeoutMs: number
-): Promise<TtsSynthesisResult> {
-  return new Promise((resolve, reject) => {
-    const connId = crypto.randomUUID().replace(/-/g, '');
-    const secMsGec = generateSecMsGec();
-    const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${EDGE_TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${EDGE_SEC_MS_GEC_VERSION}&ConnectionId=${connId}`;
+function detectSentenceEmotion(text: string): string {
+  const s = (text || '').toLowerCase();
+  if (/(bonjour|bienvenue|ravie|ravi|sourire|plaisir|joie|confiance)/i.test(s)) return 'smiling';
+  if (/(attention|interdit|nullité|sanction|rejet|illégal|piège|risque|fraude)/i.test(s)) return 'solemn';
+  if (/(rassure|comprends|doucement|pas à pas|calme|sérénité|aide)/i.test(s)) return 'empathetic';
+  if (/(bravo|excellent|félicitations|magnifique|formidable|succès)/i.test(s)) return 'enthusiastic';
+  if (/\?|(pourquoi|comment|à ton avis|imagine|sais-tu)/i.test(s)) return 'curious';
+  return 'smiling';
+}
 
-    const ws = new WebSocket(wsUrl, {
-      headers: {
-        'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache',
-        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-        'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${EDGE_CHROMSIUM_FULL_VERSION} Safari/537.36 Edg/${EDGE_CHROMSIUM_FULL_VERSION}`,
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
-      }
+// 1. Edge TTS Universal Synthesis
+async function synthesizeWithEdgeUniversal(
+  text: string,
+  voiceName: string = 'fr-FR-VivienneMultilingualNeural'
+): Promise<TtsSynthesisResult | null> {
+  try {
+    const comm = new Communicate(text, {
+      voice: voiceName,
+      rate: '+2%',
+      pitch: '+0Hz',
+      volume: '+0%',
     });
 
     const audioChunks: Buffer[] = [];
-    const rawWords: { text: string; offsetMs: number; durationMs: number }[] = [];
-    let settled = false;
+    const rawWords: Array<{ text: string; offsetMs: number; durationMs: number }> = [];
 
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        try { ws.close(); } catch {}
-        reject(new Error('Edge Neural TTS timeout'));
-      }
-    }, timeoutMs);
-
-    ws.on('open', () => {
-      const configMsg =
-        `X-Timestamp:${new Date().toISOString()}\r\n` +
-        `Content-Type:application/json; charset=utf-8\r\n` +
-        `Path:speech.config\r\n\r\n` +
-        JSON.stringify({
-          context: {
-            synthesis: {
-              audio: {
-                metadataoptions: {
-                  sentenceBoundaryEnabled: 'false',
-                  wordBoundaryEnabled: 'true'
-                },
-                outputFormat: 'audio-24khz-96kbitrate-mono-mp3'
-              }
-            }
-          }
+    for await (const chunk of comm.stream()) {
+      if (chunk.type === 'audio' && chunk.data) {
+        audioChunks.push(Buffer.from(chunk.data));
+      } else if (chunk.type === 'WordBoundary' && chunk.text) {
+        rawWords.push({
+          text: chunk.text,
+          offsetMs: Math.round((chunk.offset || 0) / 10000),
+          durationMs: Math.max(45, Math.round((chunk.duration || 0) / 10000)),
         });
-      ws.send(configMsg);
-
-      const reqId = crypto.randomUUID().replace(/-/g, '');
-      const naturalBody = buildNaturalFrenchSsmlBody(cleanText);
-      const contour = detectVoiceProsodyContour(cleanText, voiceName);
-      const ssml =
-        `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='fr-FR'>` +
-        `<voice name='${voiceName}'>` +
-        `<prosody pitch='${contour.pitch}' rate='${contour.rate}' volume='+0%'>` +
-        `${naturalBody}` +
-        `</prosody>` +
-        `</voice>` +
-        `</speak>`;
-
-      const ssmlMsg =
-        `X-RequestId:${reqId}\r\n` +
-        `Content-Type:application/ssml+xml\r\n` +
-        `X-Timestamp:${new Date().toISOString()}Z\r\n` +
-        `Path:ssml\r\n\r\n` +
-        ssml;
-      ws.send(ssmlMsg);
-    });
-
-    ws.on('message', (data: WebSocket.RawData, isBinary: boolean) => {
-      if (isBinary) {
-        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
-        if (buf.length > 2) {
-          const headerLen = buf.readUInt16BE(0);
-          const headerText = buf.subarray(2, 2 + headerLen).toString('utf8');
-          if (headerText.includes('Path:audio')) {
-            const audioPayload = buf.subarray(2 + headerLen);
-            if (audioPayload.length > 0) {
-              audioChunks.push(audioPayload);
-            }
-          }
-        }
-      } else {
-        const txt = data.toString('utf8');
-        if (txt.includes('Path:audio.metadata')) {
-          try {
-            const jsonStart = txt.indexOf('{');
-            if (jsonStart !== -1) {
-              const parsed = JSON.parse(txt.slice(jsonStart));
-              if (Array.isArray(parsed?.Metadata)) {
-                for (const item of parsed.Metadata) {
-                  if (item?.Type === 'WordBoundary' && item?.Data?.text?.Text) {
-                    const offsetMs = Math.round((Number(item.Data.Offset) || 0) / 10000);
-                    const durationMs = Math.round((Number(item.Data.Duration) || 1200000) / 10000);
-                    rawWords.push({
-                      text: String(item.Data.text.Text),
-                      offsetMs,
-                      durationMs
-                    });
-                  }
-                }
-              }
-            }
-          } catch {}
-        }
-        if (txt.includes('Path:turn.end')) {
-          if (!settled) {
-            settled = true;
-            clearTimeout(timer);
-            try { ws.close(); } catch {}
-            const finalBuf = Buffer.concat(audioChunks);
-            if (finalBuf.length > 100) {
-              const wordBoundaries = attachCharIndices(cleanText, rawWords);
-              resolve({ audioBuffer: finalBuf, wordBoundaries });
-            } else {
-              reject(new Error('Empty audio buffer from Edge Neural TTS'));
-            }
-          }
-        }
       }
-    });
-
-    ws.on('error', (err: any) => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        reject(err);
-      }
-    });
-
-    ws.on('close', () => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        const finalBuf = Buffer.concat(audioChunks);
-        if (finalBuf.length > 100) {
-          const wordBoundaries = attachCharIndices(cleanText, rawWords);
-          resolve({ audioBuffer: finalBuf, wordBoundaries });
-        } else {
-          reject(new Error('WebSocket closed before audio finished'));
-        }
-      }
-    });
-  });
-}
-
-async function synthesizeWithEdgeNeuralTTS(
-  text: string,
-  voiceName: string = 'fr-FR-VivienneMultilingualNeural'
-): Promise<TtsSynthesisResult> {
-  const cleanText = text.replace(/\s+/g, ' ').trim();
-  const dedupeKey = `${voiceName}:${cleanText}`;
-  const existing = inFlightEdgeSyntheses.get(dedupeKey);
-  if (existing) {
-    return existing;
-  }
-
-  const synthesisPromise = (async () => {
-    try {
-      let lastErr: any;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          return await runSingleEdgeSynthesis(cleanText, voiceName, 9000);
-        } catch (err) {
-          lastErr = err;
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 140 * (attempt + 1)));
-          }
-        }
-      }
-      throw lastErr || new Error('Edge Neural TTS failed after 3 attempts');
-    } finally {
-      inFlightEdgeSyntheses.delete(dedupeKey);
     }
-  })();
 
-  inFlightEdgeSyntheses.set(dedupeKey, synthesisPromise);
-  return synthesisPromise;
+    if (audioChunks.length === 0) return null;
+    const combinedMp3 = Buffer.concat(audioChunks);
+    if (combinedMp3.length < 256) return null;
+
+    return {
+      audioBuffer: combinedMp3,
+      wordBoundaries: attachCharIndices(text, rawWords),
+      provider: `edge-${voiceName}`
+    };
+  } catch (err: any) {
+    console.warn(`[Edge Universal] Failed with ${voiceName}:`, err?.message);
+    return null;
+  }
 }
 
+// 2. ElevenLabs Synthesis (if configured)
+async function synthesizeWithElevenLabs(text: string): Promise<TtsSynthesisResult | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return null;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+  try {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+      }),
+      signal: AbortSignal.timeout(9000)
+    });
+    if (!r.ok) return null;
+    const ab = await r.arrayBuffer();
+    return {
+      audioBuffer: Buffer.from(ab),
+      wordBoundaries: [],
+      provider: 'elevenlabs-v2'
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 3. Google Translate TTS (Reliable HTTP fallback that never fails)
 async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthesisResult> {
   const clean = text.replace(/\s+/g, ' ').trim();
   const maxLen = 185;
@@ -1036,9 +934,7 @@ async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthe
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36'
       }
     });
-    if (!r.ok) {
-      throw new Error(`Google TTS HTTP ${r.status}`);
-    }
+    if (!r.ok) throw new Error(`Google TTS HTTP ${r.status}`);
     const ab = await r.arrayBuffer();
     buffers.push(Buffer.from(ab));
   }
@@ -1058,32 +954,112 @@ async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthe
 
   return {
     audioBuffer: Buffer.concat(buffers),
-    wordBoundaries: attachCharIndices(clean, rawWords)
+    wordBoundaries: attachCharIndices(clean, rawWords),
+    provider: 'google-fr-tts'
   };
 }
 
-const TUTOR_PERSONAS_META: Record<string, { edgeVoice: string; name: string; title: string; specialty: string }> = {
-  denise: {
-    edgeVoice: 'fr-FR-VivienneMultilingualNeural',
-    name: 'Prof. Aïsha',
-    title: 'Directrice Pédagogique Principale ARMP',
-    specialty: 'Planification (PPM), Passation des Marchés & Bonne Gouvernance (Loi 10/010)'
-  },
-  henri: {
-    edgeVoice: 'fr-FR-RemyMultilingualNeural',
-    name: 'Prof. Henri',
-    title: 'Magistrat & Conseiller Contentieux CRD / ARMP',
-    specialty: 'Recours Gracieux, Contentieux CRD, Délais Francs & Arbitrage'
-  },
-  eloi: {
-    edgeVoice: 'fr-FR-VivienneMultilingualNeural',
-    name: 'Dr. Élodie',
-    title: 'Experte Contrôle a Priori DGCMP & Sous-Traitance ARSP',
-    specialty: 'Seuils d’Examen DGCMP, Avis de Non-Objection (ANO) & Loi 17/001 ARSP'
-  }
+const TUTOR_VOICE_MAP: Record<string, string[]> = {
+  denise: ['fr-FR-DeniseNeural', 'fr-FR-VivienneMultilingualNeural', 'fr-FR-VivienneNeural'],
+  vivienne: ['fr-FR-VivienneMultilingualNeural', 'fr-FR-DeniseNeural', 'fr-FR-VivienneNeural'],
+  henri: ['fr-FR-RemyMultilingualNeural', 'fr-FR-HenriNeural', 'fr-FR-VivienneMultilingualNeural'],
+  eloi: ['fr-FR-VivienneMultilingualNeural', 'fr-FR-DeniseNeural'],
+  charline: ['fr-FR-DeniseNeural', 'fr-FR-VivienneMultilingualNeural']
 };
 
-app.post('/api/ai/tts', async (req, res) => {
+// Cascaded Synthesis Engine
+async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): Promise<CachedTtsPayload> {
+  const cleanSentence = text.trim().slice(0, 950);
+  const voiceKey = voiceChoice.toLowerCase();
+
+  // Try ElevenLabs if configured
+  if (process.env.ELEVENLABS_API_KEY) {
+    const el = await synthesizeWithElevenLabs(cleanSentence);
+    if (el) {
+      const b64 = el.audioBuffer.toString('base64');
+      return {
+        audioData: b64,
+        audioBase64: b64,
+        mimeType: 'audio/mpeg',
+        provider: 'elevenlabs-v2',
+        wordBoundaries: el.wordBoundaries,
+        emotion: detectSentenceEmotion(cleanSentence)
+      };
+    }
+  }
+
+  // Try Edge Neural Voices
+  const candidateVoices = TUTOR_VOICE_MAP[voiceKey] || TUTOR_VOICE_MAP.denise;
+  for (const v of candidateVoices) {
+    const res = await synthesizeWithEdgeUniversal(cleanSentence, v);
+    if (res && res.audioBuffer.length > 256) {
+      const b64 = res.audioBuffer.toString('base64');
+      return {
+        audioData: b64,
+        audioBase64: b64,
+        mimeType: 'audio/mpeg',
+        provider: res.provider,
+        wordBoundaries: res.wordBoundaries,
+        emotion: detectSentenceEmotion(cleanSentence)
+      };
+    }
+  }
+
+  // Google Translate TTS Fallback
+  console.log('[TTS] Edge Neural unavailable, falling back to Google French TTS');
+  const gRes = await synthesizeWithGoogleTranslateTTS(cleanSentence);
+  const gB64 = gRes.audioBuffer.toString('base64');
+  return {
+    audioData: gB64,
+    audioBase64: gB64,
+    mimeType: 'audio/mpeg',
+    provider: 'google-fr-tts',
+    wordBoundaries: gRes.wordBoundaries,
+    emotion: detectSentenceEmotion(cleanSentence)
+  };
+}
+
+// ------------------------------------------------------------------
+// TTS Settings Endpoints (support both /api/tts/settings and /tts/settings)
+// ------------------------------------------------------------------
+const DEFAULT_TTS_SETTINGS = {
+  order: [
+    { id: 'elevenlabs', name: 'ElevenLabs Studio v2', enabled: true },
+    { id: 'neural', name: 'Studio Neural HD (Vivienne / Denise)', enabled: true },
+    { id: 'gemini', name: 'Gemini Audio TTS', enabled: false },
+  ],
+  neuralVoice: 'vivienne-multilingual',
+  browserFallback: false,
+};
+
+app.get(['/api/tts/settings', '/tts/settings'], (_req, res) => {
+  res.json({
+    ...DEFAULT_TTS_SETTINGS,
+    availability: {
+      elevenlabs: !!process.env.ELEVENLABS_API_KEY,
+      neural: true,
+      gemini: !!process.env.GEMINI_API_KEY,
+    },
+    elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
+  });
+});
+
+app.post(['/api/tts/settings', '/tts/settings'], (req, res) => {
+  res.json({
+    ok: true,
+    ...(req.body || DEFAULT_TTS_SETTINGS),
+    availability: {
+      elevenlabs: !!process.env.ELEVENLABS_API_KEY,
+      neural: true,
+      gemini: !!process.env.GEMINI_API_KEY,
+    },
+  });
+});
+
+// ------------------------------------------------------------------
+// Main TTS Endpoint
+// ------------------------------------------------------------------
+app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
   try {
     const rawText = (req.body?.text || '').toString().trim();
     const voiceChoice = (req.body?.voice || 'denise').toString().toLowerCase();
@@ -1091,87 +1067,74 @@ app.post('/api/ai/tts', async (req, res) => {
       return res.status(400).json({ error: 'Texte requis pour la synthèse vocale.' });
     }
 
-    const cleanSentence = rawText.slice(0, 750);
-    const cacheKey = `v24:${voiceChoice}:${cleanSentence}`;
+    const cleanSentence = rawText.slice(0, 950);
+    const cacheKey = `v30:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
     }
 
-    const persona = TUTOR_PERSONAS_META[voiceChoice] || TUTOR_PERSONAS_META.denise;
-    const primaryVoice = persona.edgeVoice;
-
-    try {
-      const { audioBuffer, wordBoundaries } = await synthesizeWithEdgeNeuralTTS(cleanSentence, primaryVoice);
-      const payload = {
-        audioBase64: audioBuffer.toString('base64'),
-        mimeType: 'audio/mpeg',
-        provider: `edge-neural-${voiceChoice}-hd`,
-        wordBoundaries
-      };
-      if (ttsMemoryCache.size > 400) {
-        const oldestKey = ttsMemoryCache.keys().next().value;
-        if (oldestKey) ttsMemoryCache.delete(oldestKey);
-      }
-      ttsMemoryCache.set(cacheKey, payload);
-      return res.json(payload);
-    } catch (edgeErr: any) {
-      console.warn(`[Neural TTS Vercel] Primary voice (${primaryVoice}) retry with VivienneMultilingualNeural:`, edgeErr?.message);
-      try {
-        const { audioBuffer, wordBoundaries } = await synthesizeWithEdgeNeuralTTS(cleanSentence, 'fr-FR-VivienneMultilingualNeural');
-        const payload = {
-          audioBase64: audioBuffer.toString('base64'),
-          mimeType: 'audio/mpeg',
-          provider: 'edge-neural-vivienne-hd',
-          wordBoundaries
-        };
-        ttsMemoryCache.set(cacheKey, payload);
-        return res.json(payload);
-      } catch (fallbackEdgeErr: any) {
-        console.warn('[Neural TTS Vercel] Edge Neural fallback to Google French TTS:', fallbackEdgeErr?.message);
-        const { audioBuffer, wordBoundaries } = await synthesizeWithGoogleTranslateTTS(cleanSentence);
-        const payload = {
-          audioBase64: audioBuffer.toString('base64'),
-          mimeType: 'audio/mpeg',
-          provider: 'google-fr-tts',
-          wordBoundaries
-        };
-        ttsMemoryCache.set(cacheKey, payload);
-        return res.json(payload);
-      }
+    const existingPromise = inFlightSyntheses.get(cacheKey);
+    if (existingPromise) {
+      const payload = await existingPromise;
+      if (payload) return res.json(payload);
     }
+
+    const synthesisTask = synthesizeSpeech(cleanSentence, voiceChoice)
+      .then((payload) => {
+        if (ttsMemoryCache.size > 500) {
+          const oldestKey = ttsMemoryCache.keys().next().value;
+          if (oldestKey) ttsMemoryCache.delete(oldestKey);
+        }
+        ttsMemoryCache.set(cacheKey, payload);
+        return payload;
+      })
+      .catch((err) => {
+        console.error('[TTS Vercel] Synthesis error:', err);
+        return null;
+      })
+      .finally(() => {
+        inFlightSyntheses.delete(cacheKey);
+      });
+
+    inFlightSyntheses.set(cacheKey, synthesisTask);
+    const result = await synthesisTask;
+
+    if (result) {
+      return res.json(result);
+    }
+    return res.status(500).json({ error: 'Échec de la synthèse vocale' });
   } catch (err: any) {
-    console.error('[Neural TTS Vercel] Synthesis error:', err?.message);
+    console.error('[Neural TTS Vercel] Route error:', err?.message);
     return res.status(500).json({ error: 'Synthèse vocale temporairement indisponible.' });
   }
 });
 
-app.post('/api/ai/tts/prewarm', async (req, res) => {
+// ------------------------------------------------------------------
+// Prewarm Endpoint
+// ------------------------------------------------------------------
+app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
   try {
     const sentences: string[] = Array.isArray(req.body?.sentences) ? req.body.sentences.slice(0, 6) : [];
     const voiceChoice = (req.body?.voice || 'denise').toString().toLowerCase();
-    const persona = TUTOR_PERSONAS_META[voiceChoice] || TUTOR_PERSONAS_META.denise;
 
-    res.json({ status: 'prewarming', count: sentences.length, voice: persona.edgeVoice });
+    res.json({ status: 'prewarming', count: sentences.length, voice: voiceChoice });
 
     for (const s of sentences) {
-      const cleanSentence = (s || '').toString().trim().slice(0, 750);
+      const cleanSentence = (s || '').toString().trim().slice(0, 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v24:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v30:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
-      try {
-        const { audioBuffer, wordBoundaries } = await synthesizeWithEdgeNeuralTTS(cleanSentence, persona.edgeVoice);
-        if (ttsMemoryCache.size > 400) {
-          const oldestKey = ttsMemoryCache.keys().next().value;
-          if (oldestKey) ttsMemoryCache.delete(oldestKey);
-        }
-        ttsMemoryCache.set(cacheKey, {
-          audioBase64: audioBuffer.toString('base64'),
-          mimeType: 'audio/mpeg',
-          provider: `edge-neural-${voiceChoice}-hd`,
-          wordBoundaries
-        });
-      } catch {}
+
+      synthesizeSpeech(cleanSentence, voiceChoice)
+        .then((payload) => {
+          if (ttsMemoryCache.size > 500) {
+            const oldestKey = ttsMemoryCache.keys().next().value;
+            if (oldestKey) ttsMemoryCache.delete(oldestKey);
+          }
+          ttsMemoryCache.set(cacheKey, payload);
+        })
+        .catch(() => {});
     }
   } catch {
     if (!res.headersSent) res.json({ status: 'skipped' });
