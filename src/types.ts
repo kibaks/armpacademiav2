@@ -11,6 +11,9 @@ export type UserRole =
   | 'dfat_admin' 
   | 'formateur';
 
+/** Niveaux du test de validation de niveau — administrés par l'Espace Administrateur */
+export type NiveauValidation = 'Initiation' | 'Approfondi' | 'Avancé';
+
 export interface RecentReadingItem {
   courseId: string;
   courseCode: string;
@@ -44,6 +47,10 @@ export interface UserProfile {
   coverUrl?: string;
   level: 'Non évalué' | 'Débutant' | 'Intermédiaire' | 'Avancé' | 'Expert';
   placementScore?: number;
+  /** Dernier niveau validé par un test de validation de niveau (admin) */
+  niveauValidation?: NiveauValidation;
+  /** Niveaux validés par module (niveau « Approfondi selon les modules ») */
+  niveauxModules?: Record<string, NiveauValidation>;
   completedModulesCount: number;
   certificationsCount: number;
   offlineDownloads: string[]; // module ids stored offline

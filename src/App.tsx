@@ -19,6 +19,7 @@ import {
 import { 
   AnalyticsDashboard 
 } from './components/AnalyticsDashboard';
+import { AdminSpace } from './components/AdminSpace';
 import { 
   LegalDocsViewer 
 } from './components/LegalDocsViewer';
@@ -54,7 +55,8 @@ import {
   UserProfile, 
   CourseModule, 
   TrainingRequest,
-  CgpmpAccountCreationRequest
+  CgpmpAccountCreationRequest,
+  NiveauValidation
 } from './types';
 import { DEMO_PROFILES, INITIAL_TRAINING_REQUESTS } from './data/initialData';
 import { COURSES_DATA } from './data/coursesData';
@@ -532,18 +534,34 @@ export default function App() {
   };
 
   // Update Profile Level after Placement Quiz
-  const handleUpdateProfileLevel = async (level: UserProfile['level'], score: number) => {
+  const handleUpdateProfileLevel = async (
+    level: UserProfile['level'],
+    score: number,
+    validation?: { niveau: NiveauValidation; moduleCode?: string }
+  ) => {
     const updated: UserProfile = {
       ...currentProfile,
       level,
-      placementScore: score
+      placementScore: score,
+      ...(validation
+        ? {
+            niveauValidation: validation.niveau,
+            niveauxModules: validation.moduleCode
+              ? { ...(currentProfile.niveauxModules || {}), [validation.moduleCode]: validation.niveau }
+              : currentProfile.niveauxModules,
+          }
+        : {}),
     };
     setProfiles((prev) => ({
       ...prev,
       [currentRole]: updated
     }));
     localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    showToast(`Niveau profil actualisé : ${level} (${score}%)`);
+    showToast(
+      validation
+        ? `🎓 Niveau validé : ${validation.niveau}${validation.moduleCode ? ` (${validation.moduleCode})` : ''} — score ${score}%`
+        : `Niveau profil actualisé : ${level} (${score}%)`
+    );
     try {
       await syncUserProfileToFirestore(updated);
     } catch (e) {
@@ -1218,6 +1236,39 @@ export default function App() {
               <div className="flex flex-wrap justify-center gap-3">
                 <button onClick={() => setActiveTab('catalogue')} className="px-5 py-2.5 rounded-xl bg-[#0C3B7C] text-white font-bold text-sm">Voir le catalogue</button>
                 <button onClick={() => { setAuthModalMode('login'); setIsAuthModalOpen(true); }} className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 font-bold text-sm">Se connecter comme formateur</button>
+              </div>
+              <p className="text-xs text-slate-500">RDC • Loi 10/010 • DFAT — Kinshasa, Gombe</p>
+            </div>
+          )
+        )}
+
+        {/* TAB 7: ESPACE ADMINISTRATEUR — bascule Espace/Dashboard, formateurs & tests de niveau */}
+        {activeTab === 'admin' && (
+          isAuthenticated && currentProfile.role === 'dfat_admin' ? (
+            <div className="px-4 sm:px-6 lg:px-8 py-8">
+              <AdminSpace
+                currentProfile={currentProfile}
+                courses={courses}
+                requests={requests}
+                allProfiles={profiles}
+                onShowToast={showToast}
+              />
+            </div>
+          ) : (
+            <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
+              <div className="w-16 h-16 rounded-2xl bg-blue-100 dark:bg-blue-950 text-blue-600 flex items-center justify-center mx-auto">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold tracking-tight">Espace Administrateur — Accès réservé</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Cet espace est réservé aux <strong>administrateurs DFAT</strong>. Votre profil actuel est{' '}
+                  <strong>{currentProfile.roleTitle}</strong> ({currentProfile.institution}).<br />
+                  Connectez-vous avec un compte administrateur ou basculez votre rôle en « Admin DFAT » depuis votre profil.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button onClick={() => { setAuthModalMode('login'); setIsAuthModalOpen(true); }} className="px-5 py-2.5 rounded-xl bg-[#0C3B7C] text-white font-bold text-sm">Se connecter</button>
               </div>
               <p className="text-xs text-slate-500">RDC • Loi 10/010 • DFAT — Kinshasa, Gombe</p>
             </div>

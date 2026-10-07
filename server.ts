@@ -1647,6 +1647,174 @@ app.post('/api/tts/settings', (req, res) => {
   }
 });
 
+// ============================================================================
+// TESTS DE VALIDATION DE NIVEAU — créés par l'Espace Administrateur
+// Niveaux : Initiation · Approfondi (selon les modules) · Avancé
+// Persistance dans level-tests.json (gitignoré), contrat simple GET/POST.
+// ============================================================================
+const LEVEL_TESTS_FILE = path.join(process.cwd(), 'level-tests.json');
+type NiveauValidationServer = 'Initiation' | 'Approfondi' | 'Avancé';
+const NIVEAUX_VALIDATION: NiveauValidationServer[] = ['Initiation', 'Approfondi', 'Avancé'];
+
+interface LevelTestQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  answer: number;
+  legalRef?: string;
+}
+interface LevelTest {
+  id: string;
+  title: string;
+  level: NiveauValidationServer;
+  moduleCode?: string;
+  passPct: number;
+  active: boolean;
+  questions: LevelTestQuestion[];
+  createdAt: string;
+}
+interface LevelTestAttempt {
+  id: string;
+  testId: string;
+  testTitle: string;
+  level: NiveauValidationServer;
+  moduleCode?: string;
+  profileId: string;
+  candidateName: string;
+  score: number;
+  passed: boolean;
+  date: string;
+}
+interface LevelTestDoc {
+  tests: LevelTest[];
+  attempts: LevelTestAttempt[];
+}
+
+function normalizeLevelTests(raw: any): LevelTestDoc {
+  const tests: LevelTest[] = [];
+  if (Array.isArray(raw?.tests)) {
+    for (const t of raw.tests) {
+      if (!t || typeof t.id !== 'string' || !t.id) continue;
+      const level = (NIVEAUX_VALIDATION as string[]).includes(t?.level)
+        ? (t.level as NiveauValidationServer)
+        : 'Initiation';
+      const questions: LevelTestQuestion[] = [];
+      if (Array.isArray(t?.questions)) {
+        t.questions.forEach((q: any, i: number) => {
+          if (!q || typeof q.question !== 'string' || !q.question.trim()) return;
+          const options = Array.isArray(q.options)
+            ? q.options.filter((o: any) => typeof o === 'string' && o.trim()).map((o: string) => o.trim())
+            : [];
+          if (options.length < 2) return;
+          const answer = Number.isInteger(q.answer) && q.answer >= 0 && q.answer < options.length ? q.answer : 0;
+          questions.push({
+            id: typeof q.id === 'string' && q.id ? q.id : `${t.id}-q${i + 1}`,
+            question: q.question.trim(),
+            options,
+            answer,
+            legalRef: typeof q.legalRef === 'string' ? q.legalRef : undefined,
+          });
+        });
+      }
+      if (questions.length === 0) continue;
+      const passPct =
+        typeof t.passPct === 'number' && t.passPct >= 1 && t.passPct <= 100 ? Math.round(t.passPct) : 60;
+      tests.push({
+        id: t.id,
+        title: typeof t.title === 'string' && t.title.trim() ? t.title.trim() : `Test ${level}`,
+        level,
+        moduleCode: typeof t.moduleCode === 'string' && t.moduleCode ? t.moduleCode : undefined,
+        passPct,
+        active: t.active !== false,
+        questions,
+        createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
+      });
+    }
+  }
+  const attempts: LevelTestAttempt[] = [];
+  if (Array.isArray(raw?.attempts)) {
+    for (const a of raw.attempts.slice(0, 500)) {
+      if (!a || typeof a.testId !== 'string' || typeof a.score !== 'number') continue;
+      attempts.push({
+        id: typeof a.id === 'string' && a.id ? a.id : `att-${attempts.length + 1}`,
+        testId: a.testId,
+        testTitle: typeof a.testTitle === 'string' ? a.testTitle : '',
+        level: (NIVEAUX_VALIDATION as string[]).includes(a?.level)
+          ? (a.level as NiveauValidationServer)
+          : 'Initiation',
+        moduleCode: typeof a.moduleCode === 'string' ? a.moduleCode : undefined,
+        profileId: typeof a.profileId === 'string' ? a.profileId : '',
+        candidateName: typeof a.candidateName === 'string' ? a.candidateName.slice(0, 120) : 'Anonyme',
+        score: Math.max(0, Math.min(100, Math.round(a.score))),
+        passed: !!a.passed,
+        date: typeof a.date === 'string' ? a.date : new Date().toISOString(),
+      });
+    }
+  }
+  return { tests, attempts };
+}
+
+function loadLevelTests(): LevelTestDoc {
+  try {
+    if (!fs.existsSync(LEVEL_TESTS_FILE)) return { tests: [], attempts: [] };
+    return normalizeLevelTests(JSON.parse(fs.readFileSync(LEVEL_TESTS_FILE, 'utf8')));
+  } catch {
+    return { tests: [], attempts: [] };
+  }
+}
+
+function saveLevelTests(doc: LevelTestDoc): void {
+  fs.writeFileSync(LEVEL_TESTS_FILE, JSON.stringify(doc, null, 2));
+}
+
+app.get('/api/level-tests', (_req, res) => {
+  res.json(loadLevelTests());
+});
+
+// Sauvegarde complète (création / édition / activation / suppression par l'admin)
+app.post('/api/level-tests', (req, res) => {
+  try {
+    const doc = normalizeLevelTests(req.body || {});
+    saveLevelTests(doc);
+    console.log(`[Level Tests] sauvegardé: ${doc.tests.length} test(s), ${doc.attempts.length} tentative(s)`);
+    res.json({ ok: true, ...doc });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || 'erreur inconnue' });
+  }
+});
+
+// Enregistrement du résultat d'un candidat (passage du test)
+app.post('/api/level-tests/attempt', (req, res) => {
+  try {
+    const b = req.body || {};
+    if (typeof b.testId !== 'string' || typeof b.score !== 'number') {
+      return res.status(400).json({ ok: false, error: 'testId et score requis' });
+    }
+    const doc = loadLevelTests();
+    const test = doc.tests.find((t) => t.id === b.testId);
+    if (!test) return res.status(404).json({ ok: false, error: 'test introuvable' });
+    const attempt: LevelTestAttempt = {
+      id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      testId: test.id,
+      testTitle: test.title,
+      level: test.level,
+      moduleCode: test.moduleCode,
+      profileId: typeof b.profileId === 'string' ? b.profileId : '',
+      candidateName: typeof b.candidateName === 'string' ? b.candidateName.slice(0, 120) : 'Anonyme',
+      score: Math.max(0, Math.min(100, Math.round(b.score))),
+      passed: !!b.passed,
+      date: new Date().toISOString(),
+    };
+    doc.attempts.unshift(attempt);
+    if (doc.attempts.length > 500) doc.attempts.length = 500;
+    saveLevelTests(doc);
+    console.log(`[Level Tests] tentative: ${attempt.candidateName} → ${test.title} = ${attempt.score}% ${attempt.passed ? '✓' : '✗'}`);
+    res.json({ ok: true, attempt, tests: doc.tests, attempts: doc.attempts });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || 'erreur inconnue' });
+  }
+});
+
 // Unified server-side synthesis with caching & in-flight deduplication (100% Vivienne HD)
 async function getOrSynthesizeTtsPayload(
   rawText: string,

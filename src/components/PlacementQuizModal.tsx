@@ -10,15 +10,33 @@ import {
   Loader2,
   Scale
 } from 'lucide-react';
-import { UserProfile, DiagnosticResult } from '../types';
+import { UserProfile, DiagnosticResult, NiveauValidation } from '../types';
 
 interface PlacementQuizModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentProfile: UserProfile;
-  onUpdateProfileLevel: (level: UserProfile['level'], score: number) => void;
+  onUpdateProfileLevel: (
+    level: UserProfile['level'],
+    score: number,
+    validation?: { niveau: NiveauValidation; moduleCode?: string }
+  ) => void;
   onSelectModule: (moduleId: string) => void;
 }
+
+interface AdminLevelTest {
+  id: string;
+  title: string;
+  level: NiveauValidation;
+  moduleCode?: string;
+  passPct: number;
+  active: boolean;
+  questions: { id: string; question: string; options: string[]; answer: number; legalRef?: string }[];
+}
+
+/** Correspondance profil (chaîne historique) → niveaux du test de validation */
+const mapValidationToProfileLevel = (n: NiveauValidation): UserProfile['level'] =>
+  n === 'Initiation' ? 'Débutant' : n === 'Approfondi' ? 'Intermédiaire' : 'Avancé';
 
 interface Question {
   id: number;
@@ -41,11 +59,53 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
+  const [adminTests, setAdminTests] = useState<AdminLevelTest[]>([]);
+  const [mode, setMode] = useState<'select' | 'quiz'>('quiz');
+  const [activeTest, setActiveTest] = useState<AdminLevelTest | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchQuestions();
+    setResult(null);
+    setCurrentQIndex(0);
+    setSelectedAnswers({});
+    setActiveTest(null);
+    (async () => {
+      try {
+        const res = await fetch('/api/level-tests');
+        const data = await res.json();
+        const actives: AdminLevelTest[] = (data.tests || []).filter(
+          (t: AdminLevelTest) => t && t.active && Array.isArray(t.questions) && t.questions.length > 0
+        );
+        setAdminTests(actives);
+        if (actives.length > 0) {
+          setMode('select');
+          setQuestions([]);
+          return;
+        }
+      } catch {
+        /* serveur absent → quiz IA */
+      }
+      setMode('quiz');
+      fetchQuestions();
+    })();
   }, [isOpen]);
+
+  const startAdminTest = (test: AdminLevelTest) => {
+    setActiveTest(test);
+    setQuestions(
+      test.questions.map((q, i) => ({
+        id: i,
+        question: q.question,
+        options: q.options,
+        correctIndex: Math.min(q.answer, q.options.length - 1),
+        legalRef: q.legalRef || test.moduleCode || 'Test de niveau',
+      }))
+    );
+    setCurrentQIndex(0);
+    setSelectedAnswers({});
+    setResult(null);
+    setMode('quiz');
+  };
 
   const fetchQuestions = async () => {
     setIsLoading(true);
@@ -91,6 +151,49 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
   const submitEvaluation = async () => {
     setIsSubmitting(true);
     try {
+      // ---- Test de validation de niveau (créé par l'administrateur) ----
+      if (activeTest) {
+        const correct = questions.filter((q) => selectedAnswers[q.id] === q.correctIndex).length;
+        const score = Math.round((correct / Math.max(1, questions.length)) * 100);
+        const passed = score >= activeTest.passPct;
+        try {
+          await fetch('/api/level-tests/attempt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              testId: activeTest.id,
+              profileId: currentProfile.id,
+              candidateName: currentProfile.name,
+              score,
+              passed,
+            }),
+          });
+        } catch {
+          /* enregistrement best-effort */
+        }
+        const wrong = questions.filter((q) => selectedAnswers[q.id] !== q.correctIndex);
+        const diagnostic = passed
+          ? `Validation ${activeTest.level} RÉUSSIE : ${correct}/${questions.length} bonnes réponses, seuil de ${activeTest.passPct}%. ${activeTest.level === 'Approfondi' && activeTest.moduleCode ? `Module ${activeTest.moduleCode} — niveau Approfondi validé selon les modules.` : `Niveau ${activeTest.level} validé.`}`
+          : `Validation ${activeTest.level} non atteinte : ${correct}/${questions.length} (${score}%) pour un seuil de ${activeTest.passPct}%. Révisez le module concerné puis repassez le test.`;
+        setResult({
+          score,
+          level: activeTest.level,
+          diagnostic,
+          strengths: questions
+            .filter((q) => selectedAnswers[q.id] === q.correctIndex)
+            .slice(0, 5)
+            .map((q) => q.question),
+          weaknesses: wrong.slice(0, 5).map((q) => q.question),
+          recommendedModuleIds: [],
+        });
+        onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level), score, {
+          niveau: activeTest.level,
+          moduleCode: activeTest.moduleCode,
+        });
+        return;
+      }
+
+      // ---- Quiz IA de positionnement (comportement historique) ----
       const payloadAnswers = questions.map((q) => {
         const picked = selectedAnswers[q.id];
         return {
@@ -125,6 +228,12 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
     setResult(null);
     setCurrentQIndex(0);
     setSelectedAnswers({});
+    setActiveTest(null);
+    if (adminTests.length > 0) {
+      setMode('select');
+      setQuestions([]);
+      return;
+    }
     fetchQuestions();
   };
 
@@ -139,9 +248,13 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
               <Sparkles className="w-5 h-5 text-amber-200" />
             </div>
             <div>
-              <h3 className="font-bold text-base sm:text-lg">Test de Positionnement Automatisé par IA</h3>
+              <h3 className="font-bold text-base sm:text-lg">
+                {activeTest || mode === 'select' ? 'Test de Validation de Niveau' : 'Test de Positionnement Automatisé par IA'}
+              </h3>
               <p className="text-xs text-amber-100">
-                Évaluation initiale & Calibration de parcours • Loi n° 10/010 du 27 avril 2010
+                {activeTest
+                  ? `${activeTest.title} • Niveau ${activeTest.level}`
+                  : 'Évaluation initiale & Calibration de parcours • Loi n° 10/010 du 27 avril 2010'}
               </p>
             </div>
           </div>
@@ -273,6 +386,59 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
                 </button>
               </div>
             </div>
+          ) : mode === 'select' && !result ? (
+            /* Sélection d'un test de validation de niveau (créé par l'admin) */
+            <div className="space-y-4 animate-in fade-in">
+              <div className="text-center space-y-1.5">
+                <div className="inline-flex p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400">
+                  <Award className="w-8 h-8" />
+                </div>
+                <h4 className="text-lg font-extrabold text-slate-900 dark:text-white">Tests de validation de niveau</h4>
+                <p className="text-xs text-slate-500">
+                  Choisissez le test proposé par l'administration — <strong>Initiation</strong>,{' '}
+                  <strong>Approfondi (selon les modules)</strong> ou <strong>Avancé</strong>.
+                </p>
+              </div>
+              <div className="space-y-2.5">
+                {adminTests.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => startAdminTest(t)}
+                    className="w-full p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 dark:hover:border-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition flex items-center justify-between gap-3 text-left"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{t.title}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {t.questions.length} question{t.questions.length > 1 ? 's' : ''} • seuil {t.passPct}%
+                        {t.moduleCode ? ` • module ${t.moduleCode}` : ''}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-wide ${
+                        t.level === 'Initiation'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300/60'
+                          : t.level === 'Approfondi'
+                          ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-400/50'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-400/50'
+                      }`}
+                    >
+                      {t.level}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-700 text-center">
+                <button
+                  onClick={() => {
+                    setMode('quiz');
+                    fetchQuestions();
+                  }}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Ou passer le Quiz IA de positionnement →
+                </button>
+              </div>
+            </div>
           ) : currentQ ? (
             /* Active Question View */
             <div className="space-y-5">
@@ -352,7 +518,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
                     </>
                   ) : currentQIndex === questions.length - 1 ? (
                     <>
-                      <span>Calculer mon Diagnostic IA</span>
+                      <span>{activeTest ? 'Soumettre le test de niveau' : 'Calculer mon Diagnostic IA'}</span>
                       <Sparkles className="w-4 h-4" />
                     </>
                   ) : (
