@@ -64,7 +64,7 @@ import {
   Search,
   Filter
 } from 'lucide-react';
-import { UserProfile, UserRole, CourseModule, TrainingRequest, SocialPost } from '../types';
+import { UserProfile, UserRole, CourseModule, TrainingRequest, SocialPost, NiveauValidation } from '../types';
 import { firebaseResetPassword, savePostToFirestore, fetchPostsFromFirestore, deletePostFromFirestore } from '../firebase';
 import { ArmpLogo } from './ArmpLogo';
 import { VIRTUAL_TUTORS } from './AITutorModal';
@@ -140,6 +140,37 @@ interface PostItem {
     timeAgo: string;
   }[];
 }
+
+/** Pastilles des niveaux validés — test de validation de niveau (Initiation / Approfondi selon modules / Avancé) */
+const NiveauValideChips: React.FC<{ profile: UserProfile }> = ({ profile }) => {
+  const n = profile.niveauValidation;
+  const mods = Object.entries(profile.niveauxModules || {});
+  if (!n && mods.length === 0) return null;
+  const cls = (l: string) =>
+    l === 'Initiation'
+      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300/60'
+      : l === 'Approfondi'
+      ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-400/50'
+      : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-400/50';
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap align-middle">
+      {n && (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-wide ${cls(n)}`}>
+          ✓ {n}
+        </span>
+      )}
+      {mods.map(([code, lvl]) => (
+        <span
+          key={code}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-black ${cls(lvl)}`}
+          title={`Niveau ${lvl} validé sur le module ${code}`}
+        >
+          {code} · {lvl}
+        </span>
+      ))}
+    </span>
+  );
+};
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({
   currentProfile,
@@ -1724,6 +1755,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                       {currentProfile.level} • Score moyen : {avgScoreDisplay}% • +{monthlyDeltaPct}% ce trimestre
+                      {' '}
+                      <NiveauValideChips profile={currentProfile} />
                     </div>
                   </div>
                 </div>
@@ -2359,6 +2392,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     <span>Niveau certifié : </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
                       {currentProfile.level} ({currentProfile.placementScore || 85}%)
+                    </span>
+                    <span className="block mt-1.5">
+                      <NiveauValideChips profile={currentProfile} />
                     </span>
                   </div>
                 </div>
@@ -3051,6 +3087,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               </h4>
               <div className="space-y-2 text-slate-700 dark:text-slate-300">
                 <div><span className="text-slate-400">Niveau actuel :</span> <strong className="text-purple-600">{currentProfile.level}</strong></div>
+                {(currentProfile.niveauValidation || (currentProfile.niveauxModules && Object.keys(currentProfile.niveauxModules).length > 0)) && (
+                  <div className="flex items-start gap-2"><span className="text-slate-400 shrink-0">Niveaux validés :</span> <NiveauValideChips profile={currentProfile} /></div>
+                )}
                 <div><span className="text-slate-400">Score moyen évalué :</span> <strong>{avgScoreDisplay}%</strong></div>
                 <div><span className="text-slate-400">Modules validés :</span> <strong>{completedCount} / {totalCourses} modules ({overallProgress}%)</strong></div>
                 <div><span className="text-slate-400">Attestations délivrées :</span> <strong>{certificationsCount} diplômes</strong></div>
