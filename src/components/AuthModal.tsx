@@ -575,8 +575,8 @@ export const ROLE_CREATION_CONFIG: Record<UserRole, RoleCreationFieldSpec> = {
 
 export interface LoginProfileSpec {
   role: UserRole;
-  category: 'Autorité Contractante' | 'Opérateurs Économiques' | 'Sociétés Civiles' | 'Indépendant';
-  categoryKey: 'ac' | 'oe' | 'sc' | 'ind';
+  category: 'Autorité Contractante' | 'Opérateurs Économiques' | 'Sociétés Civiles' | 'Indépendant' | 'Administration & Supervision';
+  categoryKey: 'ac' | 'oe' | 'sc' | 'ind' | 'admin';
   categoryIcon: string;
   title: string;
   subLabel: string;
@@ -686,6 +686,22 @@ export const LOGIN_PROFILES_CATALOG: LoginProfileSpec[] = [
     matricule: 'IND-RDC-2026-881',
     description: 'Consultant individuel, auditeur indépendant ou expert en passation des marchés intervenant en appui technique.',
     privileges: ['Prestations intellectuelles (TDR)', 'Certification d’expertise ARMP', 'Études de cas & jurisprudence']
+  },
+  {
+    role: 'super_admin',
+    category: 'Administration & Supervision',
+    categoryKey: 'admin',
+    categoryIcon: '🔰',
+    title: 'Super Administrateur',
+    subLabel: 'Backend • Comptes, Rôles & Paramétrage global',
+    shortTag: 'Super Admin',
+    demoName: 'Dieudonné KASONGO',
+    demoInstitution: 'Administration centrale ARMP',
+    demoEmail: 'superadmin@academia.cd',
+    demoPass: 'SUPA-2026-ROOT',
+    matricule: 'SUPA-001',
+    description: 'Compte de supervision qui gère tout en backend : création et rôles de tous les comptes, activation des tests de niveau, paramétrage de la chaîne vocale et observatoire décisionnel.',
+    privileges: ['Création & rôles de tous les comptes', 'Activation des tests de niveau', 'Supervision backend & dashboard']
   }
 ];
 
@@ -1892,6 +1908,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                       <div className="text-[9px] text-emerald-300 font-mono truncate">{spec.demoEmail}</div>
                                     </div>
                                     <ArrowRight className="w-3.5 h-3.5 text-emerald-400 shrink-0 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* 5. Administration & Supervision */}
+                            <div className="space-y-1 pt-1">
+                              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                🔰 Administration & Supervision
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {LOGIN_PROFILES_CATALOG.filter((p) => p.categoryKey === 'admin').map((spec) => (
+                                  <button
+                                    key={spec.role}
+                                    type="button"
+                                    onClick={() => handleDirectLoginForRole(spec.role)}
+                                    className="p-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/40 hover:border-sky-300 text-left transition flex items-center justify-between group cursor-pointer"
+                                  >
+                                    <div className="min-w-0 pr-1">
+                                      <div className="text-xs font-bold text-white truncate">{spec.title}</div>
+                                      <div className="text-[10px] text-slate-300 truncate">{spec.demoName}</div>
+                                      <div className="text-[9px] text-sky-300 font-mono truncate">{spec.demoEmail}</div>
+                                    </div>
+                                    <ArrowRight className="w-3.5 h-3.5 text-sky-300 shrink-0 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition" />
                                   </button>
                                 ))}
                               </div>

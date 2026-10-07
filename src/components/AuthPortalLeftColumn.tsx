@@ -426,6 +426,14 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
               >
                 🎓 Formateur
               </button>
+              <button
+                type="button"
+                onClick={() => onSelectDemo('super_admin')}
+                className="px-2 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 font-bold cursor-pointer"
+                title="Compte démo Super Administrateur — gère tout en backend"
+              >
+                🔰 Super Admin
+              </button>
             </div>
 
             <div className="pt-2 border-t border-white/10">
