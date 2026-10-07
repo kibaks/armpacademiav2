@@ -61,6 +61,10 @@ interface AuthPortalLeftColumnProps {
   onSelectDemo: (role: UserRole, customProfile?: UserProfile) => void;
   onPrefillLoginFromEmail: (email: string, password: string, name: string) => void;
   onOpenArmpValidationView: () => void;
+  /** Entrée distincte : formulaire de création de compte (profils ordinaires, sans CGPMP) */
+  onEnterCreation?: () => void;
+  /** Entrée distincte : formulaire de demande de création de compte CGPMP (validation ARMP) */
+  onEnterDemande?: () => void;
 }
 
 export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
@@ -95,7 +99,9 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
   cgpmpAccountRequests,
   onSelectDemo,
   onPrefillLoginFromEmail,
-  onOpenArmpValidationView
+  onOpenArmpValidationView,
+  onEnterCreation,
+  onEnterDemande
 }) => {
   const isCgpmp = selectedRole === 'cgpmp_member';
   const pendingRequests = cgpmpAccountRequests.filter(
@@ -148,15 +154,35 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
 
           <button
             type="button"
-            onClick={() => onChangeMode?.('register')}
+            onClick={() => {
+              onChangeMode?.('register');
+              onEnterCreation?.();
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
-              mode === 'register'
+              mode === 'register' && !isCgpmp
                 ? 'bg-amber-400 text-slate-950 shadow-xs'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>Créer Compte / CGPMP</span>
+            <span>Créer Compte</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onChangeMode?.('register');
+              onEnterDemande?.();
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+              mode === 'register' && isCgpmp
+                ? 'bg-blue-500 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="Formulaire de demande de création de compte CGPMP — soumis à validation ARMP"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Demande CGPMP</span>
           </button>
 
           <button

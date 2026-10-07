@@ -206,6 +206,7 @@ export default function App() {
 
   // Authentication Mode (login vs register vs forgot_password)
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'forgot_password'>('login');
+  const [authModalEntry, setAuthModalEntry] = useState<'creation' | 'demande'>('creation');
 
   // Profile Facebook SubTab state
   const [profileSubTab, setProfileSubTab] = useState<'suivi' | 'publications' | 'apropos' | 'forum' | 'photos' | 'securite' | 'notifications'>('suivi');
@@ -883,6 +884,7 @@ export default function App() {
           setIsAuthModalOpen(true);
         }}
         onOpenRegister={() => {
+          setAuthModalEntry('creation');
           setAuthModalMode('register');
           setIsAuthModalOpen(true);
         }}
@@ -1174,6 +1176,7 @@ export default function App() {
               onApproveCgpmpAccountRequest={handleApproveCgpmpAccountRequest}
               onRejectCgpmpAccountRequest={handleRejectCgpmpAccountRequest}
               onOpenCgpmpRegistrationPage={() => {
+                setAuthModalEntry('demande');
                 setCurrentRole('cgpmp_member');
                 setAuthModalMode('register');
                 setIsAuthModalOpen(true);
@@ -1350,6 +1353,7 @@ export default function App() {
         }}
         initialRole={currentRole}
         initialMode={authModalMode}
+        initialRegisterEntry={authModalEntry}
         allProfiles={profiles}
         pendingCourseTitle={
           pendingCourseForAuth?.title ||

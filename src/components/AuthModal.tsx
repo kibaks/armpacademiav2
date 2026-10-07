@@ -665,6 +665,8 @@ interface AuthModalProps {
   onDemoLogin?: (role: UserRole) => void;
   initialRole?: UserRole;
   initialMode?: 'login' | 'register' | 'forgot_password';
+  /** Distinction des entrées : formulaire de création de compte vs demande CGPMP */
+  initialRegisterEntry?: 'creation' | 'demande';
   pendingCourseTitle?: string | null;
   targetCourseTitle?: string | null;
   onShowToast?: (msg: string) => void;
@@ -681,6 +683,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onDemoLogin,
   initialRole = 'cgpmp_member',
   initialMode = 'login',
+  initialRegisterEntry = 'creation',
   pendingCourseTitle,
   targetCourseTitle,
   onShowToast,
@@ -858,6 +861,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSubmittedCgpmpRequest(null);
       setLocalCgpmpRequests(getLocalCgpmpAccountRequests());
       applyDynamicFieldsForRole(initialRole);
+      // Entrées distinctes : « Créer Compte » n'ouvre jamais le parcours CGPMP,
+      // « Demande CGPMP » force le profil CGPMP (validation ARMP).
+      if (initialMode === 'register') {
+        if (initialRegisterEntry === 'demande') {
+          applyDynamicFieldsForRole('cgpmp_member');
+        } else if (initialRole === 'cgpmp_member') {
+          applyDynamicFieldsForRole('ac_agent');
+        }
+      }
 
       const matchedLogin = LOGIN_PROFILES_CATALOG.find((p) => p.role === initialRole) || LOGIN_PROFILES_CATALOG[0];
       setSelectedLoginRole(matchedLogin.role);
@@ -1409,6 +1421,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             setMode(nextMode);
             setStepError(null);
           }}
+          onEnterCreation={() => {
+            // Création de compte : jamais de profil CGPMP (formulaire distinct de la demande)
+            if (selectedRole === 'cgpmp_member') handleSelectRoleInRegistration('ac_agent');
+            setRegisterStep(1);
+          }}
+          onEnterDemande={() => {
+            // Demande CGPMP : parcours dédié (acte de création, membres, validation ARMP)
+            handleSelectRoleInRegistration('cgpmp_member');
+            setRegisterStep(1);
+          }}
           onClose={canClose ? onClose : undefined}
           selectedRole={selectedRole}
           roleLabel={activeRoleConfig.label}
@@ -1463,7 +1485,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {mode === 'login'
                   ? 'Authentification Officielle ARMP & CGPMP'
                   : mode === 'register'
-                  ? `Création de Compte (${activeRoleConfig.label}) — Étape ${registerStep}/${isCgpmp ? 5 : 4}`
+                  ? (isCgpmp
+                      ? `Demande de Compte CGPMP (${activeRoleConfig.label}) — Étape ${registerStep}/5`
+                      : `Création de Compte (${activeRoleConfig.label}) — Étape ${registerStep}/4`)
                   : mode === 'armp_admin'
                   ? 'Validation Administrative ARMP & Envoi Mail CGPMP'
                   : 'Réinitialisation des accès'}
@@ -1864,7 +1888,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 🏛️ Autorité Contractante
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {(['cgpmp_member', 'ac_agent'] as UserRole[]).map((rKey) => {
+                                {((isCgpmp ? ['cgpmp_member'] : ['ac_agent']) as UserRole[]).map((rKey) => {
                                   const cfg = ROLE_CREATION_CONFIG[rKey];
                                   const isSelected = selectedRole === rKey;
                                   return (
