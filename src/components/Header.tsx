@@ -98,6 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
       case 'armp_agent': return <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />;
       case 'dgcmp_agent': return <Eye className="w-3.5 h-3.5 text-purple-400" />;
       case 'dfat_admin': return <Crown className="w-3.5 h-3.5 text-amber-500" />;
+      case 'super_admin': return <Crown className="w-3.5 h-3.5 text-blue-400" />;
       case 'formateur': return <GraduationCap className="w-3.5 h-3.5 text-amber-400" />;
       default: return <User className="w-3.5 h-3.5" />;
     }
@@ -441,7 +442,7 @@ export const Header: React.FC<HeaderProps> = ({
                             <ChevronRight className="w-4 h-4 text-slate-400" />
                           </button>
                         )}
-                        {currentProfile.role === 'dfat_admin' && (
+                        {(currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') && (
                           <button onClick={() => { setActiveTab('admin'); setIsProfileMenuOpen(false); }} className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 flex items-center justify-between transition">
                             <div className="flex items-center space-x-2.5">
                               <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-700 dark:text-blue-300"><ShieldCheck className="w-4 h-4" /></div>
@@ -631,7 +632,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <button onClick={() => { setActiveTab('textes'); setIsMobileMenuOpen(false); }} className="w-full p-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center space-x-2"><FileText className="w-4 h-4 text-emerald-600" /><span>Bibliothèque</span></button>
               <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className="w-full p-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center space-x-2"><BarChart3 className="w-4 h-4 text-amber-600" /><span>Observatoire</span></button>
-              {currentProfile.role === 'dfat_admin' && (
+              {(currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') && (
                 <button onClick={() => { setActiveTab('admin'); setIsMobileMenuOpen(false); }} className="w-full p-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center space-x-2"><ShieldCheck className="w-4 h-4 text-blue-600" /><span>Espace Administrateur</span></button>
               )}
               {onOpenTuteur && <button onClick={() => { onOpenTuteur(); setIsMobileMenuOpen(false); }} className="w-full p-2.5 rounded-xl text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 flex items-center space-x-2"><Bot className="w-4 h-4 text-amber-600" /><span>Tuteur IA</span></button>}

@@ -174,6 +174,27 @@ export const PROFILE_PEDAGOGICAL_CONFIGS: Record<UserRole, ProfilePedagogicalCon
       'Traçabilité et authenticité des scores d’examen QCM avant délivrance du certificat officiel'
     ]
   },
+  super_admin: {
+    role: 'super_admin',
+    shortLabel: 'Super Administration (Backend)',
+    catalogFilterLabel: 'Tous les catalogues',
+    legalBasisFocus: 'Règles internes de la plateforme, politique des comptes & habilitations, charte pédagogique ACADEMIA',
+    mandateSummary: 'Gérer l’ensemble des comptes et rôles en backend, superviser le paramétrage global et garantir l’intégrité de la plateforme.',
+    defaultCategoryLock: 'Tous',
+    defaultLevelLock: 'Tous',
+    defaultStatusLock: 'Tous',
+    operationalPosture: 'Direction Systèmes & Comptes — Plateforme ACADEMIA ITECH',
+    documentaryDeliverables: [
+      'Registre des comptes, des rôles et des changements d’habilitation',
+      'Journaux de supervision backend et rapports d’incident',
+      'Grilles de validation des tests de niveau et décisions d’activation'
+    ],
+    auditAndRiskFocus: [
+      'Séparation des devoirs entre super administrateurs, administration DFAT et formateurs',
+      'Traçabilité des créations, suppressions et changements de rôle de compte',
+      'Disponibilité de la chaîne vocale et intégrité des données de progression'
+    ]
+  },
   ac_agent: {
     role: 'ac_agent',
     shortLabel: 'Autre Agent (Autorité Contractante)',

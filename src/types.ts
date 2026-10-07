@@ -9,6 +9,7 @@ export type UserRole =
   | 'dgcmp_agent' 
   | 'particulier' 
   | 'dfat_admin' 
+  | 'super_admin'    // Super Administrateur — gère TOUS les comptes & le backend
   | 'formateur';
 
 /** Niveaux du test de validation de niveau — administrés par l'Espace Administrateur */

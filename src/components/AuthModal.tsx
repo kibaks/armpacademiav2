@@ -95,7 +95,7 @@ interface RoleCreationFieldSpec {
   defaultSecondaryId: string;
 }
 
-const ROLE_CREATION_CONFIG: Record<UserRole, RoleCreationFieldSpec> = {
+export const ROLE_CREATION_CONFIG: Record<UserRole, RoleCreationFieldSpec> = {
   pme: {
     label: '🏢 PME & Sous-Traitant',
     shortDesc: 'Loi 17/001 • ARSP • Contenu Local 51%',
@@ -372,6 +372,39 @@ const ROLE_CREATION_CONFIG: Record<UserRole, RoleCreationFieldSpec> = {
     secondaryIdLabel: 'N° Acte d’Habilitation DFAT *',
     secondaryIdPlaceholder: 'ACT-DFAT-2026-01',
     defaultSecondaryId: 'ACT-DFAT-2026-01'
+  },
+  super_admin: {
+    label: '🔰 Super Administrateur',
+    shortDesc: 'Gestion backend de tous les comptes & rôles',
+    badgeText: 'Privilèges Super Admin chargés',
+    institutionLabel: 'Structure de tutelle *',
+    institutionPlaceholder: 'Administration centrale / Direction générale',
+    institutionPresets: [
+      'Administration centrale ARMP',
+      'Direction Générale — Plateforme ACADEMIA ITECH'
+    ],
+    subCategoryLabel: 'Périmètre de gestion *',
+    subCategoryOptions: [
+      'Comptes, rôles & habilitations',
+      'Paramétrage global de la plateforme',
+      'Supervision pédagogique & contenus'
+    ],
+    specialtyLabel: 'Niveau d’accréditation *',
+    specialtyOptions: [
+      'Super Administrateur technique',
+      'Super Administrateur délégué'
+    ],
+    roleTitleLabel: 'Fonction *',
+    roleTitlePlaceholder: 'Super Administrateur / Directeur de plateforme',
+    roleTitlePresets: [
+      'Super Administrateur Plateforme ACADEMIA',
+      'Directeur Systèmes & Comptes'
+    ],
+    matriculeLabel: 'N° Matricule Super Admin *',
+    matriculePlaceholder: 'SUPA-001',
+    secondaryIdLabel: 'N° Arrêté / Décision *',
+    secondaryIdPlaceholder: 'ARR-SUPA-2026-01',
+    defaultSecondaryId: 'ARR-SUPA-2026-01'
   },
   ac_agent: {
     label: '🏛️ Autorité Contractante — Autre Agent',

@@ -1247,13 +1247,14 @@ export default function App() {
 
         {/* TAB 7: ESPACE ADMINISTRATEUR — bascule Espace/Dashboard, formateurs & tests de niveau */}
         {activeTab === 'admin' && (
-          isAuthenticated && currentProfile.role === 'dfat_admin' ? (
+          isAuthenticated && (currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') ? (
             <div className="px-4 sm:px-6 lg:px-8 py-8">
               <AdminSpace
                 currentProfile={currentProfile}
                 courses={courses}
                 requests={requests}
                 allProfiles={profiles}
+                firestoreProfiles={firestoreProfiles}
                 onShowToast={showToast}
               />
             </div>
@@ -1265,9 +1266,9 @@ export default function App() {
               <div className="space-y-2">
                 <h3 className="text-xl font-bold tracking-tight">Espace Administrateur — Accès réservé</h3>
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Cet espace est réservé aux <strong>administrateurs DFAT</strong>. Votre profil actuel est{' '}
+                  Cet espace est réservé aux <strong>super administrateurs & administration DFAT</strong>. Votre profil actuel est{' '}
                   <strong>{currentProfile.roleTitle}</strong> ({currentProfile.institution}).<br />
-                  Connectez-vous avec un compte administrateur ou basculez votre rôle en « Admin DFAT » depuis votre profil.
+                  Connectez-vous avec un compte super administrateur ou basculez votre rôle en « 🔰 Super Administrateur » / « 🏛️ Administration DFAT » depuis votre profil.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-3">

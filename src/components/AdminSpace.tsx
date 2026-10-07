@@ -15,10 +15,12 @@ import {
   Layers,
   Award,
   ArrowLeft,
+  KeyRound,
   X,
 } from 'lucide-react';
-import { UserProfile, CourseModule, TrainingRequest, NiveauValidation } from '../types';
+import { UserProfile, CourseModule, TrainingRequest, NiveauValidation, UserRole } from '../types';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { ROLE_CREATION_CONFIG } from './AuthModal';
 import { saveProfileToLocalRegistry } from '../firebase';
 
 interface LevelTestQuestion {
@@ -60,6 +62,7 @@ interface AdminSpaceProps {
   courses: CourseModule[];
   requests: TrainingRequest[];
   allProfiles: Record<string, UserProfile>;
+  firestoreProfiles?: UserProfile[];
   onShowToast?: (msg: string) => void;
 }
 
@@ -105,10 +108,17 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   courses,
   requests,
   allProfiles,
+  firestoreProfiles,
   onShowToast,
 }) => {
   const [view, setView] = useState<'espace' | 'dashboard'>('espace');
-  const [section, setSection] = useState<'formateurs' | 'tests'>('formateurs');
+  const [section, setSection] = useState<'comptes' | 'formateurs' | 'tests'>('comptes');
+
+  // ---------- Tous les comptes (backend) ----------
+  const [accounts, setAccounts] = useState<UserProfile[]>([]);
+  const [acctSearch, setAcctSearch] = useState('');
+  const [acctRoleFilter, setAcctRoleFilter] = useState<string>('tous');
+  const [roleLocked, setRoleLocked] = useState(false);
 
   // ---------- Formateurs ----------
   const [trainers, setTrainers] = useState<UserProfile[]>([]);
@@ -120,6 +130,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     institution: 'ARMP-RDC',
     phone: '+243 ',
     roleTitle: 'Formateur',
+    role: 'formateur' as UserRole,
   });
   const [createdCred, setCreatedCred] = useState<{ email: string; password: string } | null>(null);
 
@@ -131,6 +142,29 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const [testError, setTestError] = useState<string | null>(null);
 
   const toast = (m: string) => onShowToast?.(m);
+
+  const readRegistry = (): Record<string, UserProfile> => {
+    try {
+      const raw = localStorage.getItem(REGISTRY_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const refreshAccounts = useCallback(() => {
+    const merged = new Map<string, UserProfile>();
+    Object.values(readRegistry()).forEach((p) => {
+      if (p && p.id) merged.set(p.id, p);
+    });
+    Object.values(allProfiles || {}).forEach((p) => {
+      if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
+    });
+    (firestoreProfiles || []).forEach((p) => {
+      if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
+    });
+    setAccounts(Array.from(merged.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+  }, [allProfiles, firestoreProfiles]);
 
   const refreshTrainers = useCallback(() => {
     const merged = new Map<string, UserProfile>();
@@ -166,10 +200,27 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
   useEffect(() => {
     refreshTrainers();
+    refreshAccounts();
     refreshTests();
-  }, [refreshTrainers, refreshTests]);
+  }, [refreshTrainers, refreshAccounts, refreshTests]);
 
-  // ---------- Création formateur ----------
+  // ---------- Création de compte (rôle libre ou formateur verrouillé) ----------
+  const openCreateForm = (role: UserRole, locked: boolean) => {
+    setRoleLocked(locked);
+    setTrainerForm({
+      prenom: '',
+      nom: '',
+      email: '',
+      institution: 'ARMP-RDC',
+      phone: '+243 ',
+      roleTitle: role === 'formateur' ? 'Formateur' : '',
+      role,
+    });
+    setCreatedCred(null);
+    setShowTrainerForm(true);
+    setSection(locked ? 'formateurs' : 'comptes');
+  };
+
   const handleCreateTrainer = (e: React.FormEvent) => {
     e.preventDefault();
     const prenom = trainerForm.prenom.trim();
@@ -178,14 +229,15 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     if (!prenom || !nom) return toast('⚠️ Prénom et nom requis');
     if (!email.includes('@')) return toast('⚠️ Adresse email invalide');
     const password = genPassword();
+    const role = trainerForm.role || 'formateur';
     const profile: UserProfile = {
-      id: `TRN-${Date.now().toString(36).toUpperCase()}`,
+      id: `${role === 'formateur' ? 'TRN' : 'ACC'}-${Date.now().toString(36).toUpperCase()}`,
       name: `${prenom} ${nom}`,
       nom: nom.toUpperCase(),
       prenom,
       email,
-      role: 'formateur',
-      roleTitle: trainerForm.roleTitle.trim() || 'Formateur',
+      role,
+      roleTitle: trainerForm.roleTitle.trim() || ROLE_CREATION_CONFIG[role]?.label || 'Compte',
       institution: trainerForm.institution.trim() || 'ARMP-RDC',
       phone: trainerForm.phone.trim(),
       avatarUrl: '',
@@ -201,10 +253,32 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       /* quota */
     }
     refreshTrainers();
+    refreshAccounts();
     setCreatedCred({ email, password });
     setShowTrainerForm(false);
-    setTrainerForm({ prenom: '', nom: '', email: '', institution: 'ARMP-RDC', phone: '+243 ', roleTitle: 'Formateur' });
-    toast(`✅ Formateur ${profile.name} créé — identifiants générés`);
+    toast(`✅ Compte ${ROLE_CREATION_CONFIG[role]?.label || role} créé pour ${profile.name}`);
+  };
+
+  const handleChangeRole = (acc: UserProfile, role: UserRole) => {
+    try {
+      const map = readRegistry();
+      const uidKey = `uid:${acc.id}`;
+      const emailKey = acc.email ? `email:${acc.email.trim().toLowerCase()}` : '';
+      if (map[uidKey]) map[uidKey] = { ...map[uidKey], role };
+      if (emailKey && map[emailKey]) map[emailKey] = { ...map[emailKey], role };
+      localStorage.setItem(REGISTRY_KEY, JSON.stringify(map));
+    } catch {
+      /* quota */
+    }
+    refreshAccounts();
+    refreshTrainers();
+    toast(`🔁 ${acc.name} → ${ROLE_CREATION_CONFIG[role]?.label || role}`);
+  };
+
+  const handleResetPassword = (acc: UserProfile) => {
+    const password = genPassword();
+    setCreatedCred({ email: acc.email, password });
+    toast(`🔑 Nouveau mot de passe généré pour ${acc.name}`);
   };
 
   const handleDeleteTrainer = (t: UserProfile) => {
@@ -219,7 +293,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       /* ignore */
     }
     refreshTrainers();
-    toast(`🗑 Formateur ${t.name} supprimé`);
+    refreshAccounts();
+    toast(`🗑 Compte ${t.name} supprimé`);
   };
 
   const copyCred = async (text: string) => {
@@ -340,6 +415,90 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const passedAttempts = doc.attempts.filter((a) => a.passed).length;
 
   // ================================================================
+  const accountFormNode = (
+            <form onSubmit={handleCreateTrainer} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nouveau compte — créer n’importe quel profil</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Prénom *</span>
+                  <input
+                    value={trainerForm.prenom}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, prenom: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                    placeholder="Jean"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Nom *</span>
+                  <input
+                    value={trainerForm.nom}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, nom: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                    placeholder="KABASELE"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Email *</span>
+                  <input
+                    type="email"
+                    value={trainerForm.email}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                    placeholder="formateur@armp.cd"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Institution</span>
+                  <input
+                    value={trainerForm.institution}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, institution: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                    placeholder="ARMP-RDC"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Téléphone</span>
+                  <input
+                    value={trainerForm.phone}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                    placeholder="+243 81 000 0000"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Fonction</span>
+                  <input
+                    value={trainerForm.roleTitle}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, roleTitle: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                    placeholder="Ex. Formateur, Super Administrateur…"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Rôle du compte *</span>
+                  <select
+                    value={trainerForm.role}
+                    disabled={roleLocked}
+                    onChange={(e) => setTrainerForm({ ...trainerForm, role: e.target.value as UserRole })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold disabled:opacity-60"
+                  >
+                    {Object.entries(ROLE_CREATION_CONFIG).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Créer le compte</span>
+                </button>
+              </div>
+            </form>
+  );
   // VUE : DASHBOARD (bascule)
   // ================================================================
   if (view === 'dashboard') {
@@ -426,7 +585,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       <div className="flex space-x-2 border-b border-slate-200 dark:border-slate-800">
         {(
           [
-            { id: 'formateurs', label: 'Formateurs', icon: <Users className="w-4 h-4" /> },
+            { id: 'comptes', label: 'Comptes & Rôles', icon: <Users className="w-4 h-4" /> },
+            { id: 'formateurs', label: 'Formateurs', icon: <GraduationCap className="w-4 h-4" /> },
             { id: 'tests', label: 'Tests de validation de niveau', icon: <Award className="w-4 h-4" /> },
           ] as const
         ).map((s) => (
@@ -448,6 +608,150 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       {/* ============================================================ */}
       {/* SECTION FORMATEURS                                           */}
       {/* ============================================================ */}
+      {/* ============================================================ */}
+      {/* SECTION COMPTES & RÔLES — backend, gérée par le super admin  */}
+      {/* ============================================================ */}
+      {section === 'comptes' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Tous les comptes de la plateforme</h3>
+              <p className="text-xs text-slate-500">
+                Le super administrateur crée, change les rôles et supprime n'importe quel compte (formateurs, agents, administration…).
+              </p>
+            </div>
+            <button
+              onClick={() => (showTrainerForm && !roleLocked ? setShowTrainerForm(false) : openCreateForm('particulier', false))}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
+            >
+              {showTrainerForm && !roleLocked ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              <span>{showTrainerForm && !roleLocked ? 'Fermer' : 'Créer un compte'}</span>
+            </button>
+          </div>
+
+          {createdCred && !roleLocked && (
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-1.5">
+              <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Compte créé — identifiants à transmettre :</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono">{createdCred.email}</code>
+                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold">{createdCred.password}</code>
+                <button
+                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.password}`)}
+                  className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
+                  title="Copier"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button onClick={() => setCreatedCred(null)} className="text-[11px] font-bold text-emerald-700 underline">
+                  J'ai noté — fermer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showTrainerForm && !roleLocked && accountFormNode}
+
+          {/* Filtres */}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={acctSearch}
+              onChange={(e) => setAcctSearch(e.target.value)}
+              placeholder="Rechercher — nom, email ou institution…"
+              className="flex-1 min-w-[14rem] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+            />
+            <select
+              value={acctRoleFilter}
+              onChange={(e) => setAcctRoleFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold"
+            >
+              <option value="tous">Tous les rôles</option>
+              {Object.entries(ROLE_CREATION_CONFIG).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+            <span className="text-[11px] font-bold text-slate-400">
+              {accounts.filter((a) => {
+                const q = acctSearch.trim().toLowerCase();
+                const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
+                const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
+                return okQ && okR;
+              }).length} / {accounts.length} comptes
+            </span>
+          </div>
+
+          {/* Liste de tous les comptes */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+            {accounts.filter((a) => {
+              const q = acctSearch.trim().toLowerCase();
+              const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
+              const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
+              return okQ && okR;
+            }).length === 0 ? (
+              <div className="p-8 text-center space-y-2">
+                <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-500">Aucun compte trouvé</p>
+                <p className="text-xs text-slate-400">Créez un compte ou élargissez la recherche.</p>
+              </div>
+            ) : (
+              accounts.filter((a) => {
+                const q = acctSearch.trim().toLowerCase();
+                const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
+                const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
+                return okQ && okR;
+              }).map((a) => (
+                <div key={a.id || a.email} className="p-3 flex flex-wrap items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-black text-xs shrink-0">
+                    {(a.name || '?').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{a.name}</p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {a.email} • {a.institution || '—'} {a.roleTitle ? `• ${a.roleTitle}` : ''}
+                    </p>
+                  </div>
+                  <select
+                    value={a.role}
+                    onChange={(e) => handleChangeRole(a, e.target.value as UserRole)}
+                    className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-bold shrink-0"
+                    title="Changer le rôle"
+                  >
+                    {Object.entries(ROLE_CREATION_CONFIG).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <button
+                      onClick={() => copyCred(a.email || '')}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                      title="Copier l'email"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleResetPassword(a)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50"
+                      title="Générer un nouveau mot de passe"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTrainer(a)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+                      title="Supprimer le compte"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {section === 'formateurs' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -456,11 +760,11 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               <p className="text-xs text-slate-500">L'administrateur crée les formateurs — ils se connectent avec l'email + mot de passe généré.</p>
             </div>
             <button
-              onClick={() => setShowTrainerForm((v) => !v)}
+              onClick={() => (showTrainerForm && roleLocked ? setShowTrainerForm(false) : openCreateForm('formateur', true))}
               className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-amber-400 text-slate-950 text-xs font-black hover:bg-amber-300 transition shadow-sm"
             >
-              {showTrainerForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              <span>{showTrainerForm ? 'Fermer' : 'Créer un formateur'}</span>
+              {showTrainerForm && roleLocked ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              <span>{showTrainerForm && roleLocked ? 'Fermer' : 'Créer un formateur'}</span>
             </button>
           </div>
 
@@ -487,77 +791,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             </div>
           )}
 
-          {showTrainerForm && (
-            <form onSubmit={handleCreateTrainer} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nouveau formateur</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Prénom *</span>
-                  <input
-                    value={trainerForm.prenom}
-                    onChange={(e) => setTrainerForm({ ...trainerForm, prenom: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                    placeholder="Jean"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Nom *</span>
-                  <input
-                    value={trainerForm.nom}
-                    onChange={(e) => setTrainerForm({ ...trainerForm, nom: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                    placeholder="KABASELE"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Email *</span>
-                  <input
-                    type="email"
-                    value={trainerForm.email}
-                    onChange={(e) => setTrainerForm({ ...trainerForm, email: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                    placeholder="formateur@armp.cd"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Institution</span>
-                  <input
-                    value={trainerForm.institution}
-                    onChange={(e) => setTrainerForm({ ...trainerForm, institution: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                    placeholder="ARMP-RDC"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Téléphone</span>
-                  <input
-                    value={trainerForm.phone}
-                    onChange={(e) => setTrainerForm({ ...trainerForm, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                    placeholder="+243 81 000 0000"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Fonction</span>
-                  <input
-                    value={trainerForm.roleTitle}
-                    onChange={(e) => setTrainerForm({ ...trainerForm, roleTitle: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-                    placeholder="Formateur"
-                  />
-                </label>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition shadow-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Créer le compte formateur</span>
-                </button>
-              </div>
-            </form>
-          )}
+          {showTrainerForm && accountFormNode}
 
           {/* Liste */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
