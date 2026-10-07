@@ -172,6 +172,19 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Accueil</span>
             </button>
 
+            {isAuthenticated && currentProfile.role === 'super_admin' ? (
+              /* Super admin : Catalogue remplacé par l'Espace Administrateur */
+              <button
+                onClick={() => setActiveTab('admin')}
+                className={`px-4 py-2.5 rounded-xl text-sm transition flex items-center space-x-2 ${activeTab === 'admin' ? (isDarkMode ? 'bg-blue-600 text-white font-extrabold shadow-sm' : 'bg-[#0C3B7C] text-white font-extrabold shadow-md shadow-blue-900/20') : (isDarkMode ? 'text-slate-200 hover:text-white hover:bg-slate-800 font-bold' : 'text-slate-800 hover:text-[#0C3B7C] hover:bg-slate-200/80 font-bold')}`}
+              >
+                <ShieldCheck className={`w-4 h-4 ${activeTab === 'admin' ? 'text-white' : isDarkMode ? 'text-slate-400' : 'text-slate-700'}`} />
+                <span>Espace Administrateur</span>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ${activeTab === 'admin' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-blue-300 border border-blue-500/40' : 'bg-blue-100 text-blue-800 border border-blue-300/60'}`}>
+                  Super Admin
+                </span>
+              </button>
+            ) : (
             <button
               onClick={() => setActiveTab('catalogue')}
               className={`px-4 py-2.5 rounded-xl text-sm transition flex items-center space-x-2 ${activeTab === 'catalogue' || activeTab === 'cours' ? (isDarkMode ? 'bg-blue-600 text-white font-extrabold shadow-sm' : 'bg-[#0C3B7C] text-white font-extrabold shadow-md shadow-blue-900/20') : (isDarkMode ? 'text-slate-200 hover:text-white hover:bg-slate-800 font-bold' : 'text-slate-800 hover:text-[#0C3B7C] hover:bg-slate-200/80 font-bold')}`}
@@ -180,6 +193,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Catalogue</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${activeTab === 'catalogue' || activeTab === 'cours' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-800'}`}>{totalCourses}</span>
             </button>
+            )}
 
             {/* Demander visible en déconnecté ou si rôle ≠ formateur ; Espace Formateur uniquement si connecté + formateur */}
             {(!isAuthenticated || currentProfile.role !== 'formateur') && (
@@ -588,10 +602,16 @@ export const Header: React.FC<HeaderProps> = ({
           <button onClick={() => { setActiveTab('accueil'); setIsMobileMenuOpen(false); }} className={`w-full p-3 rounded-xl text-xs font-bold flex items-center space-x-2.5 ${activeTab === 'accueil' ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-[#0C3B7C] text-white') : (isDarkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-900 hover:bg-slate-100')}`}>
             <Home className="w-4 h-4" /><span>Accueil</span>
           </button>
+          {isAuthenticated && currentProfile.role === 'super_admin' ? (
+            <button onClick={() => { setActiveTab('admin'); setIsMobileMenuOpen(false); }} className={`w-full p-3 rounded-xl text-xs font-bold flex items-center space-x-2.5 ${activeTab === 'admin' ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-[#0C3B7C] text-white') : (isDarkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-900 hover:bg-slate-100')}`}>
+              <ShieldCheck className="w-4 h-4" /><span>Espace Administrateur</span>
+            </button>
+          ) : (
           <button onClick={() => { setActiveTab('catalogue'); setIsMobileMenuOpen(false); }} className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between ${activeTab === 'catalogue' || activeTab === 'cours' ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-[#0C3B7C] text-white') : (isDarkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-900 hover:bg-slate-100')}`}>
             <div className="flex items-center space-x-2.5"><BookOpen className="w-4 h-4" /><span>Catalogue des formations</span></div>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold font-mono ${activeTab === 'catalogue' || activeTab === 'cours' ? 'bg-white/20 text-white' : isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-900'}`}>{totalCourses}</span>
           </button>
+          )}
           {(!isAuthenticated || currentProfile.role !== 'formateur') && (
             <button onClick={() => { setActiveTab('demander'); setIsMobileMenuOpen(false); }} className={`w-full p-3 rounded-xl text-xs font-bold flex items-center space-x-2.5 ${activeTab === 'demander' || activeTab === 'workflow' ? (isDarkMode ? 'bg-blue-600 text-white' : 'bg-[#0C3B7C] text-white') : (isDarkMode ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-900 hover:bg-slate-100')}`}>
               <Send className="w-4 h-4" /><span>Demander</span>
