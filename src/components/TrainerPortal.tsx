@@ -55,7 +55,8 @@ import {
   TrendingUp,
   Send,
   AlertCircle,
-  Filter
+  Filter,
+  Target
 } from 'lucide-react';
 import { CourseModule, UserProfile, UserRole, LessonFormat, StudioVideoItem, QuizBankItem } from '../types';
 import { ArmpLogo } from './ArmpLogo';
@@ -577,12 +578,21 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     setTimeout(() => setTrainerNotice(null), 4000);
   };
 
-  // Calculs dynamiques des KPIs Formateur
+  // Calculs dynamiques et réels des KPIs Formateur
   const profilesArray = allProfiles ? Object.values(allProfiles) : [currentProfile];
-  const learnerProfiles = profilesArray.filter(p => p.role !== 'formateur');
-  const totalStudentsCount = courses.reduce((acc, c) => acc + (c.studentsCount || 0), 0) + profilesArray.length * 12;
+  const learnerProfiles = profilesArray.filter(p => p.role !== 'formateur' && p.role !== 'dfat_admin');
+  const totalStudentsCount = learnerProfiles.length;
+  const certifiedLearnersCount = learnerProfiles.filter(p => 
+    (p.certificationsCount || 0) > 0 || 
+    (p.completedCourseIds && p.completedCourseIds.length > 0) || 
+    (p.completedModulesCount && p.completedModulesCount > 0)
+  ).length;
+  const activeLearnersCount = learnerProfiles.filter(p => 
+    (p.courseProgress && Object.values(p.courseProgress).some(v => typeof v === 'number' && v > 0)) || 
+    (p.completedModulesCount && p.completedModulesCount > 0)
+  ).length;
   const avgSuccessRate = Number(
-    (profilesArray.reduce((acc, p) => acc + (p.placementScore || 85), 0) / Math.max(1, profilesArray.length)).toFixed(1)
+    (learnerProfiles.reduce((acc, p) => acc + (p.placementScore || 80), 0) / Math.max(1, learnerProfiles.length)).toFixed(1)
   );
 
   // Calcul du suivi par apprenant pour un cours donné
@@ -983,8 +993,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             </div>
           </div>
 
-          {/* Profile Identity — contenu dans container */}
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-4 pt-0 relative">
+          {/* Profile Identity — pleine largeur comme pour le profil */}
+          <div className="w-full px-4 sm:px-8 lg:px-12 pb-4 pt-0 relative">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 -mt-14 sm:-mt-20 mb-4">
               <div className="flex flex-col sm:flex-row sm:items-end space-y-3 sm:space-y-0 sm:space-x-5">
                 <div className="relative group mx-auto sm:mx-0">
@@ -1017,18 +1027,61 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                       {currentProfile.institution}
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-xl font-medium pt-1 italic">
-                    « Studio pédagogique — {currentProfile.roleTitle}. Conception de cours Loi 10/010, encadrement CGPMP et attestation DFAT. »
-                  </p>
-                  <div className="flex items-center justify-center sm:justify-start space-x-2 pt-2 text-[11px] text-slate-600 dark:text-slate-300">
-                    <div className="flex -space-x-2 overflow-hidden">
-                      <img className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-slate-900 object-cover" src={imgMentor} alt="Apprenant" />
-                      <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 ring-2 ring-white dark:ring-slate-900 text-[9px] font-bold text-white">AR</div>
-                      <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 ring-2 ring-white dark:ring-slate-900 text-[9px] font-bold text-white">+1k</div>
+                  {/* Statistiques Réelles et Nombre Réel d'Apprenants */}
+                  <div className="space-y-2 pt-2">
+                    {/* Pills de KPIs réels pour le Formateur */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left">
+                      <div className="px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200/70 dark:border-blue-900/50">
+                        <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                          <Users className="w-3 h-3 text-blue-600" /> Apprenants
+                        </div>
+                        <div className="text-sm font-black text-slate-900 dark:text-white">
+                          {learnerProfiles.length} <span className="text-[10px] font-semibold text-slate-500">inscrits</span>
+                        </div>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/70 dark:border-emerald-900/50">
+                        <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                          <Award className="w-3 h-3" /> Certifiés
+                        </div>
+                        <div className="text-sm font-black text-emerald-700 dark:text-emerald-300">
+                          {certifiedLearnersCount} <span className="text-[10px] font-semibold text-emerald-600/70">validés</span>
+                        </div>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200/70 dark:border-indigo-900/50">
+                        <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                          <BookOpen className="w-3 h-3" /> Formations
+                        </div>
+                        <div className="text-sm font-black text-indigo-700 dark:text-indigo-300">
+                          {courses.length} <span className="text-[10px] font-semibold text-indigo-500">cours</span>
+                        </div>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200/70 dark:border-amber-900/50">
+                        <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                          <Target className="w-3 h-3" /> Réussite
+                        </div>
+                        <div className="text-sm font-black text-amber-700 dark:text-amber-300">
+                          {avgSuccessRate}% <span className="text-[10px] font-semibold text-amber-600/70">moyenne</span>
+                        </div>
+                      </div>
                     </div>
-                    <span className="font-semibold">
-                      <strong className="text-slate-800 dark:text-slate-200">1 842 apprenants</strong> • 91,4% réussite • 38h Masterclass
-                    </span>
+
+                    {/* Vrais apprenants connectés (Avatars réels) */}
+                    <div className="flex items-center justify-center sm:justify-start space-x-2 text-[11px] text-slate-600 dark:text-slate-300 pt-0.5">
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {learnerProfiles.slice(0, 5).map((l) => (
+                          <img
+                            key={l.id}
+                            className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-slate-900 object-cover"
+                            src={l.avatarUrl}
+                            alt={l.name}
+                            title={`${l.name} (${l.institution})`}
+                          />
+                        ))}
+                      </div>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        <strong className="text-slate-900 dark:text-white font-black">{learnerProfiles.length} apprenants réels</strong> inscrits dans vos promotions
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1109,9 +1162,9 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. BODY CONTENT — DANS CONTAINER                                          */}
+      {/* 2. BODY CONTENT — PLEINE LARGEUR COMME POUR LE PROFIL                     */}
       {/* ========================================================================= */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      <div className="w-full px-4 sm:px-8 lg:px-12 pt-8 pb-12">
         
         {/* ======================================================================= */}
         {/* TAB 1: TRAINER DASHBOARD OVERVIEW                                       */}
@@ -1142,9 +1195,9 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono">
-                  {totalStudentsCount.toLocaleString('fr-FR')}
+                  {learnerProfiles.length}
                 </div>
-                <span className="text-[11px] text-purple-500 font-bold block">{profilesArray.length} profils actifs synchronisés</span>
+                <span className="text-[11px] text-purple-500 font-bold block">{learnerProfiles.length} apprenants réels enregistrés</span>
               </div>
 
               <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-1`}>
@@ -1157,7 +1210,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono">
                   {avgSuccessRate}%
                 </div>
-                <span className="text-[11px] text-slate-400 block">Moyenne certifiante ARMP</span>
+                <span className="text-[11px] text-emerald-500 font-bold block">{certifiedLearnersCount} certifiés sur {learnerProfiles.length}</span>
               </div>
 
               <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-1`}>
@@ -1220,7 +1273,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                             {c.title}
                           </h4>
                           <span className="text-[10px] text-slate-500 block">
-                            {c.lessons.length} chapitres • {c.studentsCount} inscrits • Note {c.rating}★
+                            {c.lessons.length} chapitres • {learnerProfiles.length} apprenants réels • Note {c.rating}★
                           </span>
                         </div>
                       </div>
@@ -1415,7 +1468,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
         {/* TAB 2B: AI ANIMATED MODULE GENERATOR (DEPUIS CONTENU EXISTANT FORMATEUR)*/}
         {/* ======================================================================= */}
         {activeTab === 'ai_generator' && (
-          <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+          <div className="w-full space-y-6 animate-in fade-in duration-200">
             {/* Hero Header */}
             <div className="rounded-3xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 border border-indigo-800/60 p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
               <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -1827,7 +1880,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
         {/* TAB 3: COURSE AUTHORING STUDIO — MÊME DISPOSITION QUE COURS APPRENANT  */}
         {/* ======================================================================= */}
         {activeTab === 'authoring' && (
-          <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+          <div className="w-full space-y-6 animate-in fade-in duration-200">
             {/* Shortcut Banner to AI Animated Generator */}
             <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-blue-500/15 border border-amber-400/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center space-x-3">
@@ -2980,7 +3033,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
         {/* TAB 5: CERTIFYING QUESTION BANK (BANQUE DE QCM PERSISTÉE FIRESTORE)     */}
         {/* ======================================================================= */}
         {activeTab === 'quiz_bank' && (
-          <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-200">
+          <div className="w-full space-y-6 animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center space-x-2">
@@ -3126,7 +3179,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           const avgProgressCourse = Math.round(rawLearners.reduce((acc, l) => acc + l.progressPct, 0) / Math.max(1, rawLearners.length));
 
           return (
-            <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+            <div className="w-full space-y-6 animate-in fade-in duration-200">
               
               {/* Entête Principal */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
