@@ -178,6 +178,9 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   });
   const [moduleAuthors, setModuleAuthors] = useState<Record<string, ModuleAuthor>>(() => readModuleAuthors());
 
+  // ---------- Vue de la section Performances : apprenants | formateurs ----------
+  const [perfView, setPerfView] = useState<'apprenants' | 'formateurs'>('apprenants');
+
   // ---------- Niveaux paramétrables : libellés + seuils (test de positionnement) ----------
   const [levelSettings, setLevelSettings] = useState<LevelSettings>(DEFAULT_LEVEL_SETTINGS);
 
@@ -648,6 +651,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       return {
         learner: l,
         progress: stats.overallProgress,
+        progressMap: stats.courseProgressMap,
         score: stats.averageScore,
         completed: stats.completedCoursesCount,
         inProgress: stats.inProgressCoursesCount,
@@ -665,6 +669,22 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     ? Math.round(learnerPerf.reduce((sum, x) => sum + x.score, 0) / learnerPerf.length)
     : 0;
   const perfCertifs = learnerPerf.reduce((sum, x) => sum + x.certifs, 0);
+
+  // Performance des formateurs : progression réelle des apprenants sur leurs modules
+  const trainerPerfFull = trainerPerf.map((tp) => {
+    const vals = tp.modules.flatMap((m) => learnerPerf.map((lp) => lp.progressMap[m.id] ?? 0));
+    const avgProgress = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+    return { ...tp, avgProgress };
+  });
+  const trainerStudentsTotal = trainerPerfFull.reduce((sum, x) => sum + x.students, 0);
+  const trainerProgVals = trainerPerfFull.filter((x) => x.modules.length > 0).map((x) => x.avgProgress);
+  const trainerAvgProgress = trainerProgVals.length
+    ? Math.round(trainerProgVals.reduce((a, b) => a + b, 0) / trainerProgVals.length)
+    : null;
+  const trainerRatingVals = courses.filter((c) => (c.rating || 0) > 0).map((c) => c.rating);
+  const trainerAvgRating = trainerRatingVals.length
+    ? trainerRatingVals.reduce((a, b) => a + b, 0) / trainerRatingVals.length
+    : null;
   const perfLevelColor = (idx: number) =>
     idx === 3
       ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
@@ -1718,12 +1738,41 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       {/* ============================================================ */}
       {section === 'performances' && (
         <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Performances des apprenants</h3>
-            <p className="text-xs text-slate-500">
-              Ensemble des apprenants ({learnerPerf.length} suivi(s)) — progression, niveaux, scores et évolution. Trié par progression.
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                {perfView === 'apprenants' ? 'Performances des apprenants' : 'Performances des formateurs'}
+              </h3>
+              <p className="text-xs text-slate-500">
+                {perfView === 'apprenants'
+                  ? `Ensemble des apprenants (${learnerPerf.length} suivi(s)) — progression, niveaux, scores et évolution. Trié par progression.`
+                  : `Résultats en fonction des modules ajoutés — ${attributedCount} module(s) attribué(s) sur ${courses.length}. Attribuez un module à un formateur depuis « Modules de formation ».`}
+              </p>
+            </div>
+            <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1">
+              {(
+                [
+                  { id: 'apprenants' as const, label: `Apprenants (${learnerPerf.length})` },
+                  { id: 'formateurs' as const, label: `Formateurs (${trainerPerf.length})` },
+                ]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setPerfView(tab.id)}
+                  className={`px-4 py-2 rounded-lg text-xs font-black transition ${
+                    perfView === tab.id
+                      ? 'bg-blue-900 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {perfView === 'apprenants' && (
+          <div className="space-y-4">
 
           {/* KPIs globaux */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1821,14 +1870,29 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </div>
             </div>
           )}
+          </div>
+          )}
 
-          {/* Performances des formateurs (conservé) */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Performances des formateurs</h3>
-              <p className="text-xs text-slate-500">
-                Résultats en fonction des modules ajoutés — {attributedCount} module(s) attribué(s) sur {courses.length}. Attribuez un module à un formateur depuis « Modules de formation ».
-              </p>
+          {perfView === 'formateurs' && (
+          <div className="space-y-4">
+            {/* KPIs formateurs */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: 'Formateurs', value: String(trainerPerf.length), sub: 'actifs sur la plateforme' },
+                { label: 'Modules attribués', value: String(attributedCount), sub: `${courses.length} modules au catalogue` },
+                { label: 'Apprenants touchés', value: String(trainerStudentsTotal), sub: 'cumul des portées' },
+                {
+                  label: 'Progression de leurs apprenants',
+                  value: trainerAvgProgress === null ? '—' : `${trainerAvgProgress}%`,
+                  sub: trainerAvgRating === null ? 'note moyenne —' : `note moy. ${trainerAvgRating.toFixed(1)} ★`,
+                },
+              ].map((k) => (
+                <div key={k.label} className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{k.label}</p>
+                  <p className="text-xl font-black text-slate-900 dark:text-white leading-none">{k.value}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{k.sub}</p>
+                </div>
+              ))}
             </div>
 
             {trainerPerf.length === 0 ? (
@@ -1839,7 +1903,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {trainerPerf.map(({ trainer, modules, students, avgRating, chapters }) => (
+                {trainerPerfFull.map(({ trainer, modules, students, avgRating, chapters, avgProgress }) => (
                   <div key={trainer.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center space-x-3 min-w-0">
@@ -1883,6 +1947,19 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                         />
                       </div>
                     </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                        <span>Progression moyenne des apprenants</span>
+                        <span>{avgProgress}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-emerald-500"
+                          style={{ width: `${avgProgress}%` }}
+                        />
+                      </div>
+                    </div>
                     <p className="text-[10px] text-slate-400 truncate">
                       {chapters} chapitre(s) publié(s)
                       {modules.length > 0 ? ` • ${modules.slice(0, 2).map((m) => m.title).join(' • ')}${modules.length > 2 ? '…' : ''}` : ''}
@@ -1892,6 +1969,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </div>
             )}
           </div>
+          )}
         </div>
       )}
 
