@@ -25,6 +25,7 @@ import { UserProfile, CourseModule, TrainingRequest, NiveauValidation, UserRole 
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { ROLE_CREATION_CONFIG } from './AuthModal';
 import { saveProfileToLocalRegistry } from '../firebase';
+import { computeUserLearningStats } from '../utils/learningStats';
 import { readModuleAuthors, recordModuleAuthor, ModuleAuthor } from '../utils/moduleAuthors';
 import {
   LevelSettings,
@@ -32,6 +33,7 @@ import {
   buildLevelOrder,
   levelLabels,
   levelLabel,
+  resolveLevelIndex,
   normalizeLevelSettings as normalizeLevelSettingsClient,
   setLevelSettingsCache,
 } from '../utils/levelSettings';
@@ -639,6 +641,41 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const maxPerfStudents = Math.max(1, ...trainerPerf.map((p) => p.students));
   const attributedCount = courses.filter((c) => moduleAuthors[c.id]).length;
 
+  // ---------- Performances : ensemble des apprenants + évolution ----------
+  const learnerPerf = learners
+    .map((l) => {
+      const stats = computeUserLearningStats(l, courses);
+      return {
+        learner: l,
+        progress: stats.overallProgress,
+        score: stats.averageScore,
+        completed: stats.completedCoursesCount,
+        inProgress: stats.inProgressCoursesCount,
+        certifs: stats.certificationsCount,
+        delta: stats.monthlyDeltaPct,
+        level: levelLabel(l.level, l.levelKey, levelSettings),
+        levelIndex: resolveLevelIndex(l.level, l.levelKey, levelSettings),
+      };
+    })
+    .sort((a, b) => b.progress - a.progress);
+  const perfAvgProgress = learnerPerf.length
+    ? Math.round(learnerPerf.reduce((sum, x) => sum + x.progress, 0) / learnerPerf.length)
+    : 0;
+  const perfAvgScore = learnerPerf.length
+    ? Math.round(learnerPerf.reduce((sum, x) => sum + x.score, 0) / learnerPerf.length)
+    : 0;
+  const perfCertifs = learnerPerf.reduce((sum, x) => sum + x.certifs, 0);
+  const perfLevelColor = (idx: number) =>
+    idx === 3
+      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+      : idx === 2
+        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+        : idx === 1
+          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+          : idx === 0
+            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+
   // ---------- Ajout d'un module de formation (super admin) ----------
   const handleAddModule = (e: React.FormEvent) => {
     e.preventDefault();
@@ -788,7 +825,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             { id: 'utilisateurs', label: 'Gestion des utilisateurs', icon: <Users className="w-4 h-4" /> },
             { id: 'permissions', label: 'Permissions & rôles', icon: <KeyRound className="w-4 h-4" /> },
             { id: 'tests', label: 'Tests de validation', icon: <Award className="w-4 h-4" /> },
-            { id: 'performances', label: 'Performances formateurs', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'performances', label: 'Performances', icon: <BarChart3 className="w-4 h-4" /> },
             { id: 'modules', label: 'Modules de formation', icon: <BookOpen className="w-4 h-4" /> },
           ] as const
         ).map((s) => (
@@ -1523,7 +1560,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                 { id: 'modules', label: '📚 Ajouter un module' },
                 { id: 'tests', label: '🧪 Nouveau test de niveau' },
                 { id: 'permissions', label: '🔑 Permissions & rôles' },
-                { id: 'performances', label: '📊 Performances formateurs' },
+                { id: 'performances', label: '📊 Performances' },
               ] as const
             ).map((q) => (
               <button
@@ -1682,72 +1719,179 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       {section === 'performances' && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Performances des formateurs</h3>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Performances des apprenants</h3>
             <p className="text-xs text-slate-500">
-              Résultats en fonction des modules ajoutés — {attributedCount} module(s) attribué(s) sur {courses.length}. Attribuez un module à un formateur depuis « Modules de formation ».
+              Ensemble des apprenants ({learnerPerf.length} suivi(s)) — progression, niveaux, scores et évolution. Trié par progression.
             </p>
           </div>
 
-          {trainerPerf.length === 0 ? (
+          {/* KPIs globaux */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'Apprenants', value: String(learnerPerf.length), sub: 'actifs suivis' },
+              { label: 'Progression moyenne', value: `${perfAvgProgress}%`, sub: `${courses.length} modules au catalogue` },
+              { label: 'Score moyen', value: `${perfAvgScore}%`, sub: 'placement & quiz' },
+              {
+                label: 'Réussite des tests',
+                value: passRate === null ? '—' : `${passRate}%`,
+                sub: `${perfCertifs} certification(s)`,
+              },
+            ].map((k) => (
+              <div key={k.label} className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{k.label}</p>
+                <p className="text-xl font-black text-slate-900 dark:text-white leading-none">{k.value}</p>
+                <p className="text-[10px] text-slate-500 truncate">{k.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Répartition par niveau */}
+          <div className="flex flex-wrap gap-2">
+            {levelCounts.map((lc) => (
+              <span key={lc.level} className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                {lc.level} :&nbsp;<strong>{lc.count}</strong>
+              </span>
+            ))}
+          </div>
+
+          {/* Ensemble des apprenants */}
+          {learnerPerf.length === 0 ? (
             <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
-              <GraduationCap className="w-8 h-8 text-slate-300 mx-auto" />
-              <p className="text-sm font-bold text-slate-500">Aucun formateur enregistré</p>
-              <p className="text-xs text-slate-400">Ajoutez d'abord des formateurs depuis « Gestion des formateurs ».</p>
+              <Users className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-500">Aucun apprenant enregistré</p>
+              <p className="text-xs text-slate-400">Les apprenants apparaîtront ici dès leur inscription.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {trainerPerf.map(({ trainer, modules, students, avgRating, chapters }) => (
-                <div key={trainer.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center space-x-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-black shrink-0">
-                        {(trainer.name || '?').slice(0, 2).toUpperCase()}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <span className="md:col-span-4">Apprenant</span>
+                <span className="md:col-span-2">Niveau</span>
+                <span className="md:col-span-3">Progression</span>
+                <span className="md:col-span-1 text-center">Score</span>
+                <span className="md:col-span-2 text-right">Évolution</span>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {learnerPerf.map(({ learner, progress, score, completed, inProgress, certifs, delta, level, levelIndex }) => (
+                  <div key={learner.id} className="px-4 py-3 grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-3 items-center">
+                    <div className="md:col-span-4 flex items-center space-x-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-black shrink-0 text-xs">
+                        {(learner.name || '?').slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{trainer.name}</p>
-                        <p className="text-[11px] text-slate-500 truncate">{trainer.institution}</p>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{learner.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{learner.institution} • {learner.roleTitle}</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0">
-                      {modules.length} module(s)
-                    </span>
+                    <div className="md:col-span-2">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black whitespace-nowrap ${perfLevelColor(levelIndex)}`}>
+                        {level}
+                      </span>
+                    </div>
+                    <div className="md:col-span-3 space-y-1">
+                      <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                        <span>
+                          {completed}/{courses.length} modules
+                          {inProgress > 0 ? ` • ${inProgress} en cours` : ''}
+                        </span>
+                        <span className="text-slate-700 dark:text-slate-200">{progress}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${progress >= 70 ? 'bg-emerald-500' : progress >= 40 ? 'bg-blue-500' : 'bg-amber-400'}`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="md:col-span-1 text-center">
+                      <span className="text-sm font-black text-slate-900 dark:text-white">{score}%</span>
+                    </div>
+                    <div className="md:col-span-2 flex items-center justify-end gap-2">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                        ▲ +{delta}%
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                        title="Certifications obtenues"
+                      >
+                        🎓 {certifs}
+                      </span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none">{modules.length}</p>
-                      <p className="text-[9px] font-bold uppercase text-slate-500">Modules</p>
-                    </div>
-                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none">{students}</p>
-                      <p className="text-[9px] font-bold uppercase text-slate-500">Apprenants</p>
-                    </div>
-                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none">
-                        {avgRating === null ? '—' : `${avgRating.toFixed(1)} ★`}
-                      </p>
-                      <p className="text-[9px] font-bold uppercase text-slate-500">Note moy.</p>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[10px] font-bold text-slate-500">
-                      <span>Portée apprenants</span>
-                      <span>{students}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-amber-400"
-                        style={{ width: `${Math.round((students / maxPerfStudents) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 truncate">
-                    {chapters} chapitre(s) publié(s)
-                    {modules.length > 0 ? ` • ${modules.slice(0, 2).map((m) => m.title).join(' • ')}${modules.length > 2 ? '…' : ''}` : ''}
-                  </p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Performances des formateurs (conservé) */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Performances des formateurs</h3>
+              <p className="text-xs text-slate-500">
+                Résultats en fonction des modules ajoutés — {attributedCount} module(s) attribué(s) sur {courses.length}. Attribuez un module à un formateur depuis « Modules de formation ».
+              </p>
+            </div>
+
+            {trainerPerf.length === 0 ? (
+              <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
+                <GraduationCap className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-500">Aucun formateur enregistré</p>
+                <p className="text-xs text-slate-400">Ajoutez d'abord des formateurs depuis « Gestion des formateurs ».</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {trainerPerf.map(({ trainer, modules, students, avgRating, chapters }) => (
+                  <div key={trainer.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-black shrink-0">
+                          {(trainer.name || '?').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{trainer.name}</p>
+                          <p className="text-[11px] text-slate-500 truncate">{trainer.institution}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0">
+                        {modules.length} module(s)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                        <p className="text-lg font-black text-slate-900 dark:text-white leading-none">{modules.length}</p>
+                        <p className="text-[9px] font-bold uppercase text-slate-500">Modules</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                        <p className="text-lg font-black text-slate-900 dark:text-white leading-none">{students}</p>
+                        <p className="text-[9px] font-bold uppercase text-slate-500">Apprenants</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                        <p className="text-lg font-black text-slate-900 dark:text-white leading-none">
+                          {avgRating === null ? '—' : `${avgRating.toFixed(1)} ★`}
+                        </p>
+                        <p className="text-[9px] font-bold uppercase text-slate-500">Note moy.</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                        <span>Portée apprenants</span>
+                        <span>{students}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-amber-400"
+                          style={{ width: `${Math.round((students / maxPerfStudents) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      {chapters} chapitre(s) publié(s)
+                      {modules.length > 0 ? ` • ${modules.slice(0, 2).map((m) => m.title).join(' • ')}${modules.length > 2 ? '…' : ''}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
