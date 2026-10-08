@@ -184,24 +184,6 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Demande CGPMP</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeMode?.('armp_admin')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
-              mode === 'armp_admin'
-                ? 'bg-emerald-400 text-slate-950 shadow-xs'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Admin ARMP</span>
-            {pendingRequests.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px]">
-                {pendingRequests.length}
-              </span>
-            )}
-          </button>
         </div>
       </div>
 
