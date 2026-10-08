@@ -2018,6 +2018,473 @@ export const COURSES_DATA: CourseModule[] = [
           'L’article 2 de la Loi n° 10/010 du 27 avril 2010 inclut expressément les Provinces et les Entités Territoriales Décentralisées (ETD) dans le champ d’application obligatoire du Code des marchés publics.'
       }
     ]
+  },
+  {
+    id: 'MOD-025',
+    code: 'AC-201',
+    title: 'Passation des marchés pour les Autorités Contractantes',
+    category: 'Passation',
+    targetAudience: ['ac_agent', 'cgpmp_member', 'armp_agent', 'dfat_admin', 'formateur'],
+    duration: '6 Heures',
+    level: 'Intermédiaire',
+    legalRef: 'Loi n° 10/010 du 27 avril 2010',
+    description:
+      'Guides l’autorité contractante de la planification du besoin jusqu’à la notification : choix de la constitution des comités, analyse des offres et rédaction du rapport d’attribution.',
+    coverImage: imgCoverFormation,
+    chaptersCount: 2,
+    rating: 4.7,
+    studentsCount: 480,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-25-1',
+        title: 'Planification du besoin et choix de la procédure de passation',
+        duration: '45 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 18-20 Loi 10/010 (Besoin, planification et programmation)',
+          'Art. 26 Loi 10/010 (Choix de la procédure selon le montant)'
+        ],
+        content:
+          '[Scène: authority_planning] Du besoin à la procédure : Avant toute mise en concurrence, l’autorité contractante documente le besoin (objet, montant estimé, délai d’exécution) et vérifie la disponibilité des crédits. Le choix entre appel d’offres ouvert, restreint ou négociation découle directement de l’estimation et du régime juridique applicable.\n\n[Scène: committee_selection] Constitution des comités : Le président de l’autorité contractante nomme par écrit le président, les membres et les suppléants du comité de sélection ; la séparation entre la cellule de planification, le comité de sélection et le service comptable est la première ligne de contrôle interne.'
+      },
+      {
+        id: 'L-25-2',
+        title: 'Analyse des offres, rapport d’attribution et notification',
+        duration: '50 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 47-49 Loi 10/010 (Analyse et évaluation des offres)',
+          'Art. 56 Loi 10/010 (Notification de l’attribution)'
+        ],
+        content:
+          '[Scène: bid_evaluation] Analyse des offres : Les offres sont évaluées selon les critères annoncés dans l’avis — prix, délai, expérience, capacité technique — avec vérification des pièces de conformité. Toute offre irrégulière est écartée par décision motivée.\n\n[Scène: attribution_notification] Attribution et notification : Le rapport d’attribution détaille le classement, les écarts significatifs et les réserves. L’attribution est notifiée au titulaire retenu ; les autres soumissionnaires sont informés dans le délai prévu, ce qui ouvre la voie aux voies de recours.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Qui préside le comité de sélection des offres dans une autorité contractante ?',
+        options: [
+          'Le fournisseur la moins chère',
+          'Le président de l’autorité contractante, qui nomme le comité par écrit',
+          'Le maire de la commune',
+          'Le comptable public'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Le comité de sélection est nommé par le président de l’autorité contractante ; sa composition écrite et la séparation des fonctions garantissent l’impartialité de la procédure.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-026',
+    code: 'AC-202',
+    title: 'Contrôle interne et capacité juridique de l’autorité contractante',
+    category: 'Gestion & Audit',
+    targetAudience: ['ac_agent', 'grande_entreprise', 'cgpmp_member', 'dfat_admin', 'formateur'],
+    duration: '5 Heures',
+    level: 'Fondamental',
+    legalRef: 'Loi n° 10/010 du 27 avril 2010 — gestion financière des marchés',
+    description:
+      'Instaure un contrôle interne robuste : délégations de pouvoirs, pré-comptabilité, engagement de dépenses et traçabilité documentaire de chaque décision de passation.',
+    coverImage: imgCoverAudit,
+    chaptersCount: 2,
+    rating: 4.6,
+    studentsCount: 350,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-26-1',
+        title: 'Délégations de pouvoirs et séparation des fonctions',
+        duration: '40 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Loi 10/010 — principes de régularité et de traçabilité',
+          'Circulaires DFAT de gestion interne des entités publiques'
+        ],
+        content:
+          '[Scène: internal_control] Cartographie des pouvoirs : Chaque acte de passation (demande d’achat, ordre de service, réception, paiement) doit être approuvé par un responsable distinct. La matrice des délégations écrites évite les cumuls incompatibles entre commander, vérifier et payer.\n\n[Scène: segregation_duties] Tour de contrôle documentaire : Un dossier de marché complet suit un circuit unique numéroté — avis, plis, PV d’ouverture, analyse, contrat, factures — archivé et consultable en cas de contrôle ARMP ou de litige.'
+      },
+      {
+        id: 'L-26-2',
+        title: 'Pré-comptabilité, engagement de dépenses et trace de paiement',
+        duration: '45 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Loi 10/010 — exécution financière des contrats',
+          'Loi organique des finances publiques — engagement et liquidation'
+        ],
+        content:
+          '[Scène: budget_commitment] Engagement avant dépense : Aucune prestation ne démarre sans ordre d’engagement appuyé sur le crédit disponible. Le contrôle interne rapproche le contrat, le procès-verbal de réception et l’état d’avancement avant toute facture.\n\n[Scène: payment_trace] Paiement traçable : Le paiement part du compte unique de l’entité ; rapprocher les pièces (facture, PV de réception, attestation fiscale) et conserver le justificatif signé constitue la preuve en cas d’audit rétrospectif.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Quel est le premier réflexe de contrôle interne avant toute dépense ?',
+        options: [
+          'Payer d’abord puis régulariser',
+          'Vérifier l’engagement de dépense et la disponibilité du crédit',
+          'Confier les trois fonctions à la même personne',
+          'Attendre le contrôle externe'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Le contrôle interne exige l’engagement préalable de la dépense, la disponibilité du crédit et la séparation entre commande, réception et paiement.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-027',
+    code: 'GE-301',
+    title: 'Grands Entreprises : structurer une offre compétitive pour la commande publique',
+    category: 'Passation',
+    targetAudience: ['grande_entreprise', 'pme', 'particulier', 'dfat_admin', 'formateur'],
+    duration: '6 Heures',
+    level: 'Intermédiaire',
+    legalRef: 'Loi n° 10/010 du 27 avril 2010',
+    description:
+      'Méthode complète pour les grands groupes : lecture du DCE, montage financier et technique de l’offre, respect des délais et stratégie de sous-traitance locale.',
+    coverImage: imgCoverSeminar,
+    chaptersCount: 2,
+    rating: 4.8,
+    studentsCount: 620,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-27-1',
+        title: 'Lecture du DCE et montage financier de l’offre',
+        duration: '50 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 37 Loi 10/010 (Publicité et contenu du dossier)',
+          'Art. 41-43 Loi 10/010 (Composition et recevabilité des offres)'
+        ],
+        content:
+          '[Scène: dce_analysis] Anatomie du DCE : Le dossier de consultation énonce l’objet, les critères de jugement, les modalités de soumission et le délai de validité. Toute offre signée hors délai, sans caution ou sans déclaration sur l’honneur est écartée.\n\n[Scène: financial_pack] Montage financier : Décomposer le prix (main-d’œuvre, matériaux, frais généraux, marge) et joindre les bilans des trois dernières années, la capacité bancaire et l’état des engagements en cours évite l’écartement pour insuffisance de capacité.'
+      },
+      {
+        id: 'L-27-2',
+        title: 'Cas pratique : mémoire technique d’un groupement industriel',
+        duration: '55 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Loi 17/001 — contenu local et capacités nationales',
+          'Loi 10/010 — critères d’évaluation technique'
+        ],
+        content:
+          '[Scène: groupment_offer] Architecture du mémoire : Présenter l’expérience comparables des 5 dernières années, les moyens humains affectés (CV nommés), le planning d’exécution et l’organigramme de contrôle qualité, en cohérence avec les critères de l’avis.\n\n[Scène: local_content] Intégrer le contenu local : Associer des sous-traitants locaux pour la logistique, la maintenance et les services non spécialisés renforce le score tout en répondant aux exigences de la Loi 17/001.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Une offre reçue 5 minutes après l’heure limite de dépôt doit être :',
+        options: [
+          'Acceptée si le prix est le plus bas',
+          'Écartée comme irrégulière (offre tardive)',
+          'Reçue à la discrétion du président du comité',
+          'Transmise à l’ARMP pour arbitrage'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Le dépôt après l’heure limite rend l’offre irrégulière : le principe d’égalité des soumissionnaires intertrait toute tolérance à cet égard.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-028',
+    code: 'GE-302',
+    title: 'Groupements d’affaires, annexes industrielles et contenu local (Loi 17/001)',
+    category: 'Réglementation',
+    targetAudience: ['grande_entreprise', 'pme', 'ac_agent', 'dgcmp_agent', 'dfat_admin', 'formateur'],
+    duration: '7 Heures',
+    level: 'Avancé',
+    legalRef: 'Loi n° 17/001 du 8 février 2017 sur le contenu local',
+    description:
+      'Stratégie industrielle des grands groupes en RDC : seuil des 51 % de capital congolais, annexes I et II, attestations ARSP et structuration de la sous-traitance de second rang.',
+    coverImage: imgCoverMentor,
+    chaptersCount: 2,
+    rating: 4.7,
+    studentsCount: 410,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-28-1',
+        title: 'Seuil des 51 %, annexe I et annexe II : cartographie des activités réservées',
+        duration: '55 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 3 Loi 17/001 (Contenu local minimum 51 %)',
+          'Annexe I & II Loi 17/001 (Activités réservées et conditions)'
+        ],
+        content:
+          '[Scène: local_content_51] Le test des 51 % : Toute entreprise soumissionnant en RDC doit détenir au moins 51 % de capital congolais pour les activités listées en annexe I ; l’attestation de conformité conditionne la recevabilité de l’offre.\n\n[Scène: annex_mapping] Lecture des annexes : Identifier si son activité figure en annexe I (réservée) ou en annexe II (conditions spécifiques) détermine le montage juridique — filiale locale, groupement ou joint-venture — avant même de répondre.'
+      },
+      {
+        id: 'L-28-2',
+        title: 'Attestations ARSP et sous-traitance de second rang',
+        duration: '50 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Loi 17/001 — attestation de conformité du contenu local',
+          'Loi 10/010 — recours à la sous-traitance'
+        ],
+        content:
+          '[Scène: arsp_certificate] Obtenir l’attestation : L’Agence de Régulation et de Surveillance des Passations (ARSP) délivre l’attestation après vérification du capital, des capacités techniques et de l’ancrage local — pièce indispensable au dossier de conformité.\n\n[Scène: second_rank_subcontract] Structurer la sous-traitance : Définir clairement les lots sous-traités, les références des partenaires locaux et la responsabilité solidaire du titulaire évite les requalifications en fractionnement illicite.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Quel pourcentage minimal de capital congolais exige la Loi 17/001 pour les activités de l’annexe I ?',
+        options: ['25 %', '40 %', '51 %', '75 %'],
+        correctIndex: 2,
+        explanation:
+          'La Loi 17/001 fixe un contenu local minimal de 51 % de capital détenu par des nationaux congolais pour les activités listées à l’annexe I.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-029',
+    code: 'SC-401',
+    title: 'Société civile : observer, auditer et contester la commande publique',
+    category: 'Contentieux',
+    targetAudience: ['societe_civile', 'armp_agent', 'dgcmp_agent', 'particulier', 'dfat_admin', 'formateur'],
+    duration: '5 Heures',
+    level: 'Intermédiaire',
+    legalRef: 'Loi n° 10/010 du 27 avril 2010',
+    description:
+      'Outils concrets pour les associations et ONG : accès aux documents d’attribution, signalement motivé, réserves et voies de recours contre les attributions contestables.',
+    coverImage: imgCoverAudit,
+    chaptersCount: 2,
+    rating: 4.9,
+    studentsCount: 390,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-30-1',
+        title: 'Droit d’observation et accès aux documents d’attribution',
+        duration: '45 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 37 et 72 Loi 10/010 (Publicité des avis et résultats)',
+          'Loi n° 18/004 sur l’accès à l’information d’intérêt public'
+        ],
+        content:
+          '[Scène: civic_observation] Collecter les preuves : Avis publiés, bordereaux d’attribution, panneaux de chantier et rapports d’inspection constituent le socle documentaire d’un signalement. L’ARMP publie les décisions susceptibles de recours.\n\n[Scène: info_access] Demande d’information : Une demande écrite adressée à l’entité contractante (copie à l’ARMP) permet d’obtenir le montant, le titulaire et le délai d’exécution — pièces nécessaires pour objectiver tout recours.'
+      },
+      {
+        id: 'L-30-2',
+        title: 'Signalement, réserves et recours gracieux / hiérarchique',
+        duration: '50 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 61-66 Loi 10/010 (Recours gracieux et hiérarchique)',
+          'Art. 67 Loi 10/010 (Sursis à exécution)'
+        ],
+        content:
+          '[Scène: formal_remedy] Chronologie des recours : Le recours gracieux auprès de l’autorité contractante précède le recours hiérarchique ; chaque étape obéit à un délai strict — le retard rend le recours irrecevable.\n\n[Scène: suspension_request] Demander le sursis à exécution : Lorsque l’attribution révèle une irrégularité manifeste (critères modifiés après coup, offre anormalement basse non justifiée), la demande de sursis suspend l’effet du contrat jusqu’à décision.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Quelle est la bonne séquence des recours contentieux des marchés ?',
+        options: [
+          'Recours hiérarchique puis gracieux',
+          'Recours gracieux, puis recours hiérarchique, le cas échéant contentieux',
+          'Action en justice directe devant le tribunal',
+          'Manifestation publique devant l’ARMP'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Le recours gracieux est introduit d’abord auprès de l’autorité contractante, suivi du recours hiérarchique ; les délais de chacune des étapes sont impératifs.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-030',
+    code: 'SC-402',
+    title: 'Transparence citoyenne et suivi social des ouvrages publics',
+    category: 'Réglementation',
+    targetAudience: ['societe_civile', 'particulier', 'armp_agent', 'cgpmp_member', 'dfat_admin', 'formateur'],
+    duration: '4 Heures',
+    level: 'Fondamental',
+    legalRef: 'Loi n° 10/010 du 27 avril 2010 — publicité et redevabilité',
+    description:
+      'Comment la société civile suit l’exécution des marchés : avis et données ouvertes, panneaux de chantier, comités de suivi communautaire et signalement des retards.',
+    coverImage: imgCoverSeminar,
+    chaptersCount: 2,
+    rating: 4.6,
+    studentsCount: 540,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-31-1',
+        title: 'Avis, données ouvertes et panneau de chantier : lire la trace publique',
+        duration: '40 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 37 Loi 10/010 (Publicité des avis d’appel d’offres)',
+          'Art. 72 Loi 10/010 (Publication des résultats d’attribution)'
+        ],
+        content:
+          '[Scène: open_data_civic] La chaîne de publicité : De l’avis d’appel d’offres au résultat d’attribution, chaque étape publique se compare au chantier réel. Les écarts (montant affiché vs travaux constatés) alimentent un signalement factuel.\n\n[Scène: site_board] Le panneau de chantier : objet, maître d’ouvrage, titulaire, délai, montant et source de financement doivent y figurer — sa simple photographie est déjà un élément de preuve.'
+      },
+      {
+        id: 'L-31-2',
+        title: 'Comités de suivi communautaire et redevabilité locale',
+        duration: '40 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Loi 10/010 — exécution et réception des travaux',
+          'Bonnes gouvernance locale — concertation citoyenne'
+        ],
+        content:
+          '[Scène: community_monitor] Organiser le suivi : Un comité (associations, syndicats, chefferie, société civile) tient un registre daté des observations — retards, malfaçons, variations de quantités — transmis au maître d’ouvrage et à l’ARMP.\n\n[Scène: feedback_loop] Boucle de rétroaction : Relancer officiellement l’entité par courrier recommandé avec copie des preuves déclenche l’obligation de réponse et, en cas de silence, saisine de l’instance de contrôle.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Quelle pièce doit obligatoirement figurer sur un chantier public ?',
+        options: [
+          'Une affiche commerciale du titulaire',
+          'Un panneau indiquant objet, titulaire, délai, montant et financement',
+          'Le nom du maire uniquement',
+          'Aucune pièce particulière'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Le panneau réglementaire du chantier porte les mentions essentielles du marché : c’est l’outil de base du contrôle citoyen de l’exécution.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-031',
+    code: 'IND-501',
+    title: 'Consultants indépendants : TDR, missions d’expertise et déontologie',
+    category: 'Gestion & Audit',
+    targetAudience: ['independant', 'particulier', 'cgpmp_member', 'formateur', 'dfat_admin'],
+    duration: '5 Heures',
+    level: 'Intermédiaire',
+    legalRef: 'Loi n° 10/010 — prestations intellectuelles',
+    description:
+      'Rédiger des TDR convaincants, monter une proposition technique-financière, gérer conflits d’intérêts, secret professionnel et facturation des prestations intellectuelles.',
+    coverImage: imgCoverMentor,
+    chaptersCount: 2,
+    rating: 4.7,
+    studentsCount: 470,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-32-1',
+        title: 'Rédaction d’un TDR et proposition technique-financière',
+        duration: '45 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Loi 10/010 — modalités des prestations intellectuelles',
+          'Cahier des charges types des missions d’expertise'
+        ],
+        content:
+          '[Scène: tor_writing] Anatomie d’un TDR : Contexte, objectifs spécifiques, périmètre, livrables attendus, planning et budget plafond — chaque ambiguïté laisse place à une interprétation coûteuse pendant la mission.\n\n[Scène: technical_offer] Proposition technique : Méthodologie pas à pas, composition nominal de l’équipe, taux journaliers et frais détaillés, références comparables des 5 dernières années — la cohérence entre méthodologie et livrables fait la différence.'
+      },
+      {
+        id: 'L-32-2',
+        title: 'Conflits d’intérêts, secret professionnel et facturation',
+        duration: '45 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Déontologie des missions d’expertise indépendante',
+          'Loi 10/010 — incompatibilités et impartialité'
+        ],
+        content:
+          '[Scène: conflict_of_interest] Déclarer les incompatibilités : Avoir conseillé le soumissionnaire dans les douze mois précédents interdit de servir d’expert ; la déclaration écrite protège la mission et le consultant.\n\n[Scène: professional_ethics] Facturation loyale : Facturer au réel selon les jours conventionnés, joindre les comptes rendus d’étape et respecter le secret des informations obtenues consolide la réputation et les renouvellements de missions.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Un consultant qui a accompagné le soumissionnaire 6 mois avant la mission d’expertise doit :',
+        options: [
+          'Ignorer ce fait et postuler',
+          'Déclarer le conflit d’intérêts ; la mission lui est en principe interdite',
+          'Demander une autorisation au soumissionnaire',
+          'Changer de nom sur la proposition'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Les incompatibilités interdisent d’exercer une mission d’expertise en présence d’un lien récent avec un soumissionnaire ; la déclaration préalable est obligatoire.'
+      }
+    ]
+  },
+  {
+    id: 'MOD-032',
+    code: 'IND-502',
+    title: 'Soumissionnaire individuel : mémoire de consultation et voies de recours',
+    category: 'Passation',
+    targetAudience: ['independant', 'particulier', 'ac_agent', 'dgcmp_agent', 'dfat_admin', 'formateur'],
+    duration: '5 Heures',
+    level: 'Fondamental',
+    legalRef: 'Loi n° 10/010 du 27 avril 2010',
+    description:
+      'Construire pas à pas un mémoire de consultation irréprochable, respecter les délais de soumission et exercer les recours gracieux, hiérarchiques et contentieux en cas d’écartement.',
+    coverImage: imgCoverFormation,
+    chaptersCount: 2,
+    rating: 4.8,
+    studentsCount: 560,
+    requiresDfatApproval: false,
+    lessons: [
+      {
+        id: 'L-33-1',
+        title: 'Constitution du mémoire de consultation pas à pas',
+        duration: '50 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 41-43 Loi 10/010 (Composition et recevabilité des offres)',
+          'Art. 47 Loi 10/010 (Critères de jugement)'
+        ],
+        content:
+          '[Scène: memo_assembly] Checklist du soumissionnaire : Lettre de soumission signée, déclaration sur l’honneur, devis unitaire, références d’expérience, CV de l’équipe, calendrier et attestations fiscales/maladie — la liste se vérifie deux fois avant dépôt.\n\n[Scène: deadline_discipline] Discipline du dépôt : Déposer au moins 24 h avant l’heure limite dans l’enveloppe prescrite, conserver un récépissé, photographier le dépôt — le formalisme protège autant que le fond.'
+      },
+      {
+        id: 'L-33-2',
+        title: 'Recours gracieux, hiérarchique et contentieux des marchés',
+        duration: '50 min',
+        format: 'animation',
+        templateId: 'whiteboard',
+        keyArticles: [
+          'Art. 61-66 Loi 10/010 (Voies de recours)',
+          'Art. 67 Loi 10/010 (Effet suspensif du recours)'
+        ],
+        content:
+          '[Scène: remedy_path] Parcours du recours : Saisir l’autorité contractante en recours gracieux dans le délai de l’avis, puis l’autorité hiérarchique ; motiver chaque grief par une irrégularité précise de la procédure.\n\n[Scène: tribunal_route] Contentieux : À défaut d issue, le recours contentieux porté à l’instance compétente avec demande de sursis à exécution suspend l’attribution contestée jusqu’à décision de justice.'
+      }
+    ],
+    quiz: [
+      {
+        question: 'Quel est l’effet d’un recours gracieux régulièrement introduit dans le délai ?',
+        options: [
+          'Il n’a aucun effet',
+          'Il peut suspendre l’exécution de l’attribution si le sursis est demandé',
+          'Il annule automatiquement le contrat',
+          'Il oblige l’ARMP à racheter le marché'
+        ],
+        correctIndex: 1,
+        explanation:
+          'Le recours exercé dans les délais, assorti d’une demande de sursis, peut suspendre l’exécution de l’attribution contestée jusqu’à décision.'
+      }
+    ]
   }
 ];
 

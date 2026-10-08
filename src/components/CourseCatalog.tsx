@@ -124,6 +124,10 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
     { label: 'Régulateurs ARMP', roleKey: 'armp_agent' },
     { label: 'Contrôleurs DGCMP', roleKey: 'dgcmp_agent' },
     { label: 'Soumissionnaires / Consultants', roleKey: 'particulier' },
+    { label: 'Autorités Contractantes', roleKey: 'ac_agent' },
+    { label: 'Grands Entreprises', roleKey: 'grande_entreprise' },
+    { label: 'Société Civile & ONG', roleKey: 'societe_civile' },
+    { label: 'Consultants Indépendants', roleKey: 'independant' },
     { label: 'Formateurs & Supervision DFAT', roleKey: 'formateur' }
   ];
 

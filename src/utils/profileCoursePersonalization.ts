@@ -288,7 +288,7 @@ export function getProfilePedagogicalConfig(role: UserRole): ProfilePedagogicalC
  */
 export function isCourseForProfile(course: CourseModule, profile: UserProfile): boolean {
   if (!profile || !profile.role) return true;
-  if (profile.role === 'dfat_admin' || profile.role === 'formateur') {
+  if (profile.role === 'dfat_admin' || profile.role === 'formateur' || profile.role === 'super_admin') {
     return true;
   }
   if (!course.targetAudience || course.targetAudience.length === 0) {
