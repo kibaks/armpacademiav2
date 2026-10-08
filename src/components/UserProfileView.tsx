@@ -215,6 +215,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [show2FASetupModal, setShow2FASetupModal] = useState(false);
   const [otpInput, setOtpInput] = useState('');
   const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+  const [otp2FAHint, setOtp2FAHint] = useState<string | null>(null);
+  const [otp2FAError, setOtp2FAError] = useState<string | null>(null);
 
   // Password reset state
   const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
@@ -672,22 +674,58 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
   const is2FAActive = !!currentProfile.twoFactorEnabled;
 
-  const handleOpen2FASetup = () => {
+  const handleOpen2FASetup = async () => {
     setOtpInput('');
+    setOtp2FAError(null);
+    setOtp2FAHint(null);
     setShow2FASetupModal(true);
+    // Envoi réel du code OTP
+    try {
+      const res = await fetch('/api/2fa/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentProfile.email }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setOtp2FAHint(
+          data.devCode
+            ? `Mode sans provider mail — code de test : ${data.devCode}`
+            : `Code envoyé à ${currentProfile.email} (valable 10 minutes).`
+        );
+      } else {
+        setOtp2FAError(data.error || 'Envoi du code impossible.');
+      }
+    } catch {
+      setOtp2FAError('Serveur injoignable — réessayez.');
+    }
   };
 
-  const handleConfirm2FAActivation = (e: React.FormEvent) => {
+  const handleConfirm2FAActivation = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsVerifying2FA(true);
-    setTimeout(() => {
-      setIsVerifying2FA(false);
+    setOtp2FAError(null);
+    try {
+      const res = await fetch('/api/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentProfile.email, code: otpInput }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setOtp2FAError(data.error || 'Code incorrect.');
+        return;
+      }
       setShow2FASetupModal(false);
       if (onToggleTwoFactor) {
         onToggleTwoFactor(true);
       }
       onShowToast?.('Authentification à double facteur (2FA) activée.');
-    }, 400);
+    } catch {
+      setOtp2FAError('Serveur injoignable — réessayez.');
+    } finally {
+      setIsVerifying2FA(false);
+    }
   };
 
   const handleDirectDisable2FA = () => {
@@ -3833,9 +3871,20 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <QrCode className="w-24 h-24 text-slate-900" />
               </div>
               <p className="text-slate-600 dark:text-slate-300">
-                Scannez ce QR Code avec Google Authenticator ou entrez le code de sécurité envoyé par SMS à votre numéro WhatsApp.
+                Scannez ce QR Code avec Google Authenticator ou saisissez le code de vérification à 6 chiffres envoyé à votre adresse email.
               </p>
             </div>
+
+            {otp2FAHint && (
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-800 dark:text-blue-200 text-center">
+                {otp2FAHint}
+              </div>
+            )}
+            {otp2FAError && (
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-bold text-red-700 dark:text-red-300 text-center">
+                {otp2FAError}
+              </div>
+            )}
 
             <form onSubmit={handleConfirm2FAActivation} className="space-y-3 pt-2">
               <input
@@ -3851,7 +3900,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
               <button
                 type="submit"
-                disabled={isVerifying2FA || otpInput.length < 4}
+                disabled={isVerifying2FA || otpInput.length < 6}
                 className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-2"
               >
                 {isVerifying2FA ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}

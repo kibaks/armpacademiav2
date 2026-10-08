@@ -2293,6 +2293,65 @@ app.post('/api/level-settings', (req, res) => {
   }
 });
 
+// ============================================================================
+// 2FA — code OTP à usage unique (authentification à double facteur)
+// - envoyé par email via RESEND_API_KEY si configuré
+// - sinon renvoyé en devCode (mode démo / sans provider mail)
+// ============================================================================
+const otpStore = new Map<string, { code: string; expires: number; attempts: number }>();
+
+app.post('/api/2fa/send', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email.includes('@')) return res.status(400).json({ ok: false, error: 'Adresse email invalide.' });
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    otpStore.set(email, { code, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
+    let delivered = false;
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+      try {
+        const r = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendApiKey}` },
+          body: JSON.stringify({
+            from: 'ARMP RDC Academia <no-reply@armp-rdc.org>',
+            to: [email],
+            subject: '[ARMP RDC] Votre code de vérification (2FA)',
+            text: `Code de vérification ACADEMIA : ${code} — valable 10 minutes. Ne le partagez avec personne.`,
+          }),
+        });
+        delivered = r.ok;
+      } catch {
+        delivered = false;
+      }
+    }
+    res.json({ ok: true, delivered, ...(delivered ? {} : { devCode: code }) });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || 'send failed' });
+  }
+});
+
+app.post('/api/2fa/verify', (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const code = String(req.body?.code || '').trim();
+  const entry = otpStore.get(email);
+  if (!entry) return res.status(400).json({ ok: false, error: 'Aucun code actif — demandez-en un nouveau.' });
+  if (Date.now() > entry.expires) {
+    otpStore.delete(email);
+    return res.status(400).json({ ok: false, error: 'Code expiré — demandez-en un nouveau.' });
+  }
+  if (entry.attempts >= 5) {
+    otpStore.delete(email);
+    return res.status(400).json({ ok: false, error: 'Trop de tentatives — demandez un nouveau code.' });
+  }
+  if (entry.code !== code) {
+    entry.attempts += 1;
+    return res.status(400).json({ ok: false, error: `Code incorrect (${5 - entry.attempts} tentative(s) restante(s)).` });
+  }
+  otpStore.delete(email);
+  res.json({ ok: true });
+});
+
 app.post('/api/ai/placement-quiz', async (req, res) => {
   try {
     const { role, institution, answers } = req.body;

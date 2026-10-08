@@ -787,6 +787,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   );
   const [secondaryIdInput, setSecondaryIdInput] = useState(initialConfig.defaultSecondaryId);
   const [enable2FAOnRegister, setEnable2FAOnRegister] = useState(true);
+
+  // ---------- 2FA : étape OTP après validation du mot de passe ----------
+  const [twoFAProfile, setTwoFAProfile] = useState<UserProfile | null>(null);
+  const [otp2FA, setOtp2FA] = useState('');
+  const [otp2FAHint, setOtp2FAHint] = useState<string | null>(null);
+  const [otp2FAError, setOtp2FAError] = useState<string | null>(null);
+  const [isSending2FA, setIsSending2FA] = useState(false);
+  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+
+  // Réinitialisation de l'étape OTP à la fermeture du modal
+  useEffect(() => {
+    if (!isOpen) {
+      setTwoFAProfile(null);
+      setOtp2FA('');
+      setOtp2FAHint(null);
+      setOtp2FAError(null);
+    }
+  }, [isOpen]);
   const [acceptEthicsCharter, setAcceptEthicsCharter] = useState(true);
 
   // CGPMP Specific Conditions State:
@@ -1173,6 +1191,64 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   // Final Submit Handler
+  // ---------- 2FA : envoi / vérification du code ----------
+  const beginTwoFA = async (profile: UserProfile) => {
+    setTwoFAProfile(profile);
+    setOtp2FA('');
+    setOtp2FAError(null);
+    setIsSending2FA(true);
+    try {
+      const res = await fetch('/api/2fa/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: profile.email }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setOtp2FAError(data.error || "Envoi du code impossible.");
+        return;
+      }
+      setOtp2FAHint(
+        data.devCode
+          ? `Mode sans provider mail — code de test : ${data.devCode}`
+          : `Code envoyé à ${profile.email} (valable 10 minutes).`
+      );
+      onShowToast?.('🔐 Code de vérification 2FA envoyé.');
+    } catch {
+      setOtp2FAError('Serveur injoignable — réessayez.');
+    } finally {
+      setIsSending2FA(false);
+    }
+  };
+
+  const confirmTwoFA = async () => {
+    if (!twoFAProfile) return;
+    setIsVerifying2FA(true);
+    setOtp2FAError(null);
+    try {
+      const res = await fetch('/api/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: twoFAProfile.email, code: otp2FA }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setOtp2FAError(data.error || 'Code incorrect.');
+        return;
+      }
+      onShowToast?.(`Double authentification validée — Bienvenue ${twoFAProfile.name}.`);
+      const prof = twoFAProfile;
+      setTwoFAProfile(null);
+      setOtp2FA('');
+      onLoginSuccess?.(prof);
+      onClose();
+    } catch {
+      setOtp2FAError('Serveur injoignable — réessayez.');
+    } finally {
+      setIsVerifying2FA(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStepError(null);
@@ -1367,6 +1443,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setIsSubmitting(true);
       try {
         const userProfile = await firebaseLoginUser(cleanMail, passwordInput);
+        // Authentification à double facteur : code OTP exigé si activé sur le compte
+        if (userProfile.twoFactorEnabled) {
+          setIsSubmitting(false);
+          await beginTwoFA(userProfile);
+          return;
+        }
         onShowToast?.(`Connexion réussie : Bienvenue ${userProfile.name} (${userProfile.roleTitle}).`);
         onLoginSuccess?.(userProfile);
         onClose();
@@ -1671,7 +1753,76 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {/* ======================================================== */}
                   {/* MODE 2: LOGIN (RIGHT COLUMN OF 2-COLUMN FULL PAGE) */}
                   {/* ======================================================== */}
-                  {mode === 'login' && (
+                  {/* Étape 2FA : vérification du code OTP après mot de passe */}
+                  {mode === 'login' && twoFAProfile && (
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                          <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                          <span>Double authentification (2FA)</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Identifiants reconnus pour <strong className="text-slate-700 dark:text-slate-200">{twoFAProfile.email}</strong>.
+                          Saisissez le code à 6 chiffres pour finaliser la connexion.
+                        </p>
+                      </div>
+
+                      {otp2FAHint && (
+                        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-800 dark:text-blue-200">
+                          {otp2FAHint}
+                        </div>
+                      )}
+                      {otp2FAError && (
+                        <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-bold text-red-700 dark:text-red-300">
+                          {otp2FAError}
+                        </div>
+                      )}
+
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        autoFocus
+                        value={otp2FA}
+                        onChange={(e) => setOtp2FA(e.target.value.replace(/\D/g, ''))}
+                        placeholder="Code à 6 chiffres (ex : 123456)"
+                        className="w-full text-center tracking-widest text-lg font-mono px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
+                      />
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={confirmTwoFA}
+                          disabled={isVerifying2FA || isSending2FA || otp2FA.length < 6}
+                          className="flex-1 py-3 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 text-white font-extrabold text-xs transition flex items-center justify-center gap-2 disabled:opacity-40 cursor-pointer"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Vérifier et se connecter</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => beginTwoFA(twoFAProfile)}
+                          disabled={isSending2FA}
+                          className="px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-40 cursor-pointer"
+                        >
+                          {isSending2FA ? 'Envoi…' : 'Renvoyer'}
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTwoFAProfile(null);
+                          setOtp2FA('');
+                          setOtp2FAError(null);
+                        }}
+                        className="w-full text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition cursor-pointer"
+                      >
+                        ← Retour à la connexion
+                      </button>
+                    </div>
+                  )}
+                  {mode === 'login' && !twoFAProfile && (
                     <div className="space-y-4">
                       {/* Entête du formulaire de connexion */}
                       <div className="space-y-1">

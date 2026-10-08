@@ -49,6 +49,7 @@ export const DEFAULT_PROFILES: Record<string, UserProfile> = {
     phone: '+243 81 000 0001',
     whatsapp: '+243 81 000 0001',
     matricule: 'SUPA-001',
+    twoFactorEnabled: true,
     bio: 'Super administrateur de la plateforme ACADEMIA ITECH — gestion backend de tous les comptes, des rôles et du paramétrage global.',
     coverBio: 'Backend • Comptes & Rôles • Supervision de la plateforme',
     role: 'super_admin',
