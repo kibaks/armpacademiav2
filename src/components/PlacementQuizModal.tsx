@@ -11,6 +11,7 @@ import {
   Scale
 } from 'lucide-react';
 import { UserProfile, DiagnosticResult, NiveauValidation } from '../types';
+import { randomizeQuestions } from '../utils/shuffleQuestions';
 
 interface PlacementQuizModalProps {
   isOpen: boolean;
@@ -92,14 +93,17 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
 
   const startAdminTest = (test: AdminLevelTest) => {
     setActiveTest(test);
+    // Questions et options mélangées à chaque passage
     setQuestions(
-      test.questions.map((q, i) => ({
-        id: i,
-        question: q.question,
-        options: q.options,
-        correctIndex: Math.min(q.answer, q.options.length - 1),
-        legalRef: q.legalRef || test.moduleCode || 'Test de niveau',
-      }))
+      randomizeQuestions(
+        test.questions.map((q, i) => ({
+          id: i,
+          question: q.question,
+          options: q.options,
+          correctIndex: Math.min(q.answer, q.options.length - 1),
+          legalRef: q.legalRef || test.moduleCode || 'Test de niveau',
+        }))
+      )
     );
     setCurrentQIndex(0);
     setSelectedAnswers({});
@@ -120,7 +124,8 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       });
       const data = await res.json();
       if (data.questions) {
-        setQuestions(data.questions);
+        // Questions générées : ordre et options aléatoires à chaque passage
+        setQuestions(randomizeQuestions(data.questions));
       }
     } catch (err) {
       console.error(err);
@@ -186,10 +191,13 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
           weaknesses: wrong.slice(0, 5).map((q) => q.question),
           recommendedModuleIds: [],
         });
-        onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level), score, {
-          niveau: activeTest.level,
-          moduleCode: activeTest.moduleCode,
-        });
+        // Affectation du niveau à l'utilisateur connecté : uniquement si le test est réussi
+        if (passed) {
+          onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level), score, {
+            niveau: activeTest.level,
+            moduleCode: activeTest.moduleCode,
+          });
+        }
         return;
       }
 
