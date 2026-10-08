@@ -61,6 +61,7 @@ import {
 import { DEMO_PROFILES, INITIAL_TRAINING_REQUESTS } from './data/initialData';
 import { COURSES_DATA } from './data/coursesData';
 import { computeUserLearningStats, recordCourseReadingInProfile } from './utils/learningStats';
+import { readModuleAuthors, recordModuleAuthor } from './utils/moduleAuthors';
 import { 
   auth, 
   getOrInitUserProfile, 
@@ -761,6 +762,13 @@ export default function App() {
       return updated;
     });
     saveCustomCourseToFirestore(newCourse).catch(err => console.warn("Could not sync custom course to Firestore:", err));
+    // Attribution de l'auteur pour les performances des formateurs (si pas déjà attribué)
+    try {
+      const authors = readModuleAuthors();
+      if (!authors[newCourse.id] && currentProfile) {
+        recordModuleAuthor(newCourse.id, { id: currentProfile.id, name: currentProfile.name });
+      }
+    } catch { /* ignore */ }
     showToast(`Formation "${newCourse.title}" publiée et sauvegardée au catalogue officiel !`);
   };
 
@@ -1256,6 +1264,7 @@ export default function App() {
                 allProfiles={profiles}
                 firestoreProfiles={firestoreProfiles}
                 onShowToast={showToast}
+                onAddCourse={handleAddCustomCourse}
               />
             </div>
           ) : (

@@ -17,11 +17,15 @@ import {
   ArrowLeft,
   KeyRound,
   X,
+  UserCheck,
+  BarChart3,
+  BookOpen,
 } from 'lucide-react';
 import { UserProfile, CourseModule, TrainingRequest, NiveauValidation, UserRole } from '../types';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { ROLE_CREATION_CONFIG } from './AuthModal';
 import { saveProfileToLocalRegistry } from '../firebase';
+import { readModuleAuthors, recordModuleAuthor, ModuleAuthor } from '../utils/moduleAuthors';
 
 interface LevelTestQuestion {
   id: string;
@@ -64,6 +68,7 @@ interface AdminSpaceProps {
   allProfiles: Record<string, UserProfile>;
   firestoreProfiles?: UserProfile[];
   onShowToast?: (msg: string) => void;
+  onAddCourse?: (course: CourseModule) => void;
 }
 
 const NIVEAUX: NiveauValidation[] = ['Initiation', 'Approfondi', 'Avancé'];
@@ -110,9 +115,12 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   allProfiles,
   firestoreProfiles,
   onShowToast,
+  onAddCourse,
 }) => {
   const [view, setView] = useState<'espace' | 'dashboard'>('espace');
-  const [section, setSection] = useState<'comptes' | 'formateurs' | 'tests'>('comptes');
+  const [section, setSection] = useState<
+    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules'
+  >('tableau');
 
   // ---------- Tous les comptes (backend) ----------
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
@@ -140,6 +148,24 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const [showTestForm, setShowTestForm] = useState(false);
   const [draft, setDraft] = useState(emptyDraft());
   const [testError, setTestError] = useState<string | null>(null);
+
+  // ---------- Suivi des apprenants ----------
+  const [lrnSearch, setLrnSearch] = useState('');
+  const [lrnLevel, setLrnLevel] = useState('tous');
+
+  // ---------- Modules de formation (ajout super admin) ----------
+  const [showModuleForm, setShowModuleForm] = useState(false);
+  const [modForm, setModForm] = useState({
+    title: '',
+    category: 'Passation' as CourseModule['category'],
+    level: 'Fondamental' as CourseModule['level'],
+    duration: '12h',
+    trainerId: '',
+    targetAudience: ['particulier', 'pme', 'grande_entreprise', 'independant'] as UserRole[],
+    legalRef: '',
+    description: '',
+  });
+  const [moduleAuthors, setModuleAuthors] = useState<Record<string, ModuleAuthor>>(() => readModuleAuthors());
 
   const toast = (m: string) => onShowToast?.(m);
 
@@ -218,7 +244,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     });
     setCreatedCred(null);
     setShowTrainerForm(true);
-    setSection(locked ? 'formateurs' : 'comptes');
+    setSection(locked ? 'formateurs' : 'utilisateurs');
   };
 
   const handleCreateTrainer = (e: React.FormEvent) => {
@@ -499,6 +525,133 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </div>
             </form>
   );
+  // ================================================================
+  // DONNÉES DÉRIVÉES — apprenants, segments, permissions, performances
+  // ================================================================
+  const LEARNER_EXCLUDE = new Set<UserRole>(['super_admin', 'dfat_admin', 'formateur']);
+  const learners = accounts.filter((a) => a && !LEARNER_EXCLUDE.has(a.role));
+  const passRate =
+    doc.attempts.length > 0
+      ? Math.round((doc.attempts.filter((a) => a.passed).length / doc.attempts.length) * 100)
+      : null;
+
+  const levelOrder = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert', 'Non évalué'];
+  const levelCounts = levelOrder.map((lv) => ({
+    level: lv,
+    count: learners.filter((l) => l.level === lv).length,
+  }));
+
+  // Segmentation des apprenants en fonction de leur niveau de validation
+  const segments: { key: NiveauValidation | 'Non assigné'; label: string; members: UserProfile[] }[] = [
+    ...NIVEAUX.map((n) => ({ key: n as NiveauValidation | 'Non assigné', label: n, members: [] as UserProfile[] })),
+    { key: 'Non assigné' as NiveauValidation | 'Non assigné', label: 'Non assigné', members: [] as UserProfile[] },
+  ];
+  learners.forEach((l) => {
+    const k: NiveauValidation | 'Non assigné' = l.niveauValidation ?? 'Non assigné';
+    const seg = segments.find((s) => s.key === k);
+    (seg || segments[segments.length - 1]).members.push(l);
+  });
+
+  // Matrice des permissions & rôles (récapitule les accès appliqués par le code)
+  const PERMISSION_COLS = [
+    { key: 'accounts', label: 'Comptes & rôles' },
+    { key: 'trainers', label: 'Formateurs' },
+    { key: 'modules', label: 'Modules' },
+    { key: 'tests', label: 'Tests & segmentation' },
+    { key: 'dashboard', label: 'Tableau de bord' },
+    { key: 'learners', label: 'Suivi apprenants' },
+  ];
+  const ALL_PERM: Record<string, boolean> = Object.fromEntries(PERMISSION_COLS.map((c) => [c.key, true]));
+  const NONE_PERM: Record<string, boolean> = Object.fromEntries(PERMISSION_COLS.map((c) => [c.key, false]));
+  const PERMISSION_MATRIX: Record<string, Record<string, boolean>> = {
+    super_admin: ALL_PERM,
+    dfat_admin: ALL_PERM,
+    formateur: { ...NONE_PERM, modules: true },
+  };
+  const permissionRow = (role: string) => PERMISSION_MATRIX[role] || NONE_PERM;
+  const ROLE_ORDER: UserRole[] = [
+    'super_admin', 'dfat_admin', 'formateur', 'ac_agent', 'armp_agent', 'dgcmp_agent',
+    'cgpmp_member', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier',
+  ];
+  const permissionRoles: UserRole[] = [
+    ...ROLE_ORDER.filter((r) => r in ROLE_CREATION_CONFIG),
+    ...(Object.keys(ROLE_CREATION_CONFIG) as UserRole[]).filter((r) => !ROLE_ORDER.includes(r)),
+  ];
+
+  // Performances des formateurs en fonction des modules ajoutés
+  const trainerPerf = trainers.map((t) => {
+    const mods = courses.filter((c) => moduleAuthors[c.id]?.id === t.id);
+    const students = mods.reduce((s, c) => s + (c.studentsCount || 0), 0);
+    const rated = mods.filter((c) => (c.rating || 0) > 0);
+    const avgRating = rated.length ? rated.reduce((s, c) => s + c.rating, 0) / rated.length : null;
+    return {
+      trainer: t,
+      modules: mods,
+      students,
+      avgRating,
+      chapters: mods.reduce((s, c) => s + (c.chaptersCount || 0), 0),
+    };
+  });
+  const maxPerfStudents = Math.max(1, ...trainerPerf.map((p) => p.students));
+  const attributedCount = courses.filter((c) => moduleAuthors[c.id]).length;
+
+  // ---------- Ajout d'un module de formation (super admin) ----------
+  const handleAddModule = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = modForm.title.trim();
+    if (!title) return toast('⚠️ Intitulé du module requis');
+    const seq = String(courses.length + 1).padStart(3, '0');
+    const course: CourseModule = {
+      id: `ADM-${Date.now().toString(36).toUpperCase()}`,
+      code: `MDL-${seq}`,
+      title,
+      category: modForm.category,
+      targetAudience: modForm.targetAudience.length ? modForm.targetAudience : ['particulier'],
+      duration: modForm.duration.trim() || '8h',
+      level: modForm.level,
+      legalRef: modForm.legalRef.trim() || 'Loi n° 10/010 du 27 avril 2010',
+      description:
+        modForm.description.trim() ||
+        `Module ajouté par ${currentProfile.name} depuis l'espace super administrateur.`,
+      coverImage: '',
+      chaptersCount: 1,
+      rating: 0,
+      studentsCount: 0,
+      requiresDfatApproval: false,
+      lessons: [
+        {
+          id: 'L1',
+          title: `Chapitre 1 : Introduction — ${title}`,
+          duration: '20 min',
+          content: 'Présentation du module, objectifs pédagogiques et cadre légal associé.',
+          keyArticles: [modForm.legalRef.trim() || 'Loi 10/010'],
+        },
+      ],
+      quiz: [],
+    };
+    const trainer = trainers.find((t) => t.id === modForm.trainerId);
+    const author: ModuleAuthor = trainer
+      ? { id: trainer.id, name: trainer.name }
+      : { id: currentProfile.id, name: currentProfile.name };
+    if (onAddCourse) {
+      onAddCourse(course);
+    } else {
+      try {
+        const raw = localStorage.getItem('armp_courses_custom');
+        const list: CourseModule[] = raw ? JSON.parse(raw) : [];
+        list.unshift(course);
+        localStorage.setItem('armp_courses_custom', JSON.stringify(list));
+      } catch {
+        /* quota */
+      }
+    }
+    recordModuleAuthor(course.id, author);
+    setModuleAuthors(readModuleAuthors());
+    setModForm({ ...modForm, title: '', legalRef: '', description: '' });
+    setShowModuleForm(false);
+    toast(`📚 Module « ${title} » ajouté${trainer ? ` — auteur : ${trainer.name}` : ''}`);
+  };
+
   // VUE : DASHBOARD (bascule)
   // ================================================================
   if (view === 'dashboard') {
@@ -545,9 +698,9 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <ShieldCheck className="w-6 h-6 text-amber-300" />
           </div>
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight">Espace Administrateur</h2>
+            <h2 className="text-lg font-extrabold tracking-tight">Espace Super Administrateur</h2>
             <p className="text-[11px] text-blue-200/80">
-              {currentProfile.name} • {currentProfile.roleTitle} — gestion des formateurs & tests de niveau
+              {currentProfile.name} • {currentProfile.roleTitle} — pilotage : comptes, formateurs, apprenants, modules & tests
             </p>
           </div>
         </div>
@@ -567,9 +720,9 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { icon: <GraduationCap className="w-4 h-4" />, label: 'Formateurs', value: trainers.length, cls: 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400' },
-          { icon: <Layers className="w-4 h-4" />, label: 'Tests de niveau', value: doc.tests.length, cls: 'bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400' },
+          { icon: <UserCheck className="w-4 h-4" />, label: 'Apprenants', value: learners.length, cls: 'bg-cyan-100 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400' },
+          { icon: <BookOpen className="w-4 h-4" />, label: 'Modules', value: courses.length, cls: 'bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400' },
           { icon: <Power className="w-4 h-4" />, label: 'Tests actifs', value: activeTests.length, cls: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400' },
-          { icon: <Award className="w-4 h-4" />, label: 'Validations réussies', value: passedAttempts, cls: 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400' },
         ].map((s) => (
           <div key={s.label} className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center space-x-3">
             <div className={`p-2 rounded-xl ${s.cls}`}>{s.icon}</div>
@@ -582,18 +735,23 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       </div>
 
       {/* Navigation sections */}
-      <div className="flex space-x-2 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-wrap gap-x-1 gap-y-0 border-b border-slate-200 dark:border-slate-800">
         {(
           [
-            { id: 'comptes', label: 'Comptes & Rôles', icon: <Users className="w-4 h-4" /> },
-            { id: 'formateurs', label: 'Formateurs', icon: <GraduationCap className="w-4 h-4" /> },
-            { id: 'tests', label: 'Tests de validation de niveau', icon: <Award className="w-4 h-4" /> },
+            { id: 'tableau', label: 'Tableau de bord', icon: <LayoutDashboard className="w-4 h-4" /> },
+            { id: 'formateurs', label: 'Gestion des formateurs', icon: <GraduationCap className="w-4 h-4" /> },
+            { id: 'apprenants', label: 'Suivi des apprenants', icon: <UserCheck className="w-4 h-4" /> },
+            { id: 'utilisateurs', label: 'Gestion des utilisateurs', icon: <Users className="w-4 h-4" /> },
+            { id: 'permissions', label: 'Permissions & rôles', icon: <KeyRound className="w-4 h-4" /> },
+            { id: 'tests', label: 'Tests de validation', icon: <Award className="w-4 h-4" /> },
+            { id: 'performances', label: 'Performances formateurs', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'modules', label: 'Modules de formation', icon: <BookOpen className="w-4 h-4" /> },
           ] as const
         ).map((s) => (
           <button
             key={s.id}
             onClick={() => setSection(s.id)}
-            className={`flex items-center space-x-1.5 px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition ${
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 -mb-px transition ${
               section === s.id
                 ? 'border-amber-500 text-amber-600 dark:text-amber-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
@@ -606,18 +764,15 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       </div>
 
       {/* ============================================================ */}
-      {/* SECTION FORMATEURS                                           */}
+      {/* SECTION GESTION DES UTILISATEURS — backend, gérée par le super admin */}
       {/* ============================================================ */}
-      {/* ============================================================ */}
-      {/* SECTION COMPTES & RÔLES — backend, gérée par le super admin  */}
-      {/* ============================================================ */}
-      {section === 'comptes' && (
+      {section === 'utilisateurs' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Tous les comptes de la plateforme</h3>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des utilisateurs</h3>
               <p className="text-xs text-slate-500">
-                Le super administrateur crée, change les rôles et supprime n'importe quel compte (formateurs, agents, administration…).
+                Tous les comptes de la plateforme — le super administrateur crée, change les rôles et supprime n'importe quel compte (formateurs, agents, administration…).
               </p>
             </div>
             <button
@@ -756,7 +911,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Comptes formateurs</h3>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des formateurs</h3>
               <p className="text-xs text-slate-500">L'administrateur crée les formateurs — ils se connectent avec l'email + mot de passe généré.</p>
             </div>
             <button
@@ -1103,6 +1258,43 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             </div>
           )}
 
+          {/* Segmentation des apprenants en fonction du niveau */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-2">
+                <Users className="w-4 h-4 text-blue-500" />
+                <p className="text-xs font-extrabold text-slate-700 dark:text-slate-200">Segmentation des apprenants par niveau</p>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400">{learners.length} apprenants segmentés</span>
+            </div>
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {segments.map((seg) => (
+                <div key={seg.key} className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`px-2 py-0.5 rounded-full border text-[10px] font-black ${seg.key === 'Non assigné' ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 border-slate-300' : levelBadge(seg.key)}`}>
+                      {seg.label}
+                    </span>
+                    <span className="text-sm font-black text-slate-900 dark:text-white">{seg.members.length}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {seg.members.length === 0 ? (
+                      <p className="text-[10px] text-slate-400 italic">Aucun apprenant</p>
+                    ) : (
+                      seg.members.slice(0, 6).map((m) => (
+                        <p key={m.id} className="text-[11px] text-slate-600 dark:text-slate-300 truncate" title={m.name}>
+                          • {m.name}
+                        </p>
+                      ))
+                    )}
+                    {seg.members.length > 6 && (
+                      <p className="text-[10px] font-bold text-blue-500">+{seg.members.length - 6} autres…</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Résultats */}
           {doc.attempts.length > 0 && (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
@@ -1131,6 +1323,464 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION TABLEAU DE BORD                                      */}
+      {/* ============================================================ */}
+      {section === 'tableau' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Tableau de bord</h3>
+              <p className="text-xs text-slate-500">Vue d'ensemble de la plateforme — comptes, apprenants, modules, tests et validations.</p>
+            </div>
+            <button
+              onClick={() => setView('dashboard')}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Mode Dashboard complet</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'Comptes utilisateurs', value: accounts.length, icon: <Users className="w-4 h-4" />, cls: 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400' },
+              { label: 'Apprenants suivis', value: learners.length, icon: <UserCheck className="w-4 h-4" />, cls: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-400' },
+              { label: 'Modules de formation', value: courses.length, icon: <BookOpen className="w-4 h-4" />, cls: 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400' },
+              { label: 'Taux de réussite tests', value: passRate === null ? '—' : `${passRate}%`, icon: <Award className="w-4 h-4" />, cls: 'bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400' },
+            ].map((k) => (
+              <div key={k.label} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${k.cls}`}>{k.icon}</div>
+                <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{k.value}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{k.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+              <p className="text-xs font-extrabold text-slate-700 dark:text-slate-200">Apprenants par niveau</p>
+              {learners.length === 0 && <p className="text-xs text-slate-400 italic">Aucun apprenant enregistré</p>}
+              {levelCounts.map((lc) => {
+                const pct = learners.length ? Math.round((lc.count / learners.length) * 100) : 0;
+                return (
+                  <div key={lc.level} className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-bold">
+                      <span className="text-slate-600 dark:text-slate-300">{lc.level}</span>
+                      <span className="text-slate-900 dark:text-white">{lc.count} ({pct}%)</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-extrabold text-slate-700 dark:text-slate-200">Derniers passages des tests</p>
+                <span className="text-[10px] font-bold text-slate-400">{passedAttempts} validations réussies</span>
+              </div>
+              {doc.attempts.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Aucun passage enregistré</p>
+              ) : (
+                doc.attempts.slice(0, 6).map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-2 text-[11px]">
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 dark:text-white truncate">{a.candidateName}</p>
+                      <p className="text-slate-500 truncate">{a.testTitle}</p>
+                    </div>
+                    <span className={`font-black ${a.passed ? 'text-emerald-600' : 'text-red-500'}`}>{a.score}%</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { id: 'utilisateurs', label: '➕ Créer un compte' },
+                { id: 'formateurs', label: '🎓 Ajouter un formateur' },
+                { id: 'modules', label: '📚 Ajouter un module' },
+                { id: 'tests', label: '🧪 Nouveau test de niveau' },
+                { id: 'permissions', label: '🔑 Permissions & rôles' },
+                { id: 'performances', label: '📊 Performances formateurs' },
+              ] as const
+            ).map((q) => (
+              <button
+                key={q.id}
+                onClick={() => setSection(q.id)}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-amber-400 hover:text-amber-600 transition"
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION SUIVI DES APPRENANTS                                 */}
+      {/* ============================================================ */}
+      {section === 'apprenants' && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Suivi des apprenants</h3>
+            <p className="text-xs text-slate-500">Progression, niveaux et validations de tous les apprenants de la plateforme.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={lrnSearch}
+              onChange={(e) => setLrnSearch(e.target.value)}
+              placeholder="Rechercher un apprenant — nom, email ou institution…"
+              className="flex-1 min-w-[14rem] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+            />
+            <select
+              value={lrnLevel}
+              onChange={(e) => setLrnLevel(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold"
+            >
+              <option value="tous">Tous les niveaux</option>
+              {levelOrder.map((lv) => (
+                <option key={lv} value={lv}>{lv}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {levelCounts.map((lc) => (
+              <span key={lc.level} className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                {lc.level} :&nbsp;<strong>{lc.count}</strong>
+              </span>
+            ))}
+          </div>
+
+          {(() => {
+            const q = lrnSearch.trim().toLowerCase();
+            const filtered = learners.filter((l) => {
+              const okQ = !q || [l.name, l.email, l.institution].some((v) => (v || '').toLowerCase().includes(q));
+              const okL = lrnLevel === 'tous' || l.level === lrnLevel;
+              return okQ && okL;
+            });
+            return filtered.length === 0 ? (
+              <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
+                <UserCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-500">Aucun apprenant ne correspond à la recherche</p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+                {filtered.slice(0, 60).map((l) => (
+                  <div key={l.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 flex items-center justify-center font-black shrink-0">
+                        {(l.name || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{l.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {l.roleTitle} • {l.institution} • {l.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 text-[11px]">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{l.level}</span>
+                      <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold">{l.completedModulesCount} modules</span>
+                      {l.placementScore !== undefined && (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">Score {l.placementScore}%</span>
+                      )}
+                      {l.niveauValidation ? (
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">✓ {l.niveauValidation}</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold">Non validé</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION PERMISSIONS & RÔLES                                 */}
+      {/* ============================================================ */}
+      {section === 'permissions' && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des permissions et rôles</h3>
+            <p className="text-xs text-slate-500">
+              Attribution des permissions par rôle. Pour changer le rôle d'un compte, utilisez la section « Gestion des utilisateurs ».
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300">
+                  <th className="text-left px-4 py-3 font-extrabold">Rôle</th>
+                  {PERMISSION_COLS.map((c) => (
+                    <th key={c.key} className="px-3 py-3 font-extrabold text-center whitespace-nowrap">{c.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {permissionRoles.map((r) => {
+                  const row = permissionRow(r);
+                  const cfg = ROLE_CREATION_CONFIG[r];
+                  return (
+                    <tr key={r} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <td className="px-4 py-2.5 font-bold text-slate-900 dark:text-white whitespace-nowrap">{cfg?.label || r}</td>
+                      {PERMISSION_COLS.map((c) => (
+                        <td key={c.key} className="px-3 py-2.5 text-center">
+                          {row[c.key] ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" />
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-600 font-black">—</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-[11px] text-slate-400 flex items-start space-x-1.5">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              Le super administrateur et l'administration DFAT disposent de toutes les permissions ; un formateur peut publier des modules. Les apprenants n'ont aucun accès backend.
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION PERFORMANCES DES FORMATEURS                          */}
+      {/* ============================================================ */}
+      {section === 'performances' && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Performances des formateurs</h3>
+            <p className="text-xs text-slate-500">
+              Résultats en fonction des modules ajoutés — {attributedCount} module(s) attribué(s) sur {courses.length}. Attribuez un module à un formateur depuis « Modules de formation ».
+            </p>
+          </div>
+
+          {trainerPerf.length === 0 ? (
+            <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
+              <GraduationCap className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-500">Aucun formateur enregistré</p>
+              <p className="text-xs text-slate-400">Ajoutez d'abord des formateurs depuis « Gestion des formateurs ».</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {trainerPerf.map(({ trainer, modules, students, avgRating, chapters }) => (
+                <div key={trainer.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center font-black shrink-0">
+                        {(trainer.name || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{trainer.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{trainer.institution}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0">
+                      {modules.length} module(s)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none">{modules.length}</p>
+                      <p className="text-[9px] font-bold uppercase text-slate-500">Modules</p>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none">{students}</p>
+                      <p className="text-[9px] font-bold uppercase text-slate-500">Apprenants</p>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
+                      <p className="text-lg font-black text-slate-900 dark:text-white leading-none">
+                        {avgRating === null ? '—' : `${avgRating.toFixed(1)} ★`}
+                      </p>
+                      <p className="text-[9px] font-bold uppercase text-slate-500">Note moy.</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                      <span>Portée apprenants</span>
+                      <span>{students}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-amber-400"
+                        style={{ width: `${Math.round((students / maxPerfStudents) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">
+                    {chapters} chapitre(s) publié(s)
+                    {modules.length > 0 ? ` • ${modules.slice(0, 2).map((m) => m.title).join(' • ')}${modules.length > 2 ? '…' : ''}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION MODULES DE FORMATION (AJOUT)                         */}
+      {/* ============================================================ */}
+      {section === 'modules' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Modules de formation</h3>
+              <p className="text-xs text-slate-500">
+                Consultez le catalogue ({courses.length} modules) et ajoutez de nouveaux modules — attribués au formateur de votre choix.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowModuleForm((v) => !v)}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
+            >
+              {showModuleForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              <span>{showModuleForm ? 'Fermer' : 'Ajouter un module'}</span>
+            </button>
+          </div>
+
+          {showModuleForm && (
+            <form onSubmit={handleAddModule} className="p-4 rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/30 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Intitulé *</span>
+                  <input
+                    value={modForm.title}
+                    onChange={(e) => setModForm({ ...modForm, title: e.target.value })}
+                    placeholder="ex: Contrôle a priori DGCMP — cas pratiques"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Catégorie</span>
+                  <select
+                    value={modForm.category}
+                    onChange={(e) => setModForm({ ...modForm, category: e.target.value as CourseModule['category'] })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  >
+                    {['Réglementation', 'Passation', 'Contrôle', 'Contentieux', 'Gestion & Audit'].map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Niveau</span>
+                  <select
+                    value={modForm.level}
+                    onChange={(e) => setModForm({ ...modForm, level: e.target.value as CourseModule['level'] })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  >
+                    {['Fondamental', 'Intermédiaire', 'Avancé', 'Spécialisé'].map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Durée</span>
+                  <input
+                    value={modForm.duration}
+                    onChange={(e) => setModForm({ ...modForm, duration: e.target.value })}
+                    placeholder="12h"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Formateur auteur</span>
+                  <select
+                    value={modForm.trainerId}
+                    onChange={(e) => setModForm({ ...modForm, trainerId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  >
+                    <option value="">🔰 Super administrateur (moi)</option>
+                    {trainers.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Référence légale</span>
+                  <input
+                    value={modForm.legalRef}
+                    onChange={(e) => setModForm({ ...modForm, legalRef: e.target.value })}
+                    placeholder="ex: Loi 10/010, Art. 45"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  />
+                </label>
+                <label className="space-y-1 sm:col-span-4">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Description</span>
+                  <textarea
+                    rows={2}
+                    value={modForm.description}
+                    onChange={(e) => setModForm({ ...modForm, description: e.target.value })}
+                    placeholder="Objectifs pédagogiques et public visé…"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  />
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] text-slate-500">
+                  Le module apparaît immédiatement dans le catalogue et dans les performances du formateur sélectionné.
+                </p>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-500 transition">
+                  Publier le module
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+            {courses.length === 0 ? (
+              <div className="p-8 text-center space-y-2">
+                <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-500">Aucun module dans le catalogue</p>
+              </div>
+            ) : (
+              courses.slice(0, 60).map((c) => {
+                const author = moduleAuthors[c.id];
+                return (
+                  <div key={c.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.title}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {c.code} • {c.category} • {c.duration} • {c.level}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 text-[11px]">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                        {author ? `✍️ ${author.name}` : 'Cours officiel'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">{c.studentsCount} apprenants</span>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">★ {c.rating}</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>
