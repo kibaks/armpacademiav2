@@ -167,6 +167,9 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   });
   const [moduleAuthors, setModuleAuthors] = useState<Record<string, ModuleAuthor>>(() => readModuleAuthors());
 
+  // ---------- Seuils de niveau paramétrables (test de positionnement) ----------
+  const [levelSettings, setLevelSettings] = useState({ intermediaire: 60, avance: 80, expert: 90 });
+
   const toast = (m: string) => onShowToast?.(m);
 
   const readRegistry = (): Record<string, UserProfile> => {
@@ -228,6 +231,16 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     refreshTrainers();
     refreshAccounts();
     refreshTests();
+    fetch('/api/level-settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (s && Number.isFinite(+s.intermediaire) && Number.isFinite(+s.avance) && Number.isFinite(+s.expert)) {
+          setLevelSettings({ intermediaire: +s.intermediaire, avance: +s.avance, expert: +s.expert });
+        }
+      })
+      .catch(() => {
+        /* serveur absent */
+      });
   }, [refreshTrainers, refreshAccounts, refreshTests]);
 
   // ---------- Création de compte (rôle libre ou formateur verrouillé) ----------
@@ -329,6 +342,26 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       toast('📋 Copié dans le presse-papiers');
     } catch {
       toast('Copie impossible — sélectionnez manuellement');
+    }
+  };
+
+  // ---------- Seuils de niveau (paramétrage) ----------
+  const saveLevelSettings = async () => {
+    try {
+      const res = await fetch('/api/level-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(levelSettings),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setLevelSettings(data.settings);
+        toast('🎚️ Seuils de niveau enregistrés — le test de positionnement les applique immédiatement');
+      } else {
+        toast(`⚠️ ${data.error || 'sauvegarde refusée'}`);
+      }
+    } catch {
+      toast('⚠️ Serveur injoignable — sauvegarde impossible');
     }
   };
 
@@ -1018,6 +1051,50 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               {showTestForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
               <span>{showTestForm ? 'Fermer' : 'Nouveau test'}</span>
             </button>
+          </div>
+
+          {/* Paramétrage des seuils de niveau */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-extrabold text-slate-900 dark:text-white">Paramétrage des niveaux</p>
+                <p className="text-[11px] text-slate-500">
+                  Seuils du test de positionnement : Débutant &lt;&nbsp;{levelSettings.intermediaire} ≤ Intermédiaire &lt;&nbsp;{levelSettings.avance} ≤ Avancé &lt;&nbsp;{levelSettings.expert} ≤ Expert (% de réussite).
+                </p>
+              </div>
+              <button
+                onClick={saveLevelSettings}
+                className="px-4 py-2 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
+              >
+                Enregistrer les seuils
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(
+                [
+                  { k: 'intermediaire', label: 'Seuil Intermédiaire (score ≥ %)' },
+                  { k: 'avance', label: 'Seuil Avancé (score ≥ %)' },
+                  { k: 'expert', label: 'Seuil Expert (score ≥ %)' },
+                ] as { k: keyof typeof levelSettings; label: string }[]
+              ).map((f) => (
+                <label key={f.k} className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{f.label}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={levelSettings[f.k]}
+                    onChange={(e) =>
+                      setLevelSettings((prev) => ({
+                        ...prev,
+                        [f.k]: e.target.value === '' ? 0 : Math.min(100, Math.max(0, Number(e.target.value))),
+                      }))
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  />
+                </label>
+              ))}
+            </div>
           </div>
 
           {testError && (

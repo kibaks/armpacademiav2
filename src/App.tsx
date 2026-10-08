@@ -195,6 +195,7 @@ export default function App() {
   const [tutorInitialAction, setTutorInitialAction] = useState<'chat' | 'call' | 'video' | 'voice' | null>(null);
   const [tutorInitialPersona, setTutorInitialPersona] = useState<'denise' | 'charline' | 'vivienne' | 'eloise' | null>(null);
   const [pendingTutorAfterAuth, setPendingTutorAfterAuth] = useState(false);
+  const [pendingPlacementAfterAuth, setPendingPlacementAfterAuth] = useState(false);
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
   const [selectedCourseForPlayer, setSelectedCourseForPlayer] = useState<CourseModule | null>(null);
   const [preselectedCourseForCgpmp, setPreselectedCourseForCgpmp] = useState<CourseModule | null>(null);
@@ -430,6 +431,11 @@ export default function App() {
       setTimeout(() => setIsTutorOpen(true), 300);
       showToast("✅ Accès Tuteur IA Arena déverrouillé");
     }
+    if (pendingPlacementAfterAuth) {
+      setPendingPlacementAfterAuth(false);
+      setTimeout(() => setIsPlacementOpen(true), 400);
+      showToast('✅ Test de niveau débloqué — bienvenue !');
+    }
   };
 
   // Fast institutional demo login
@@ -450,6 +456,11 @@ export default function App() {
       setPendingTutorAfterAuth(false);
       setTimeout(() => setIsTutorOpen(true), 300);
       showToast('✅ Accès Tuteur IA déverrouillé');
+    }
+    if (pendingPlacementAfterAuth) {
+      setPendingPlacementAfterAuth(false);
+      setTimeout(() => setIsPlacementOpen(true), 400);
+      showToast('✅ Test de niveau débloqué — bienvenue !');
     }
   };
 
@@ -533,6 +544,19 @@ export default function App() {
       localStorage.setItem('armp_session_profile', JSON.stringify(targetProf));
       showToast(`Session basculée sur : ${targetProf.roleTitle} (${targetProf.institution})`);
     }
+  };
+
+  // Test de niveau conditionné à la connexion : sinon, ouvrir l'authentification
+  // puis relancer automatiquement le test une fois connecté.
+  const handleOpenPlacement = () => {
+    if (!isAuthenticated) {
+      setPendingPlacementAfterAuth(true);
+      setAuthModalMode('login');
+      setIsAuthModalOpen(true);
+      showToast('🔐 Connectez-vous pour passer le test de niveau');
+      return;
+    }
+    setIsPlacementOpen(true);
   };
 
   // Update Profile Level after Placement Quiz
@@ -911,7 +935,7 @@ export default function App() {
         isOfflineMode={isOffline}
         setIsOfflineMode={setIsOffline}
         onOpenTuteur={handleOpenTutor}
-        onOpenPlacementQuiz={() => setIsPlacementOpen(true)}
+        onOpenPlacementQuiz={handleOpenPlacement}
         totalCourses={courses.length}
         courses={courses}
         onOpenCourse={handleOpenCourse}
@@ -936,7 +960,7 @@ export default function App() {
             <HeroSlider
               onExploreCourses={() => setActiveTab('catalogue')}
               onOpenTuteur={handleOpenTutor}
-              onOpenPlacement={() => setIsPlacementOpen(true)}
+              onOpenPlacement={handleOpenPlacement}
               isDarkMode={isDarkMode}
             />
 
@@ -1076,7 +1100,7 @@ export default function App() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setIsPlacementOpen(true)}
+                  onClick={handleOpenPlacement}
                   className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center space-x-2 flex-shrink-0"
                 >
                   <Sparkles className="w-4 h-4 text-amber-300" />
@@ -1152,7 +1176,7 @@ export default function App() {
                 courses={courses}
                 requests={requests}
                 onOpenCourse={handleOpenCourse}
-                onOpenPlacementQuiz={() => setIsPlacementOpen(true)}
+                onOpenPlacementQuiz={handleOpenPlacement}
                 onOpenTuteur={handleOpenTutor}
                 onCallTutor={handleCallTutor}
                 onLogout={handleLogout}

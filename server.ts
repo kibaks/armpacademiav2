@@ -2235,6 +2235,64 @@ Message exact de l'apprenant : "${fullMessage}"
 });
 
 // AI Diagnostic Placement Quiz Generator & Evaluator
+// ============================================================================
+// LEVEL SETTINGS — seuils paramétrables du niveau (quiz de positionnement)
+// score >= expert → Expert ; >= avance → Avancé ; >= intermediaire → Intermédiaire ;
+// sinon Débutant. Fichier level-settings.json, éditable depuis l'espace admin
+// via GET/POST /api/level-settings (aucun redémarrage requis).
+// ============================================================================
+interface LevelSettings {
+  intermediaire: number;
+  avance: number;
+  expert: number;
+}
+
+const LEVEL_SETTINGS_FILE = path.join(process.cwd(), 'level-settings.json');
+const DEFAULT_LEVEL_SETTINGS: LevelSettings = { intermediaire: 60, avance: 80, expert: 90 };
+
+function normalizeLevelSettings(raw: any): LevelSettings {
+  const clamp = (v: any, d: number) =>
+    Number.isFinite(+v) ? Math.min(100, Math.max(0, Math.round(+v))) : d;
+  const intermediaire = clamp(raw?.intermediaire, DEFAULT_LEVEL_SETTINGS.intermediaire);
+  const avance = clamp(raw?.avance, DEFAULT_LEVEL_SETTINGS.avance);
+  const expert = clamp(raw?.expert, DEFAULT_LEVEL_SETTINGS.expert);
+  return {
+    intermediaire,
+    avance: Math.max(avance, intermediaire + 1),
+    expert: Math.max(expert, Math.max(avance, intermediaire) + 1),
+  };
+}
+
+function loadLevelSettings(): LevelSettings {
+  try {
+    if (!fs.existsSync(LEVEL_SETTINGS_FILE)) return { ...DEFAULT_LEVEL_SETTINGS };
+    return normalizeLevelSettings(JSON.parse(fs.readFileSync(LEVEL_SETTINGS_FILE, 'utf8')));
+  } catch {
+    return { ...DEFAULT_LEVEL_SETTINGS };
+  }
+}
+
+function levelFromScore(score: number, s: LevelSettings = loadLevelSettings()): string {
+  if (score >= s.expert) return 'Expert';
+  if (score >= s.avance) return 'Avancé';
+  if (score >= s.intermediaire) return 'Intermédiaire';
+  return 'Débutant';
+}
+
+app.get('/api/level-settings', (_req, res) => {
+  res.json(loadLevelSettings());
+});
+
+app.post('/api/level-settings', (req, res) => {
+  try {
+    const next = normalizeLevelSettings(req.body);
+    fs.writeFileSync(LEVEL_SETTINGS_FILE, JSON.stringify(next, null, 2));
+    res.json({ ok: true, settings: next });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || 'write failed' });
+  }
+});
+
 app.post('/api/ai/placement-quiz', async (req, res) => {
   try {
     const { role, institution, answers } = req.body;
@@ -2243,15 +2301,16 @@ app.post('/api/ai/placement-quiz', async (req, res) => {
     // If answers provided, evaluate placement level
     if (answers && Array.isArray(answers)) {
       if (!ai) {
-        // Fallback calculation
+        // Fallback calculation — niveau piloté par les seuils paramétrables
         const correctCount = answers.filter((a: any) => a.isCorrect).length;
         const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const level = score >= 80 ? 'Avancé / Expert' : score >= 60 ? 'Intermédiaire' : 'Fondamental / Débutant';
+        const lvCfg = loadLevelSettings();
+        const level = levelFromScore(score, lvCfg);
         return res.json({
           score,
           level,
           diagnostic: `Profil calibré pour ${role || 'Agent'}. Maîtrise constatée sur les concepts de base. Recommandation : Renforcement sur le contrôle a priori DGCMP et l'instruction des recours ARMP.`,
-          recommendedModuleIds: score >= 80 ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
+          recommendedModuleIds: score >= lvCfg.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
         });
       }
 
@@ -2281,19 +2340,24 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure :
         });
 
         const parsed = JSON.parse(evalResponse.text || '{}');
+        // Le niveau rendu est toujours recalculé sur les seuils paramétrables
+        if (Number.isFinite(+parsed.score)) {
+          parsed.level = levelFromScore(+parsed.score);
+        }
         return res.json(parsed);
       } catch (err: any) {
         console.warn('[Placement Quiz] AI evaluation fallback activated:', err?.message);
         const correctCount = answers.filter((a: any) => a.isCorrect).length;
         const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const level = score >= 80 ? 'Avancé / Expert' : score >= 60 ? 'Intermédiaire' : 'Fondamental / Débutant';
+        const lvCfg = loadLevelSettings();
+        const level = levelFromScore(score, lvCfg);
         return res.json({
           score,
           level,
           diagnostic: `Évaluation complétée pour ${role || 'Agent'}. Connaissances vérifiées sur les principes de la commande publique RDC.`,
           strengths: ['Principes fondamentaux de transparence', 'Attributions CGPMP'],
           weaknesses: ['Détails de procédure contentieuse ARMP/CRD', 'Seuils d\'ANO DGCMP'],
-          recommendedModuleIds: ['MOD-001', 'MOD-002', 'MOD-004']
+          recommendedModuleIds: score >= lvCfg.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
         });
       }
     }
