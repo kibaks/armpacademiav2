@@ -2,9 +2,12 @@ import React from 'react';
 import { BookOpen, Award, MessageCircle, Zap, ChevronRight, Smartphone, Download, WifiOff, Play, ShieldCheck } from 'lucide-react';
 import captureHome from '../assets/images/captures/capture_home.jpg';
 import phone3D from '../assets/images/slide_foreground_5.png';
+import { useLevelSettings, levelLabels } from '../utils/levelSettings';
 
 // Apple style : MacBook centré + Téléphone 3D + Tuto Step-by-step
 export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTuteur: () => void }> = ({ onExploreCourses, onOpenTuteur }) => {
+  // Échelle de niveaux paramétrable (libellés admin)
+  const lvl = levelLabels(useLevelSettings());
   const tutoSteps = [
     {
       n: '01',
@@ -15,7 +18,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
     {
       n: '02',
       title: 'Positionnez-vous en 10 min',
-      desc: 'Lancez le Tuteur IA : test adaptatif Débutant → Expert. Il analyse votre profil et recommande vos 2 modules prioritaires sur les 6 (PPM, DAO types, ANO DGCMP 72h, CRD…).',
+      desc: `Lancez le Tuteur IA : test adaptatif ${lvl[0]} → ${lvl[3]}. Il analyse votre profil et recommande vos 2 modules prioritaires sur les 6 (PPM, DAO types, ANO DGCMP 72h, CRD…).`,
       icon: Zap,
     },
     {

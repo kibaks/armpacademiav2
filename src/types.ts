@@ -46,7 +46,16 @@ export interface UserProfile {
   institution: string;
   avatarUrl: string;
   coverUrl?: string;
-  level: 'Non évalué' | 'Débutant' | 'Intermédiaire' | 'Avancé' | 'Expert';
+  /**
+   * Niveau d'apprenant — libellés PARAMÉTRABLES depuis l'espace admin
+   * (GET/POST /api/level-settings). Valeurs par défaut : Débutant /
+   * Intermédiaire / Avancé / Expert ; « Non évalué » = non calibré.
+   * Les profils existants conservent leur libellé ; `levelKey` (ci-dessous)
+   * permet de suivre les renommages admin.
+   */
+  level: string;
+  /** Clé stable du niveau (indépendante du libellé affiché). */
+  levelKey?: 'debutant' | 'intermediaire' | 'avance' | 'expert';
   placementScore?: number;
   /** Dernier niveau validé par un test de validation de niveau (admin) */
   niveauValidation?: NiveauValidation;

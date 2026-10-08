@@ -2245,10 +2245,16 @@ interface LevelSettings {
   intermediaire: number;
   avance: number;
   expert: number;
+  labels: { debutant: string; intermediaire: string; avance: string; expert: string };
 }
 
 const LEVEL_SETTINGS_FILE = path.join(process.cwd(), 'level-settings.json');
-const DEFAULT_LEVEL_SETTINGS: LevelSettings = { intermediaire: 60, avance: 80, expert: 90 };
+const DEFAULT_LEVEL_SETTINGS: LevelSettings = {
+  intermediaire: 60,
+  avance: 80,
+  expert: 90,
+  labels: { debutant: 'Débutant', intermediaire: 'Intermédiaire', avance: 'Avancé', expert: 'Expert' },
+};
 
 function normalizeLevelSettings(raw: any): LevelSettings {
   const clamp = (v: any, d: number) =>
@@ -2256,10 +2262,22 @@ function normalizeLevelSettings(raw: any): LevelSettings {
   const intermediaire = clamp(raw?.intermediaire, DEFAULT_LEVEL_SETTINGS.intermediaire);
   const avance = clamp(raw?.avance, DEFAULT_LEVEL_SETTINGS.avance);
   const expert = clamp(raw?.expert, DEFAULT_LEVEL_SETTINGS.expert);
+  // Libellés paramétrables : 4 niveaux distincts, sinon retour aux défauts
+  const dfl = DEFAULT_LEVEL_SETTINGS.labels;
+  const clean = (v: any, d: string) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : d);
+  let labels = {
+    debutant: clean(raw?.labels?.debutant, dfl.debutant),
+    intermediaire: clean(raw?.labels?.intermediaire, dfl.intermediaire),
+    avance: clean(raw?.labels?.avance, dfl.avance),
+    expert: clean(raw?.labels?.expert, dfl.expert),
+  };
+  const vals = Object.values(labels).map((v) => v.toLowerCase());
+  if (new Set(vals).size !== 4) labels = { ...dfl };
   return {
     intermediaire,
     avance: Math.max(avance, intermediaire + 1),
     expert: Math.max(expert, Math.max(avance, intermediaire) + 1),
+    labels,
   };
 }
 
@@ -2273,10 +2291,10 @@ function loadLevelSettings(): LevelSettings {
 }
 
 function levelFromScore(score: number, s: LevelSettings = loadLevelSettings()): string {
-  if (score >= s.expert) return 'Expert';
-  if (score >= s.avance) return 'Avancé';
-  if (score >= s.intermediaire) return 'Intermédiaire';
-  return 'Débutant';
+  if (score >= s.expert) return s.labels.expert;
+  if (score >= s.avance) return s.labels.avance;
+  if (score >= s.intermediaire) return s.labels.intermediaire;
+  return s.labels.debutant;
 }
 
 app.get('/api/level-settings', (_req, res) => {
@@ -2373,6 +2391,10 @@ app.post('/api/ai/placement-quiz', async (req, res) => {
         });
       }
 
+      const lvNow = loadLevelSettings();
+      const levelEnum = [lvNow.labels.debutant, lvNow.labels.intermediaire, lvNow.labels.avance, lvNow.labels.expert]
+        .map((v) => JSON.stringify(v))
+        .join(' | ');
       const evalPrompt = `
 Tu es l'évaluateur pédagogique en chef pour les marchés publics en RDC (ARMP, DGCMP, CGPMP).
 Évalue ces résultats au test de positionnement :
@@ -2382,7 +2404,7 @@ Réponses : ${JSON.stringify(answers)}
 Retourne UNIQUEMENT un objet JSON valide avec cette structure :
 {
   "score": 75,
-  "level": "Débutant" | "Intermédiaire" | "Avancé" | "Expert",
+  "level": ${levelEnum},
   "diagnostic": "Analyse personnalisée des forces et des lacunes observées par rapport à la Loi 10/010 et au Manuel des procédures...",
   "strengths": ["Force 1", "Force 2"],
   "weaknesses": ["Lacune 1", "Lacune 2"],
@@ -2399,9 +2421,16 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure :
         });
 
         const parsed = JSON.parse(evalResponse.text || '{}');
-        // Le niveau rendu est toujours recalculé sur les seuils paramétrables
+        // Le niveau rendu est toujours recalculé sur les seuils/libellés paramétrables
+        const lvAi = loadLevelSettings();
         if (Number.isFinite(+parsed.score)) {
-          parsed.level = levelFromScore(+parsed.score);
+          parsed.level = levelFromScore(+parsed.score, lvAi);
+        } else {
+          const canon = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
+          const ci = canon.indexOf(String(parsed.level));
+          if (ci >= 0) {
+            parsed.level = [lvAi.labels.debutant, lvAi.labels.intermediaire, lvAi.labels.avance, lvAi.labels.expert][ci];
+          }
         }
         return res.json(parsed);
       } catch (err: any) {

@@ -26,6 +26,15 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { ROLE_CREATION_CONFIG } from './AuthModal';
 import { saveProfileToLocalRegistry } from '../firebase';
 import { readModuleAuthors, recordModuleAuthor, ModuleAuthor } from '../utils/moduleAuthors';
+import {
+  LevelSettings,
+  DEFAULT_LEVEL_SETTINGS,
+  buildLevelOrder,
+  levelLabels,
+  levelLabel,
+  normalizeLevelSettings as normalizeLevelSettingsClient,
+  setLevelSettingsCache,
+} from '../utils/levelSettings';
 
 interface LevelTestQuestion {
   id: string;
@@ -167,8 +176,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   });
   const [moduleAuthors, setModuleAuthors] = useState<Record<string, ModuleAuthor>>(() => readModuleAuthors());
 
-  // ---------- Seuils de niveau paramétrables (test de positionnement) ----------
-  const [levelSettings, setLevelSettings] = useState({ intermediaire: 60, avance: 80, expert: 90 });
+  // ---------- Niveaux paramétrables : libellés + seuils (test de positionnement) ----------
+  const [levelSettings, setLevelSettings] = useState<LevelSettings>(DEFAULT_LEVEL_SETTINGS);
 
   const toast = (m: string) => onShowToast?.(m);
 
@@ -235,7 +244,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       .then((r) => r.json())
       .then((s) => {
         if (s && Number.isFinite(+s.intermediaire) && Number.isFinite(+s.avance) && Number.isFinite(+s.expert)) {
-          setLevelSettings({ intermediaire: +s.intermediaire, avance: +s.avance, expert: +s.expert });
+          setLevelSettings(normalizeLevelSettingsClient(s));
         }
       })
       .catch(() => {
@@ -345,7 +354,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     }
   };
 
-  // ---------- Seuils de niveau (paramétrage) ----------
+  // ---------- Niveaux (libellés + seuils) : paramétrage ----------
   const saveLevelSettings = async () => {
     try {
       const res = await fetch('/api/level-settings', {
@@ -355,8 +364,10 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       });
       const data = await res.json();
       if (data.ok) {
-        setLevelSettings(data.settings);
-        toast('🎚️ Seuils de niveau enregistrés — le test de positionnement les applique immédiatement');
+        const next = normalizeLevelSettingsClient(data.settings);
+        setLevelSettings(next);
+        setLevelSettingsCache(next);
+        toast('🎚️ Niveaux paramétrés — libellés et seuils appliqués partout immédiatement');
       } else {
         toast(`⚠️ ${data.error || 'sauvegarde refusée'}`);
       }
@@ -568,10 +579,10 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       ? Math.round((doc.attempts.filter((a) => a.passed).length / doc.attempts.length) * 100)
       : null;
 
-  const levelOrder = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert', 'Non évalué'];
+  const levelOrder = buildLevelOrder(levelSettings);
   const levelCounts = levelOrder.map((lv) => ({
     level: lv,
-    count: learners.filter((l) => l.level === lv).length,
+    count: learners.filter((l) => levelLabel(l.level, l.levelKey, levelSettings) === lv).length,
   }));
 
   // Segmentation des apprenants en fonction de leur niveau de validation
@@ -1059,23 +1070,23 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               <div>
                 <p className="text-xs font-extrabold text-slate-900 dark:text-white">Paramétrage des niveaux</p>
                 <p className="text-[11px] text-slate-500">
-                  Seuils du test de positionnement : Débutant &lt;&nbsp;{levelSettings.intermediaire} ≤ Intermédiaire &lt;&nbsp;{levelSettings.avance} ≤ Avancé &lt;&nbsp;{levelSettings.expert} ≤ Expert (% de réussite).
+                  Seuils du test de positionnement : {levelSettings.labels.debutant} &lt;&nbsp;{levelSettings.intermediaire} ≤ {levelSettings.labels.intermediaire} &lt;&nbsp;{levelSettings.avance} ≤ {levelSettings.labels.avance} &lt;&nbsp;{levelSettings.expert} ≤ {levelSettings.labels.expert} (% de réussite).
                 </p>
               </div>
               <button
                 onClick={saveLevelSettings}
                 className="px-4 py-2 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
               >
-                Enregistrer les seuils
+                Enregistrer les niveaux
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(
                 [
-                  { k: 'intermediaire', label: 'Seuil Intermédiaire (score ≥ %)' },
-                  { k: 'avance', label: 'Seuil Avancé (score ≥ %)' },
-                  { k: 'expert', label: 'Seuil Expert (score ≥ %)' },
-                ] as { k: keyof typeof levelSettings; label: string }[]
+                  { k: 'intermediaire', label: `Seuil ${levelSettings.labels.intermediaire} (score ≥ %)` },
+                  { k: 'avance', label: `Seuil ${levelSettings.labels.avance} (score ≥ %)` },
+                  { k: 'expert', label: `Seuil ${levelSettings.labels.expert} (score ≥ %)` },
+                ] as { k: 'intermediaire' | 'avance' | 'expert'; label: string }[]
               ).map((f) => (
                 <label key={f.k} className="space-y-1">
                   <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{f.label}</span>
@@ -1088,6 +1099,32 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       setLevelSettings((prev) => ({
                         ...prev,
                         [f.k]: e.target.value === '' ? 0 : Math.min(100, Math.max(0, Number(e.target.value))),
+                      }))
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              {(
+                [
+                  { k: 'debutant' as const, hint: 'palier 1 (défaut « Débutant »)' },
+                  { k: 'intermediaire' as const, hint: 'palier 2 (défaut « Intermédiaire »)' },
+                  { k: 'avance' as const, hint: 'palier 3 (défaut « Avancé »)' },
+                  { k: 'expert' as const, hint: 'palier 4 (défaut « Expert »)' },
+                ]
+              ).map((f) => (
+                <label key={f.k} className="space-y-1">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Libellé — {f.hint}</span>
+                  <input
+                    type="text"
+                    maxLength={40}
+                    value={levelSettings.labels[f.k]}
+                    onChange={(e) =>
+                      setLevelSettings((prev) => ({
+                        ...prev,
+                        labels: { ...prev.labels, [f.k]: e.target.value },
                       }))
                     }
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold"
@@ -1542,7 +1579,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             const q = lrnSearch.trim().toLowerCase();
             const filtered = learners.filter((l) => {
               const okQ = !q || [l.name, l.email, l.institution].some((v) => (v || '').toLowerCase().includes(q));
-              const okL = lrnLevel === 'tous' || l.level === lrnLevel;
+              const okL = lrnLevel === 'tous' || levelLabel(l.level, l.levelKey, levelSettings) === lrnLevel;
               return okQ && okL;
             });
             return filtered.length === 0 ? (

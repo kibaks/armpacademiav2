@@ -37,6 +37,7 @@ import {
   Briefcase
 } from 'lucide-react';
 import { UserProfile, UserRole, CourseModule } from '../types';
+import { useLevelSettings, levelLabel, resolveLevelIndex } from '../utils/levelSettings';
 import { COURSES_DATA } from '../data/coursesData';
 import { computeUserLearningStats } from '../utils/learningStats';
 import { ArmpLogo } from './ArmpLogo';
@@ -86,6 +87,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Niveaux paramétrables — suit les changements de l'espace admin
+  const levelCfg = useLevelSettings();
 
   const RoleIcon = ({ role }: { role: UserRole }) => {
     switch(role) {
@@ -226,7 +229,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className={`hidden xl:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-300 text-slate-700 shadow-xs'}`}>
                 <RoleIcon role={currentProfile.role} />
                 <span className="truncate max-w-[110px]">{currentProfile.roleTitle.split('(')[0].trim()}</span>
-                <span className={`w-1.5 h-1.5 rounded-full ${currentProfile.level === 'Expert' ? 'bg-amber-500' : currentProfile.level === 'Avancé' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${resolveLevelIndex(currentProfile.level, currentProfile.levelKey, levelCfg) === 3 ? 'bg-amber-500' : resolveLevelIndex(currentProfile.level, currentProfile.levelKey, levelCfg) === 2 ? 'bg-blue-500' : 'bg-emerald-500'}`} />
               </div>
             )}
 
@@ -280,7 +283,7 @@ export const Header: React.FC<HeaderProps> = ({
                           <Building2 className="w-3.5 h-3.5 text-[#114488] dark:text-blue-400 mt-0.5 flex-shrink-0" />
                           <div className="text-[11px] leading-snug">
                             <span className="font-bold text-slate-800 dark:text-slate-200 block">{currentProfile.institution}</span>
-                            <span className="text-slate-500 dark:text-slate-400 text-[10px]">Niveau {currentProfile.level} • {currentProfile.certificationsCount} certification(s)</span>
+                            <span className="text-slate-500 dark:text-slate-400 text-[10px]">Niveau {levelLabel(currentProfile.level, currentProfile.levelKey, levelCfg)} • {currentProfile.certificationsCount} certification(s)</span>
                           </div>
                         </div>
 
@@ -424,7 +427,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                           <div className="flex items-center justify-between pt-1 text-[10px] font-bold">
                             <span className="px-1.5 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                              {currentProfile.level}
+                              {levelLabel(currentProfile.level, currentProfile.levelKey, levelCfg)}
                             </span>
                             <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                               <Target className="w-3 h-3 text-blue-600" /> Score : {avgScoreDisplay}%

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
 import {
   X,
   Send,
@@ -1233,7 +1234,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const body: any = {
         message: effectiveMessage,
         history: nextAfterUser.slice(-8),
-        context: `Tutrice sélectionnée: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${currentProfile.level} | Dernier cours: ${
+        context: `Tutrice sélectionnée: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} | Dernier cours: ${
           learningContext
             ? `${learningContext.lastCourseTitle} (${learningContext.lastCourseCode}) ${learningContext.lastCourseProgress}%`
             : 'aucun'

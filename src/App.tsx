@@ -62,6 +62,7 @@ import { DEMO_PROFILES, INITIAL_TRAINING_REQUESTS } from './data/initialData';
 import { COURSES_DATA } from './data/coursesData';
 import { computeUserLearningStats, recordCourseReadingInProfile } from './utils/learningStats';
 import { readModuleAuthors, recordModuleAuthor } from './utils/moduleAuthors';
+import { getLevelSettings, levelKeyFromLabel } from './utils/levelSettings';
 import { 
   auth, 
   getOrInitUserProfile, 
@@ -565,9 +566,12 @@ export default function App() {
     score: number,
     validation?: { niveau: NiveauValidation; moduleCode?: string }
   ) => {
+    const lvlCfg = await getLevelSettings();
+    const levelKey = levelKeyFromLabel(level, lvlCfg);
     const updated: UserProfile = {
       ...currentProfile,
       level,
+      levelKey,
       placementScore: score,
       ...(validation
         ? {

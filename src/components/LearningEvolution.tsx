@@ -2,46 +2,78 @@ import React from 'react';
 import { Award, TrendingUp, BookOpen, CheckCircle2, Star, Target, Zap } from 'lucide-react';
 import { UserProfile, CourseModule } from '../types';
 import { COURSES_DATA } from '../data/coursesData';
+import {
+  LevelSettings,
+  DEFAULT_LEVEL_SETTINGS,
+  useLevelSettings,
+  levelLabels,
+  resolveLevelIndex,
+} from '../utils/levelSettings';
 
-export function getEvolutionMeta(profile: UserProfile, totalCoursesCount?: number) {
-  if (!profile) return { completed: 0, certs: 0, total: 0, level: 'Non évalué' as any, nextLevel: 'Débutant', progress: 10, toNext: 1, pctCourses: 0, score: 0 };
+export function getEvolutionMeta(
+  profile: UserProfile,
+  totalCoursesCount?: number,
+  cfg: LevelSettings = DEFAULT_LEVEL_SETTINGS
+) {
+  const labels = levelLabels(cfg); // échelle paramétrable : 4 paliers
+  if (!profile) {
+    return { completed: 0, certs: 0, total: 0, level: 'Non évalué' as string, levelIndex: -1, nextLevel: labels[0], progress: 10, toNext: 1, pctCourses: 0, score: 0 };
+  }
   const completed = profile.completedCourseIds ? profile.completedCourseIds.length : (profile.completedModulesCount ?? 0);
   const certs = profile.certificates ? profile.certificates.length : profile.certificationsCount;
   const score = profile.placementScore ?? 0;
   const total = totalCoursesCount || COURSES_DATA.length;
 
-  let level: UserProfile['level'] = profile.level;
-  let nextLevel: string = '';
+  const idx = resolveLevelIndex(profile.level, profile.levelKey, cfg);
+  const level = idx >= 0 ? labels[idx] : profile.level;
+
+  let nextLevel = '';
   let progress = 0;
   let toNext = 0;
 
-  // Évolution MasterStudy — paliers
-  if (level === 'Non évalué') { nextLevel = 'Débutant'; toNext = 1 - completed; progress = Math.min(20, completed * 20); }
-  else if (level === 'Débutant') { nextLevel = 'Intermédiaire'; toNext = Math.max(0, 2 - completed); progress = (completed / 2) * 40; }
-  else if (level === 'Intermédiaire') { nextLevel = 'Avancé'; toNext = Math.max(0, 4 - completed); progress = 40 + ((completed - 2) / 2) * 30; }
-  else if (level === 'Avancé') { nextLevel = 'Expert'; toNext = Math.max(0, 6 - completed); progress = 70 + ((completed - 4) / 2) * 30; }
-  else { nextLevel = 'Expert+'; progress = 100; }
+  // Évolution MasterStudy — paliers dérivés de l'échelle paramétrable
+  if (idx < 0) {
+    // Non évalué (ou libellé inconnu) : premier palier
+    nextLevel = labels[0];
+    toNext = 1 - completed;
+    progress = Math.min(20, completed * 20);
+  } else if (idx >= labels.length - 1) {
+    // Niveau max atteint
+    nextLevel = `${labels[labels.length - 1]}+`;
+    progress = 100;
+    toNext = 0;
+  } else {
+    // Paliers intermédiaires : 2, 4, 6 modules requis ; segments 0-40, 40-70, 70-100
+    const need = (idx + 1) * 2;
+    const prev = idx * 2;
+    const starts = [0, 40, 70];
+    const ends = [40, 70, 100];
+    nextLevel = labels[idx + 1];
+    toNext = Math.max(0, need - completed);
+    progress = starts[idx] + ((completed - prev) / (need - prev)) * (ends[idx] - starts[idx]);
+  }
 
   progress = Math.max(5, Math.min(100, Math.round(progress + (certs * 2) + (score > 80 ? 5 : 0))));
 
   const pctCourses = Math.round((completed / total) * 100);
-  return { completed, certs, total, level, nextLevel, progress, toNext, pctCourses, score };
+  return { completed, certs, total, level, levelIndex: idx, nextLevel, progress, toNext, pctCourses, score };
 }
 
 export const LearningEvolution: React.FC<{ profile: UserProfile; compact?: boolean }> = ({ profile, compact }) => {
-  const m = getEvolutionMeta(profile);
-  const levelColor = (lvl: string) => {
-    if (lvl === 'Expert') return 'bg-amber-500 text-white';
-    if (lvl === 'Avancé') return 'bg-blue-600 text-white';
-    if (lvl === 'Intermédiaire') return 'bg-purple-600 text-white';
-    if (lvl === 'Débutant') return 'bg-emerald-600 text-white';
+  const levelCfg = useLevelSettings();
+  const m = getEvolutionMeta(profile, undefined, levelCfg);
+  const levelColor = (lvlIndex: number) => {
+    if (lvlIndex === 3) return 'bg-amber-500 text-white';
+    if (lvlIndex === 2) return 'bg-blue-600 text-white';
+    if (lvlIndex === 1) return 'bg-purple-600 text-white';
+    if (lvlIndex === 0) return 'bg-emerald-600 text-white';
     return 'bg-slate-500 text-white';
   };
 
   if (compact) {
     return (
       <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-[#E4E6EB] dark:border-slate-800 rounded-full px-2.5 py-1">
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${levelColor(m.level)}`}>{m.level}</span>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${levelColor(m.levelIndex)}`}>{m.level}</span>
         <div className="w-16 h-1.5 bg-[#F0F2F5] dark:bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-[#0866FF]" style={{ width: `${m.progress}%` }} /></div>
         <span className="text-[11px] font-bold text-[#050505] dark:text-white">{m.progress}%</span>
         <span className="text-[11px] text-[#65676B] hidden sm:inline">{m.completed}/{m.total} modules</span>
@@ -53,7 +85,7 @@ export const LearningEvolution: React.FC<{ profile: UserProfile; compact?: boole
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-[#E4E6EB] dark:border-slate-800 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h4 className="font-black text-sm text-[#050505] dark:text-white flex items-center gap-2"><TrendingUp className="w-4 h-4 text-[#0866FF]" /> Niveau d'évolution</h4>
-        <span className={`px-2.5 py-1 rounded-full text-xs font-black ${levelColor(m.level)}`}>{m.level}</span>
+        <span className={`px-2.5 py-1 rounded-full text-xs font-black ${levelColor(m.levelIndex)}`}>{m.level}</span>
       </div>
 
       <div className="space-y-2">

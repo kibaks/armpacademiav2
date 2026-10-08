@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
 import { 
   Search, 
   Filter, 
@@ -307,7 +308,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
               Parcours Institutionnel Recommandé pour {currentProfile.institution}
             </h3>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Basé sur votre niveau diagnostique (<span className="font-bold text-amber-300">{currentProfile.level}</span>) et vos prérogatives institutionnelles selon la Loi n° 10/010. Les modules ci-dessous répondent directement aux exigences d'habilitation officielle.
+              Basé sur votre niveau diagnostique (<span className="font-bold text-amber-300">{levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())}</span>) et vos prérogatives institutionnelles selon la Loi n° 10/010. Les modules ci-dessous répondent directement aux exigences d'habilitation officielle.
             </p>
           </div>
 
@@ -368,7 +369,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                   <TrendingUp className="w-3.5 h-3.5 text-blue-600" /> Évolution moyenne du cursus ({completedCoursesCount}/{profileScopedCourses.length} validés)
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-black">
-                  {overallProgress}% • {currentProfile.level}
+                  {overallProgress}% • {levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())}
                 </span>
               </div>
               <div

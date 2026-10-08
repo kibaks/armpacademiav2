@@ -81,6 +81,7 @@ import {
   filterOtpMask,
   DRC_PROVINCES
 } from '../utils/inputMasks';
+import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
 
 import imgMentor from '../assets/images/mentor_juriste_africain_1789983212035.jpg';
 import imgCoverSeminar from '../assets/images/marches_publics_seminar_1789983166275.jpg';
@@ -1792,7 +1793,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                       Niveau d’évolution & Graphique de Lecture des Cours
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                      {currentProfile.level} • Score moyen : {avgScoreDisplay}% • +{monthlyDeltaPct}% ce trimestre
+                      {levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} • Score moyen : {avgScoreDisplay}% • +{monthlyDeltaPct}% ce trimestre
                       {' '}
                       <NiveauValideChips profile={currentProfile} />
                     </div>
@@ -2429,7 +2430,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   <div>
                     <span>Niveau certifié : </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
-                      {currentProfile.level} ({currentProfile.placementScore || 85}%)
+                      {levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} ({currentProfile.placementScore || 85}%)
                     </span>
                     <span className="block mt-1.5">
                       <NiveauValideChips profile={currentProfile} />
@@ -3124,7 +3125,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <span>Profil Pédagogique & Certifications</span>
               </h4>
               <div className="space-y-2 text-slate-700 dark:text-slate-300">
-                <div><span className="text-slate-400">Niveau actuel :</span> <strong className="text-purple-600">{currentProfile.level}</strong></div>
+                <div><span className="text-slate-400">Niveau actuel :</span> <strong className="text-purple-600">{levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())}</strong></div>
                 {(currentProfile.niveauValidation || (currentProfile.niveauxModules && Object.keys(currentProfile.niveauxModules).length > 0)) && (
                   <div className="flex items-start gap-2"><span className="text-slate-400 shrink-0">Niveaux validés :</span> <NiveauValideChips profile={currentProfile} /></div>
                 )}

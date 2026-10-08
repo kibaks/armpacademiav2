@@ -1,5 +1,11 @@
 {
   "intermediaire": 60,
   "avance": 80,
-  "expert": 90
+  "expert": 90,
+  "labels": {
+    "debutant": "Débutant",
+    "intermediaire": "Intermédiaire",
+    "avance": "Avancé",
+    "expert": "Expert"
+  }
 }

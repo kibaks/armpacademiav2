@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, DiagnosticResult, NiveauValidation } from '../types';
 import { randomizeQuestions } from '../utils/shuffleQuestions';
+import { peekLevelSettings, levelLabels } from '../utils/levelSettings';
 
 interface PlacementQuizModalProps {
   isOpen: boolean;
@@ -35,9 +36,9 @@ interface AdminLevelTest {
   questions: { id: string; question: string; options: string[]; answer: number; legalRef?: string }[];
 }
 
-/** Correspondance profil (chaîne historique) → niveaux du test de validation */
-const mapValidationToProfileLevel = (n: NiveauValidation): UserProfile['level'] =>
-  n === 'Initiation' ? 'Débutant' : n === 'Approfondi' ? 'Intermédiaire' : 'Avancé';
+/** Correspondance profil (chaîne historique) → niveaux du test de validation — paliers issus des libellés paramétrables */
+const mapValidationToProfileLevel = (n: NiveauValidation, labels: string[]): UserProfile['level'] =>
+  n === 'Initiation' ? labels[0] : n === 'Approfondi' ? labels[1] : labels[2];
 
 interface Question {
   id: number;
@@ -193,7 +194,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
         });
         // Affectation du niveau à l'utilisateur connecté : uniquement si le test est réussi
         if (passed) {
-          onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level), score, {
+          onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level, levelLabels(peekLevelSettings())), score, {
             niveau: activeTest.level,
             moduleCode: activeTest.moduleCode,
           });
