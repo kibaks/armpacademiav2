@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.mjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.mjs && esbuild backend/vercelApp.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/api.mjs",
     "start": "node dist/server.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -41,5 +41,8 @@
   },
   "overrides": {
     "@grpc/grpc-js": "^1.13.6"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
