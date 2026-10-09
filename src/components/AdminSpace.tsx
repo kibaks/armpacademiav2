@@ -1,8 +1,13 @@
+import { AdminProfileHeader } from './AdminProfileHeader';
+import { AdminPagination } from './AdminPagination';
+import { downloadAdminCsv } from '../utils/adminExport';
 import { adminApi, authenticatedFetch } from '../lib/adminApi';
 import { SkeletonLoader } from './SkeletonLoader';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck,
+  Download,
+  Search,
   Users,
   GraduationCap,
   Plus,
@@ -145,6 +150,15 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const [panelError, setPanelError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
   const [acctSearch, setAcctSearch] = useState('');
+  const [acctStatus, setAcctStatus] = useState('tous');
+  const [acctPage, setAcctPage] = useState(1);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [panelRevision, setPanelRevision] = useState(0);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditAction, setAuditAction] = useState('tous');
+  const [moduleSearch, setModuleSearch] = useState('');
+  const [moduleCategory, setModuleCategory] = useState('toutes');
+  const [modulePage, setModulePage] = useState(1);
   const [acctRoleFilter, setAcctRoleFilter] = useState<string>('tous');
   const [roleLocked, setRoleLocked] = useState(false);
 
@@ -201,7 +215,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     try {
       const data = await adminApi('/users');
       const users = (data.users as UserProfile[]).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
-      setAccounts(users); setTrainers(users.filter(p => p.role === 'formateur'));
+      setAccounts(users); setUpdatedAt(new Date().toISOString()); setTrainers(users.filter(p => p.role === 'formateur'));
       if (data.limited) setAccountsError('Affichage limité aux 500 premiers comptes.');
     } catch (error) { setAccountsError(error instanceof Error ? error.message : 'Chargement impossible.'); }
     finally { setAccountsLoading(false); }
@@ -297,7 +311,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       if (!cancelled) { if (section === 'audit') setAuditEntries(data.entries); else setSystemHealth(data); }
     }).catch(error => { if (!cancelled) setPanelError(error.message); }).finally(() => { if (!cancelled) setPanelLoading(false); });
     return () => { cancelled = true; };
-  }, [section]);
+  }, [section, panelRevision]);
 
   const copyCred = async (text: string) => {
     try {
@@ -696,6 +710,22 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     toast(`📚 Module « ${title} » ajouté${trainer ? ` — auteur : ${trainer.name}` : ''}`);
   };
 
+  const filteredAccounts = accounts.filter(a => {
+    const q = acctSearch.trim().toLocaleLowerCase('fr');
+    return (!q || [a.name, a.email, a.institution].some(v => (v || '').toLocaleLowerCase('fr').includes(q)))
+      && (acctRoleFilter === 'tous' || a.role === acctRoleFilter)
+      && (acctStatus === 'tous' || (acctStatus === 'suspendus') === !!(a as UserProfile & { disabled?: boolean }).disabled);
+  });
+  const accountPages = Math.max(1, Math.ceil(filteredAccounts.length / 20));
+  const accountPage = Math.min(acctPage, accountPages);
+  const visibleAccounts = filteredAccounts.slice((accountPage - 1) * 20, accountPage * 20);
+  const filteredModules = courses.filter(c => (!moduleSearch.trim() || [c.title, c.code, c.authorName].some(v => (v || '').toLocaleLowerCase('fr').includes(moduleSearch.trim().toLocaleLowerCase('fr')))) && (moduleCategory === 'toutes' || c.category === moduleCategory));
+  const modulePages = Math.max(1, Math.ceil(filteredModules.length / 20));
+  const currentModulePage = Math.min(modulePage, modulePages);
+  const filteredAudit = auditEntries.filter(e => (auditAction === 'tous' || e.action === auditAction) && [e.action, e.actor, e.target].some(v => String(v || '').toLowerCase().includes(auditSearch.trim().toLowerCase())));
+  const exportAccounts = () => downloadAdminCsv('comptes-armp.csv', [['Nom', 'Email', 'Institution', 'Rôle', 'Statut'], ...filteredAccounts.map(a => [a.name, a.email, a.institution, ROLE_CREATION_CONFIG[a.role]?.label || a.role, (a as any).disabled ? 'Suspendu' : 'Actif'])]);
+  const exportModules = () => downloadAdminCsv('modules-armp.csv', [['Code', 'Titre', 'Catégorie', 'Niveau', 'Durée', 'Auteur'], ...filteredModules.map(c => [c.code, c.title, c.category, c.level, c.duration, c.authorName || 'Cours officiel'])]);
+
   // VUE : DASHBOARD (bascule)
   // ================================================================
   if (view === 'dashboard') {
@@ -735,39 +765,12 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // ================================================================
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* En-tête + bascule de mode */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-blue-900 text-white border border-blue-800/60 shadow-md">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 rounded-xl bg-amber-400/15 border border-amber-400/40">
-            <ShieldCheck className="w-6 h-6 text-amber-300" />
-          </div>
-          <div>
-            <h2 className="text-lg font-extrabold tracking-tight">Espace Super Administrateur</h2>
-            <p className="text-[11px] text-blue-200/80">
-              {currentProfile.name} • {currentProfile.roleTitle} — pilotage : comptes, formateurs, apprenants, modules & tests
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2 bg-white/10 rounded-xl p-1">
-          <span className="px-3 py-1.5 rounded-lg bg-white/15 text-xs font-black">Espace</span>
-          <button
-            onClick={() => setView('dashboard')}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-100 hover:bg-white/10 transition"
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" />
-            <span>Mode Dashboard</span>
-          </button>
-        </div>
-      </div>
+      <AdminProfileHeader profile={currentProfile} loading={accountsLoading || testsLoading || panelLoading} updatedAt={updatedAt} onRefresh={() => { void refreshAccounts(); void refreshTests(); setPanelRevision(n => n + 1); }} onDashboard={() => setView('dashboard')} />
 
       {accountsError && <div role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900">{accountsError} <button onClick={refreshAccounts} className="underline font-bold">Réessayer</button></div>}
       {section === 'tests' && testError && <div role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900">{testError} <button onClick={refreshTests} className="underline font-bold">Recharger les tests</button></div>}
       {accountsLoading && <SkeletonLoader label="Chargement des comptes…" rows={3} />}
       {busy && <p role="status" className="text-sm text-blue-600">Opération en cours…</p>}
-      {(section === 'audit' || section === 'systeme') && <section className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
-        <h3 className="font-bold">{section === 'audit' ? 'Journal des actions administratives' : 'État des services'}</h3>
-        {panelLoading ? <SkeletonLoader rows={4} /> : panelError ? <p role="alert">{panelError}</p> : section === 'audit' ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Date</th><th className="text-left">Action</th><th className="text-left">Auteur</th><th className="text-left">Cible</th></tr></thead><tbody>{auditEntries.map(entry => <tr key={entry.id} className="border-t"><td className="p-2">{new Date(entry.date).toLocaleString('fr-FR')}</td><td>{entry.action}</td><td>{entry.actor}</td><td>{entry.target}</td></tr>)}</tbody></table>{!auditEntries.length && <p>Aucune action enregistrée.</p>}</div> : systemHealth && <dl className="grid grid-cols-2 gap-3"><dt>Base de données</dt><dd>{systemHealth.firestore}</dd><dt>Authentification</dt><dd>{systemHealth.identity}</dd><dt>Persistance</dt><dd>{systemHealth.persistence}</dd></dl>}
-      </section>}
       {/* Mini statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -787,7 +790,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       </div>
 
       {/* Navigation sections */}
-      <div className="flex flex-wrap gap-x-1 gap-y-0 border-b border-slate-200 dark:border-slate-800">
+      <div aria-label="Rubriques de l’administration" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
         {(
           [
             { id: 'tableau', label: 'Tableau de bord', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -804,11 +807,12 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
         ).map((s) => (
           <button
             key={s.id}
+            aria-current={section === s.id ? 'page' : undefined}
             onClick={() => setSection(s.id)}
-            className={`flex items-center space-x-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 -mb-px transition ${
+            className={`flex items-center space-x-1.5 px-3.5 min-h-11 py-2.5 rounded-xl text-xs font-bold transition ${
               section === s.id
-                ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                ? 'bg-blue-700 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
             }`}
           >
             {s.icon}
@@ -817,6 +821,11 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
         ))}
       </div>
 
+      {(section === 'audit' || section === 'systeme') && <section className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+        <h3 className="font-bold">{section === 'audit' ? 'Journal des actions administratives' : 'État des services'}</h3>
+        {section === 'audit' && <div className="flex flex-wrap gap-2"><input aria-label="Rechercher dans le journal" value={auditSearch} onChange={e => setAuditSearch(e.target.value)} placeholder="Action, auteur ou cible…" className="min-h-11 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800" /><select aria-label="Filtrer les actions" value={auditAction} onChange={e => setAuditAction(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800"><option value="tous">Toutes les actions</option>{Array.from(new Set(auditEntries.map(e => e.action as string))).sort().map(a => <option key={a} value={a}>{a}</option>)}</select><button disabled={panelLoading || !!panelError || !filteredAudit.length} onClick={() => downloadAdminCsv('journal-armp.csv', [['Date', 'Action', 'Auteur', 'Cible'], ...filteredAudit.map(e => [e.date, e.action, e.actor, e.target])])} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" />Exporter CSV</button></div>}
+        {panelLoading ? <SkeletonLoader rows={4} /> : panelError ? <p role="alert">{panelError} <button onClick={() => setPanelRevision(n => n + 1)} className="font-bold underline">Réessayer</button></p> : section === 'audit' ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Date</th><th className="text-left">Action</th><th className="text-left">Auteur</th><th className="text-left">Cible</th></tr></thead><tbody>{filteredAudit.map(entry => <tr key={entry.id} className="border-t"><td className="p-2">{new Date(entry.date).toLocaleString('fr-FR')}</td><td>{entry.action}</td><td>{entry.actor}</td><td>{entry.target}</td></tr>)}</tbody></table>{!filteredAudit.length && <p>Aucune action correspondante parmi les 100 dernières.</p>}</div> : systemHealth && <dl className="grid grid-cols-2 gap-3"><dt>Base de données</dt><dd>{systemHealth.firestore}</dd><dt>Authentification</dt><dd>{systemHealth.identity}</dd><dt>Persistance</dt><dd>{systemHealth.persistence}</dd></dl>}
+      </section>}
       {/* ============================================================ */}
       {/* SECTION GESTION DES UTILISATEURS — backend, gérée par le super admin */}
       {/* ============================================================ */}
@@ -826,7 +835,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des utilisateurs</h3>
               <p className="text-xs text-slate-500">
-                Tous les comptes de la plateforme — le super administrateur crée, change les rôles et supprime n'importe quel compte (formateurs, agents, administration…).
+                Créez les comptes et gérez leurs accès. Votre compte et les superadministrateurs existants sont protégés.
               </p>
             </div>
             <button
@@ -867,13 +876,15 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={acctSearch}
-              onChange={(e) => setAcctSearch(e.target.value)}
+              onChange={(e) => { setAcctSearch(e.target.value); setAcctPage(1); }}
+              aria-label="Rechercher un compte"
               placeholder="Rechercher — nom, email ou institution…"
               className="flex-1 min-w-[14rem] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
             />
             <select
               value={acctRoleFilter}
-              onChange={(e) => setAcctRoleFilter(e.target.value)}
+              onChange={(e) => { setAcctRoleFilter(e.target.value); setAcctPage(1); }}
+              aria-label="Filtrer les comptes par rôle"
               className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold"
             >
               <option value="tous">Tous les rôles</option>
@@ -881,42 +892,29 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                 <option key={k} value={k}>{v.label}</option>
               ))}
             </select>
+            <select aria-label="Filtrer les comptes par statut" value={acctStatus} onChange={e => { setAcctStatus(e.target.value); setAcctPage(1); }} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold dark:border-slate-700 dark:bg-slate-800"><option value="tous">Tous les statuts</option><option value="actifs">Actifs</option><option value="suspendus">Suspendus</option></select>
+            <button disabled={accountsLoading || !filteredAccounts.length} onClick={exportAccounts} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
             <span className="text-[11px] font-bold text-slate-400">
-              {accounts.filter((a) => {
-                const q = acctSearch.trim().toLowerCase();
-                const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
-                const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
-                return okQ && okR;
-              }).length} / {accounts.length} comptes
+              {filteredAccounts.length} / {accounts.length} comptes
             </span>
           </div>
 
           {/* Liste de tous les comptes */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-            {accounts.filter((a) => {
-              const q = acctSearch.trim().toLowerCase();
-              const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
-              const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
-              return okQ && okR;
-            }).length === 0 ? (
+            {filteredAccounts.length === 0 ? (
               <div className="p-8 text-center space-y-2">
                 <Users className="w-8 h-8 text-slate-300 mx-auto" />
                 <p className="text-sm font-bold text-slate-500">Aucun compte trouvé</p>
                 <p className="text-xs text-slate-400">Créez un compte ou élargissez la recherche.</p>
               </div>
             ) : (
-              accounts.filter((a) => {
-                const q = acctSearch.trim().toLowerCase();
-                const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
-                const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
-                return okQ && okR;
-              }).map((a) => (
+              visibleAccounts.map((a) => (
                 <div key={a.id || a.email} className="p-3 flex flex-wrap items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-black text-xs shrink-0">
                     {(a.name || '?').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{a.name}</p>
+                    <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold text-slate-900 dark:text-white truncate">{a.name}</p><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{(a as any).disabled ? "Suspendu" : "Actif"}</span></div>
                     <p className="text-[11px] text-slate-500 truncate">
                       {a.email} • {a.institution || '—'} {a.roleTitle ? `• ${a.roleTitle}` : ''}
                     </p>
@@ -944,7 +942,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                     <button
                       onClick={() => handleResetPassword(a)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50"
-                      title="Générer un nouveau mot de passe"
+                      title="Générer un lien de réinitialisation"
+                      disabled={busy || currentProfile.role !== 'super_admin'}
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
@@ -952,6 +951,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       onClick={() => handleDeleteTrainer(a)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
                       title="Supprimer le compte"
+                      disabled={busy || currentProfile.role !== 'super_admin' || a.id === currentProfile.id || a.role === 'super_admin'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -960,6 +960,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               ))
             )}
           </div>
+          <AdminPagination page={accountPage} pages={accountPages} count={filteredAccounts.length} onChange={setAcctPage} />
         </div>
       )}
 
@@ -968,7 +969,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des formateurs</h3>
-              <p className="text-xs text-slate-500">L'administrateur crée les formateurs — ils se connectent avec l'email + mot de passe généré.</p>
+              <p className="text-xs text-slate-500">Créez les formateurs et générez leur lien de définition du mot de passe.</p>
             </div>
             <button
               onClick={() => (showTrainerForm && roleLocked ? setShowTrainerForm(false) : openCreateForm('formateur', true))}
@@ -1540,7 +1541,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             ).map((q) => (
               <button
                 key={q.id}
-                onClick={() => setSection(q.id)}
+                onClick={() => { if (q.id === 'utilisateurs') openCreateForm('particulier', false); else if (q.id === 'formateurs') openCreateForm('formateur', true); else { setSection(q.id); if (q.id === 'modules') { setEditingModule(null); setShowModuleForm(true); } if (q.id === 'tests') { setDraft(emptyDraft()); setShowTestForm(true); } } }}
                 className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-amber-400 hover:text-amber-600 transition"
               >
                 {q.label}
@@ -2038,14 +2039,19 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             </form>
           )}
 
+          <div className="flex flex-wrap gap-2">
+            <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-800"><Search className="h-4 w-4 shrink-0 text-slate-500" /><input aria-label="Rechercher un module" value={moduleSearch} onChange={e => { setModuleSearch(e.target.value); setModulePage(1); }} placeholder="Titre, code ou auteur…" className="min-h-11 w-full min-w-0 bg-transparent text-sm" /></label>
+            <select aria-label="Catégorie des modules" value={moduleCategory} onChange={e => { setModuleCategory(e.target.value); setModulePage(1); }} className="rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800"><option value="toutes">Toutes les catégories</option>{Array.from(new Set(courses.map(c => c.category))).sort().map(c => <option key={c} value={c}>{c}</option>)}</select>
+            <button disabled={!filteredModules.length} onClick={exportModules} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-bold disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
+          </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-            {courses.length === 0 ? (
+            {filteredModules.length === 0 ? (
               <div className="p-8 text-center space-y-2">
                 <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-sm font-bold text-slate-500">Aucun module dans le catalogue</p>
+                <p className="text-sm font-bold text-slate-500">Aucun module ne correspond à la recherche</p>
               </div>
             ) : (
-              courses.slice(0, 60).map((c) => {
+              filteredModules.slice((currentModulePage - 1) * 20, currentModulePage * 20).map((c) => {
                 const author = c.authorId ? { id: c.authorId, name: c.authorName || c.authorId } : moduleAuthors[c.id];
                 return (
                   <div key={c.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
@@ -2073,6 +2079,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               })
             )}
           </div>
+          <AdminPagination page={currentModulePage} pages={modulePages} count={filteredModules.length} onChange={setModulePage} />
         </div>
       )}
     </div>
