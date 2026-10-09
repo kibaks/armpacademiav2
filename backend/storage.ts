@@ -1,6 +1,6 @@
 import express, { Router, type RequestHandler } from 'express';
-import { authenticate } from './admin';
-import { MAX_IMAGE_BYTES, imageMime } from '../shared/imageUpload';
+import { authenticate } from './admin.js';
+import { MAX_IMAGE_BYTES, imageMime } from '../shared/imageUpload.js';
 
 const STORAGE_ORIGIN = 'https://academia.137.184.59.184.nip.io';
 const hasImageSignature = (buffer: Buffer, mime: string) => {

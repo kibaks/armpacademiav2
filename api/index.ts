@@ -1,5 +1,5 @@
-import { storageRouter } from '../backend/storage';
-import { adminRouter, learningRouter, authenticate, requireAdmin } from '../backend/admin';
+import { storageRouter } from '../backend/storage.js';
+import { adminRouter, learningRouter, authenticate, requireAdmin } from '../backend/admin.js';
 import express from 'express';
 import dotenv from 'dotenv';
 import crypto from 'crypto';

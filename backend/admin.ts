@@ -2,7 +2,7 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import config from '../firebase-applet-config.json';
+import config from '../firebase-applet-config.json' with { type: 'json' };
 
 export function services() {
   const app = getApps().find(a => a.name === 'academia-admin') || initializeApp({
