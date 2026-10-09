@@ -204,6 +204,8 @@ export interface SavedAnalyticsReport {
 export type LessonFormat = 'video' | 'audio' | 'animation' | 'ia_ppt' | 'pdf' | 'visioconference' | 'texte' | 'autre';
 
 export interface CourseModule {
+  authorId?: string;
+  authorName?: string;
   id: string;
   code: string;
   title: string;

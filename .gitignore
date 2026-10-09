@@ -7,7 +7,6 @@ coverage/
 .env*
 !.env.example
 .tts-cache/
-package-lock.json
 tts-settings.json
 tools/preview/
 # Données admin: tests de validation de niveau

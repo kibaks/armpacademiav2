@@ -24,18 +24,20 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email == 'landrykibakweto123@gmail.com') ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return isSignedIn() && request.auth.token.role in ['super_admin', 'dfat_admin'];
     }
-
+    function isTrainer() {
+      return isSignedIn() && request.auth.token.role == 'formateur';
+    }
+    function isPublicRole(role) {
+      return role in ['cgpmp_member', 'ac_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier'];
+    }
     function isValidUser(data) {
       return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
         data.id is string && data.id.size() <= 128 &&
         data.name is string && data.name.size() <= 120 &&
         data.email is string && data.email.size() <= 120 &&
-        data.role in ['cgpmp_member', 'armp_agent', 'dgcmp_agent', 'pme', 'particulier', 'dfat_admin', 'formateur'];
+        data.role in ['cgpmp_member', 'ac_agent', 'armp_agent', 'dgcmp_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier', 'dfat_admin', 'super_admin', 'formateur'];
     }
 
     function isValidTrainingRequest(data) {
@@ -101,70 +103,65 @@ service cloud.firestore {
         data.executiveSummary is string && data.executiveSummary.size() <= 3000;
     }
 
-    // User Profiles collection
+    // Authentication and privilege claims are assigned by the server only.
     match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming());
-      allow delete: if isAdmin();
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().email == request.auth.token.email && isPublicRole(incoming().role);
+      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled']);
+      allow delete: if false;
     }
-
-    // CGPMP Training Requests collection
     match /trainingRequests/{requestId} {
-      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.applicantEmail == request.auth.token.email || isAdmin());
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(requestId) && isValidTrainingRequest(incoming());
-      allow update: if isSignedIn();
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.applicantEmail == request.auth.token.email || isAdmin());
+      allow create: if isSignedIn() && isValidId(requestId) && isValidTrainingRequest(incoming()) && incoming().applicantEmail == request.auth.token.email && incoming().status == 'En attente';
+      allow update: if isAdmin() && isValidTrainingRequest(incoming());
       allow delete: if isAdmin();
     }
-
-    // CGPMP Account Creation Requests collection
     match /cgpmpAccountRequests/{requestId} {
-      allow read: if true;
-      allow create, update: if isValidId(requestId) && isValidCgpmpAccountRequest(incoming());
-      allow delete: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && resource.data.permanentSecretaryEmail == request.auth.token.email);
+      allow create: if isSignedIn() && isValidId(requestId) && isValidCgpmpAccountRequest(incoming()) && incoming().permanentSecretaryEmail == request.auth.token.email && incoming().status == 'En attente de validation ARMP';
+      allow update, delete: if isAdmin();
     }
-
-    // Custom Courses collection
     match /courses/{courseId} {
       allow read: if true;
-      allow create, update: if isSignedIn() && isValidId(courseId) && isValidCourse(incoming());
+      allow create: if (isAdmin() || (isTrainer() && incoming().authorId == request.auth.uid)) && isValidId(courseId) && isValidCourse(incoming());
+      allow update: if (isAdmin() || (isTrainer() && resource.data.authorId == request.auth.uid && incoming().authorId == request.auth.uid)) && isValidCourse(incoming());
       allow delete: if isAdmin();
     }
-
     // Social Feed Posts collection
     match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(postId) && isValidPost(incoming());
+      allow create: if isSignedIn() && incoming().authorId == request.auth.uid && isValidId(postId) && isValidPost(incoming());
+      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin()) && incoming().authorId == resource.data.authorId && isValidPost(incoming());
       allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
     }
 
     // Course Q&A collection
     match /courseQA/{qaId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(qaId) && isValidCourseQA(incoming());
+      allow create: if isSignedIn() && incoming().authorId == request.auth.uid && isValidId(qaId) && isValidCourseQA(incoming());
+      allow update: if (isAdmin() || isTrainer()) && isValidCourseQA(incoming()) && incoming().authorId == resource.data.authorId;
       allow delete: if isAdmin();
     }
 
     // Studio Videos collection
     match /studioVideos/{videoId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(videoId) && isValidStudioVideo(incoming());
-      allow delete: if isSignedIn();
+      allow create, update: if (isAdmin() || isTrainer()) && isValidId(videoId) && isValidStudioVideo(incoming());
+      allow delete: if isAdmin() || isTrainer();
     }
 
     // National Quiz Bank collection
     match /quizBank/{questionId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(questionId) && isValidQuizBank(incoming());
+      allow create, update: if (isAdmin() || isTrainer()) && isValidId(questionId) && isValidQuizBank(incoming());
       allow delete: if isAdmin();
     }
 
     // Analytics Reports collection
     match /analyticsReports/{reportId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isValidId(reportId) && isValidAnalyticsReport(incoming());
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(reportId) && isValidAnalyticsReport(incoming());
       allow delete: if isAdmin();
     }
 

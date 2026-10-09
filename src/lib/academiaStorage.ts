@@ -11,9 +11,7 @@ export const ACADEMIA_API_URL =
   (import.meta as any).env?.VITE_ACADEMIA_API_URL ||
   'https://academia.137.184.59.184.nip.io';
 
-export const ACADEMIA_API_KEY =
-  (import.meta as any).env?.VITE_ACADEMIA_API_KEY ||
-  '741e42fe4ba17dd1e2a892b16483d4d000f6788e2f3f1a555b086975a95d73ff';
+export const ACADEMIA_API_KEY = (import.meta as any).env?.VITE_ACADEMIA_API_KEY || '';
 
 const API = `${ACADEMIA_API_URL}/api`;
 

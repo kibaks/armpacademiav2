@@ -1,3 +1,5 @@
+import { adminApi, authenticatedFetch } from '../lib/adminApi';
+import { SkeletonLoader } from './SkeletonLoader';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck,
@@ -24,7 +26,6 @@ import {
 import { UserProfile, CourseModule, TrainingRequest, NiveauValidation, UserRole } from '../types';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { ROLE_CREATION_CONFIG } from './AuthModal';
-import { saveProfileToLocalRegistry } from '../firebase';
 import { computeUserLearningStats } from '../utils/learningStats';
 import { readModuleAuthors, recordModuleAuthor, ModuleAuthor } from '../utils/moduleAuthors';
 import {
@@ -79,7 +80,8 @@ interface AdminSpaceProps {
   allProfiles: Record<string, UserProfile>;
   firestoreProfiles?: UserProfile[];
   onShowToast?: (msg: string) => void;
-  onAddCourse?: (course: CourseModule) => void;
+  onDeleteCourse?: (id: string) => Promise<void>;
+  onAddCourse?: (course: CourseModule) => void | Promise<void>;
 }
 
 const NIVEAUX: NiveauValidation[] = ['Initiation', 'Approfondi', 'Avancé'];
@@ -114,10 +116,9 @@ const emptyDraft = (): {
   ],
 });
 
-const genPassword = () =>
-  'FRM-' + Math.random().toString(36).slice(2, 6).toUpperCase() + Math.floor(10 + Math.random() * 89);
 
-const REGISTRY_KEY = 'academia_registered_users_v1';
+
+
 
 export const AdminSpace: React.FC<AdminSpaceProps> = ({
   currentProfile,
@@ -127,13 +128,21 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   firestoreProfiles,
   onShowToast,
   onAddCourse,
+  onDeleteCourse,
 }) => {
   const [view, setView] = useState<'espace' | 'dashboard'>('espace');
   const [section, setSection] = useState<
-    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules'
+    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules' | 'audit' | 'systeme'
   >('tableau');
 
   // ---------- Tous les comptes (backend) ----------
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<any[]>([]);
+  const [systemHealth, setSystemHealth] = useState<any>(null);
+  const [panelLoading, setPanelLoading] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
   const [acctSearch, setAcctSearch] = useState('');
   const [acctRoleFilter, setAcctRoleFilter] = useState<string>('tous');
@@ -151,7 +160,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     roleTitle: 'Formateur',
     role: 'formateur' as UserRole,
   });
-  const [createdCred, setCreatedCred] = useState<{ email: string; password: string } | null>(null);
+  const [createdCred, setCreatedCred] = useState<{ email: string; resetLink: string } | null>(null);
 
   // ---------- Tests de niveau ----------
   const [doc, setDoc] = useState<LevelTestDoc>({ tests: [], attempts: [] });
@@ -165,6 +174,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const [lrnLevel, setLrnLevel] = useState('tous');
 
   // ---------- Modules de formation (ajout super admin) ----------
+  const [editingModule, setEditingModule] = useState<CourseModule | null>(null);
   const [showModuleForm, setShowModuleForm] = useState(false);
   const [modForm, setModForm] = useState({
     title: '',
@@ -186,63 +196,34 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
   const toast = (m: string) => onShowToast?.(m);
 
-  const readRegistry = (): Record<string, UserProfile> => {
+  const refreshAccounts = useCallback(async () => {
+    setAccountsLoading(true); setAccountsError(null);
     try {
-      const raw = localStorage.getItem(REGISTRY_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  };
-
-  const refreshAccounts = useCallback(() => {
-    const merged = new Map<string, UserProfile>();
-    Object.values(readRegistry()).forEach((p) => {
-      if (p && p.id) merged.set(p.id, p);
-    });
-    Object.values(allProfiles || {}).forEach((p) => {
-      if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
-    });
-    (firestoreProfiles || []).forEach((p) => {
-      if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
-    });
-    setAccounts(Array.from(merged.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-  }, [allProfiles, firestoreProfiles]);
-
-  const refreshTrainers = useCallback(() => {
-    const merged = new Map<string, UserProfile>();
-    try {
-      const raw = localStorage.getItem(REGISTRY_KEY);
-      if (raw) {
-        const map: Record<string, UserProfile> = JSON.parse(raw);
-        Object.values(map).forEach((p) => {
-          if (p && p.role === 'formateur' && p.id) merged.set(p.id, p);
-        });
-      }
-    } catch {
-      /* registry illisible */
-    }
-    Object.values(allProfiles || {}).forEach((p) => {
-      if (p && p.role === 'formateur' && p.id && !merged.has(p.id)) merged.set(p.id, p);
-    });
-    setTrainers(Array.from(merged.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-  }, [allProfiles]);
+      const data = await adminApi('/users');
+      const users = (data.users as UserProfile[]).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+      setAccounts(users); setTrainers(users.filter(p => p.role === 'formateur'));
+      if (data.limited) setAccountsError('Affichage limité aux 500 premiers comptes.');
+    } catch (error) { setAccountsError(error instanceof Error ? error.message : 'Chargement impossible.'); }
+    finally { setAccountsLoading(false); }
+  }, []);
+  const refreshTrainers = refreshAccounts;
 
   const refreshTests = useCallback(async () => {
     setTestsLoading(true);
     try {
-      const res = await fetch('/api/level-tests');
+      const res = await authenticatedFetch('/api/level-tests');
+      if (!res.ok) throw new Error('Chargement des tests refusé.');
       const data = await res.json();
       setDoc({ tests: data.tests || [], attempts: data.attempts || [] });
+      setTestError(null);
     } catch {
-      /* serveur absent */
+      setTestError('Chargement des tests impossible. Vérifiez la connexion et la configuration du serveur.');
     } finally {
       setTestsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshTrainers();
     refreshAccounts();
     refreshTests();
     fetch('/api/level-settings')
@@ -274,81 +255,49 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     setSection(locked ? 'formateurs' : 'utilisateurs');
   };
 
-  const handleCreateTrainer = (e: React.FormEvent) => {
-    e.preventDefault();
-    const prenom = trainerForm.prenom.trim();
-    const nom = trainerForm.nom.trim();
-    const email = trainerForm.email.trim().toLowerCase();
-    if (!prenom || !nom) return toast('⚠️ Prénom et nom requis');
-    if (!email.includes('@')) return toast('⚠️ Adresse email invalide');
-    const password = genPassword();
-    const role = trainerForm.role || 'formateur';
-    const profile: UserProfile = {
-      id: `${role === 'formateur' ? 'TRN' : 'ACC'}-${Date.now().toString(36).toUpperCase()}`,
-      name: `${prenom} ${nom}`,
-      nom: nom.toUpperCase(),
-      prenom,
-      email,
-      role,
-      roleTitle: trainerForm.roleTitle.trim() || ROLE_CREATION_CONFIG[role]?.label || 'Compte',
-      institution: trainerForm.institution.trim() || 'ARMP-RDC',
-      phone: trainerForm.phone.trim(),
-      avatarUrl: '',
-      level: 'Non évalué',
-      completedModulesCount: 0,
-      certificationsCount: 0,
-      offlineDownloads: [],
-      joinDate: new Date().toLocaleDateString('fr-FR'),
-    };
+  const handleCreateTrainer = async (e: React.FormEvent) => {
+    e.preventDefault(); if (busy) return;
+    const { prenom, nom, email, role, institution, phone, roleTitle } = trainerForm;
+    if (!prenom.trim() || !nom.trim()) return toast('Prénom et nom requis.');
+    setBusy(true);
     try {
-      saveProfileToLocalRegistry(profile);
-    } catch {
-      /* quota */
-    }
-    refreshTrainers();
-    refreshAccounts();
-    setCreatedCred({ email, password });
-    setShowTrainerForm(false);
-    toast(`✅ Compte ${ROLE_CREATION_CONFIG[role]?.label || role} créé pour ${profile.name}`);
+      const data = await adminApi('/users', 'POST', { name: [prenom.trim(),nom.trim()].join(' '), email, role, institution, phone, roleTitle });
+      setCreatedCred({ email: data.profile.email, resetLink: data.resetLink });
+      setShowTrainerForm(false); await refreshAccounts(); toast('Compte Firebase créé. Transmettez le lien de définition du mot de passe au titulaire.');
+    } catch (error) { toast(error instanceof Error ? error.message : 'Création impossible.'); }
+    finally { setBusy(false); }
   };
-
-  const handleChangeRole = (acc: UserProfile, role: UserRole) => {
-    try {
-      const map = readRegistry();
-      const uidKey = `uid:${acc.id}`;
-      const emailKey = acc.email ? `email:${acc.email.trim().toLowerCase()}` : '';
-      if (map[uidKey]) map[uidKey] = { ...map[uidKey], role };
-      if (emailKey && map[emailKey]) map[emailKey] = { ...map[emailKey], role };
-      localStorage.setItem(REGISTRY_KEY, JSON.stringify(map));
-    } catch {
-      /* quota */
-    }
-    refreshAccounts();
-    refreshTrainers();
-    toast(`🔁 ${acc.name} → ${ROLE_CREATION_CONFIG[role]?.label || role}`);
+  const mutateAccount = async (path: string, method: string, body?: unknown) => {
+    if (busy) return; setBusy(true);
+    try { const data = await adminApi(path, method, body); await refreshAccounts(); return data; }
+    catch (error) { toast(error instanceof Error ? error.message : 'Opération impossible.'); }
+    finally { setBusy(false); }
   };
-
-  const handleResetPassword = (acc: UserProfile) => {
-    const password = genPassword();
-    setCreatedCred({ email: acc.email, password });
-    toast(`🔑 Nouveau mot de passe généré pour ${acc.name}`);
+  const handleChangeRole = async (acc: UserProfile, role: UserRole) => {
+    if (!window.confirm('Modifier le rôle de ' + acc.name + ' ? Sa session sera révoquée.')) return;
+    if (await mutateAccount('/users/' + encodeURIComponent(acc.id), 'PATCH', { role })) toast('Rôle mis à jour.');
   };
-
-  const handleDeleteTrainer = (t: UserProfile) => {
-    if (!window.confirm(`Supprimer le formateur ${t.name} ?`)) return;
-    try {
-      const raw = localStorage.getItem(REGISTRY_KEY);
-      const map: Record<string, UserProfile> = raw ? JSON.parse(raw) : {};
-      delete map[`uid:${t.id}`];
-      if (t.email) delete map[`email:${t.email.trim().toLowerCase()}`];
-      localStorage.setItem(REGISTRY_KEY, JSON.stringify(map));
-    } catch {
-      /* ignore */
-    }
-    refreshTrainers();
-    refreshAccounts();
-    toast(`🗑 Compte ${t.name} supprimé`);
+  const handleResetPassword = async (acc: UserProfile) => {
+    const data = await mutateAccount('/users/' + encodeURIComponent(acc.id) + '/reset-password', 'POST');
+    if (data) { setCreatedCred({ email: acc.email, resetLink: data.resetLink }); toast('Lien de réinitialisation généré.'); }
   };
+  const handleDeleteTrainer = async (acc: UserProfile) => {
+    if (!window.confirm('Supprimer définitivement le compte Firebase de ' + acc.name + ' ?')) return;
+    if (await mutateAccount('/users/' + encodeURIComponent(acc.id), 'DELETE')) toast('Compte supprimé.');
+  };
+  const handleToggleAccount = async (acc: UserProfile) => {
+    const disabled = !(acc as UserProfile & { disabled?: boolean }).disabled;
+    if (!window.confirm((disabled ? 'Suspendre ' : 'Réactiver ') + acc.name + ' ?')) return;
+    if (await mutateAccount('/users/' + encodeURIComponent(acc.id), 'PATCH', { disabled })) toast(disabled ? 'Compte suspendu.' : 'Compte réactivé.');
+  };
+  useEffect(() => {
+    if (section !== 'audit' && section !== 'systeme') return;
+    let cancelled = false; setPanelLoading(true); setPanelError(null);
+    adminApi(section === 'audit' ? '/audit' : '/health').then(data => {
+      if (!cancelled) { if (section === 'audit') setAuditEntries(data.entries); else setSystemHealth(data); }
+    }).catch(error => { if (!cancelled) setPanelError(error.message); }).finally(() => { if (!cancelled) setPanelLoading(false); });
+    return () => { cancelled = true; };
+  }, [section]);
 
   const copyCred = async (text: string) => {
     try {
@@ -362,7 +311,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // ---------- Niveaux (libellés + seuils) : paramétrage ----------
   const saveLevelSettings = async () => {
     try {
-      const res = await fetch('/api/level-settings', {
+      const res = await authenticatedFetch('/api/level-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(levelSettings),
@@ -384,14 +333,14 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // ---------- Tests : persistance ----------
   const persistDoc = async (next: LevelTestDoc, successMsg?: string) => {
     try {
-      const res = await fetch('/api/level-tests', {
+      const res = await authenticatedFetch('/api/level-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(next),
       });
       const data = await res.json();
       if (data.ok) {
-        setDoc({ tests: data.tests || [], attempts: data.attempts || [] });
+        setDoc(previous => ({ tests: data.tests || [], attempts: previous.attempts }));
         if (successMsg) toast(successMsg);
         return true;
       }
@@ -566,6 +515,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               <div className="flex justify-end">
                 <button
                   type="submit"
+                  disabled={busy || currentProfile.role !== 'super_admin'}
                   className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
@@ -614,7 +564,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const NONE_PERM: Record<string, boolean> = Object.fromEntries(PERMISSION_COLS.map((c) => [c.key, false]));
   const PERMISSION_MATRIX: Record<string, Record<string, boolean>> = {
     super_admin: ALL_PERM,
-    dfat_admin: ALL_PERM,
+    dfat_admin: { ...ALL_PERM, accounts: false, trainers: false },
     formateur: { ...NONE_PERM, modules: true },
   };
   const permissionRow = (role: string) => PERMISSION_MATRIX[role] || NONE_PERM;
@@ -629,7 +579,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
   // Performances des formateurs en fonction des modules ajoutés
   const trainerPerf = trainers.map((t) => {
-    const mods = courses.filter((c) => moduleAuthors[c.id]?.id === t.id);
+    const mods = courses.filter((c) => (c.authorId || moduleAuthors[c.id]?.id) === t.id);
     const students = mods.reduce((s, c) => s + (c.studentsCount || 0), 0);
     const rated = mods.filter((c) => (c.rating || 0) > 0);
     const avgRating = rated.length ? rated.reduce((s, c) => s + c.rating, 0) / rated.length : null;
@@ -697,14 +647,14 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
 
   // ---------- Ajout d'un module de formation (super admin) ----------
-  const handleAddModule = (e: React.FormEvent) => {
+  const handleAddModule = async (e: React.FormEvent) => {
     e.preventDefault();
     const title = modForm.title.trim();
     if (!title) return toast('⚠️ Intitulé du module requis');
     const seq = String(courses.length + 1).padStart(3, '0');
     const course: CourseModule = {
-      id: `ADM-${Date.now().toString(36).toUpperCase()}`,
-      code: `MDL-${seq}`,
+      id: editingModule?.id || `ADM-${Date.now().toString(36).toUpperCase()}`,
+      code: editingModule?.code || `MDL-${seq}`,
       title,
       category: modForm.category,
       targetAudience: modForm.targetAudience.length ? modForm.targetAudience : ['particulier'],
@@ -734,22 +684,15 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     const author: ModuleAuthor = trainer
       ? { id: trainer.id, name: trainer.name }
       : { id: currentProfile.id, name: currentProfile.name };
-    if (onAddCourse) {
-      onAddCourse(course);
-    } else {
-      try {
-        const raw = localStorage.getItem('armp_courses_custom');
-        const list: CourseModule[] = raw ? JSON.parse(raw) : [];
-        list.unshift(course);
-        localStorage.setItem('armp_courses_custom', JSON.stringify(list));
-      } catch {
-        /* quota */
-      }
-    }
+    if (!onAddCourse) return toast('Publication indisponible.');
+    setBusy(true);
+    try { await onAddCourse({ ...course, ...(editingModule ? { lessons: editingModule.lessons, quiz: editingModule.quiz, coverImage: editingModule.coverImage, chaptersCount: editingModule.chaptersCount, studentsCount: editingModule.studentsCount, rating: editingModule.rating } : {}), authorId: author.id, authorName: author.name }); }
+    catch (error) { toast(error instanceof Error ? error.message : 'Publication impossible.'); return; }
+    finally { setBusy(false); }
     recordModuleAuthor(course.id, author);
     setModuleAuthors(readModuleAuthors());
     setModForm({ ...modForm, title: '', legalRef: '', description: '' });
-    setShowModuleForm(false);
+    setShowModuleForm(false); setEditingModule(null);
     toast(`📚 Module « ${title} » ajouté${trainer ? ` — auteur : ${trainer.name}` : ''}`);
   };
 
@@ -817,6 +760,14 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
         </div>
       </div>
 
+      {accountsError && <div role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900">{accountsError} <button onClick={refreshAccounts} className="underline font-bold">Réessayer</button></div>}
+      {section === 'tests' && testError && <div role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900">{testError} <button onClick={refreshTests} className="underline font-bold">Recharger les tests</button></div>}
+      {accountsLoading && <SkeletonLoader label="Chargement des comptes…" rows={3} />}
+      {busy && <p role="status" className="text-sm text-blue-600">Opération en cours…</p>}
+      {(section === 'audit' || section === 'systeme') && <section className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+        <h3 className="font-bold">{section === 'audit' ? 'Journal des actions administratives' : 'État des services'}</h3>
+        {panelLoading ? <SkeletonLoader rows={4} /> : panelError ? <p role="alert">{panelError}</p> : section === 'audit' ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Date</th><th className="text-left">Action</th><th className="text-left">Auteur</th><th className="text-left">Cible</th></tr></thead><tbody>{auditEntries.map(entry => <tr key={entry.id} className="border-t"><td className="p-2">{new Date(entry.date).toLocaleString('fr-FR')}</td><td>{entry.action}</td><td>{entry.actor}</td><td>{entry.target}</td></tr>)}</tbody></table>{!auditEntries.length && <p>Aucune action enregistrée.</p>}</div> : systemHealth && <dl className="grid grid-cols-2 gap-3"><dt>Base de données</dt><dd>{systemHealth.firestore}</dd><dt>Authentification</dt><dd>{systemHealth.identity}</dd><dt>Persistance</dt><dd>{systemHealth.persistence}</dd></dl>}
+      </section>}
       {/* Mini statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -846,6 +797,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             { id: 'permissions', label: 'Permissions & rôles', icon: <KeyRound className="w-4 h-4" /> },
             { id: 'tests', label: 'Tests de validation', icon: <Award className="w-4 h-4" /> },
             { id: 'performances', label: 'Performances', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'audit', label: 'Journal des actions', icon: <ShieldCheck className="w-4 h-4" /> },
+            { id: 'systeme', label: 'État des services', icon: <Power className="w-4 h-4" /> },
             { id: 'modules', label: 'Modules de formation', icon: <BookOpen className="w-4 h-4" /> },
           ] as const
         ).map((s) => (
@@ -889,13 +842,13 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-1.5">
               <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Compte créé — identifiants à transmettre :</span>
+                <span>Lien de définition ou réinitialisation du mot de passe :</span>
               </p>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono">{createdCred.email}</code>
-                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold">{createdCred.password}</code>
+                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold break-all">{createdCred.resetLink}</code>
                 <button
-                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.password}`)}
+                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.resetLink}`)}
                   className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
                   title="Copier"
                 >
@@ -969,6 +922,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                     </p>
                   </div>
                   <select
+                    disabled={busy || currentProfile.role !== 'super_admin' || a.id === currentProfile.id || a.role === 'super_admin'}
+                    aria-label={"Rôle de " + a.name}
                     value={a.role}
                     onChange={(e) => handleChangeRole(a, e.target.value as UserRole)}
                     className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-bold shrink-0"
@@ -978,7 +933,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       <option key={k} value={k}>{v.label}</option>
                     ))}
                   </select>
-                  <div className="flex items-center space-x-1 shrink-0">
+                  <div className="flex items-center space-x-1 shrink-0"><button disabled={busy || currentProfile.role !== 'super_admin' || a.id === currentProfile.id || a.role === 'super_admin'} onClick={() => handleToggleAccount(a)} className="p-1.5 rounded-lg text-amber-600 disabled:opacity-40" title={(a as any).disabled ? 'Réactiver le compte' : 'Suspendre le compte'}><Power className="w-4 h-4" /></button>
                     <button
                       onClick={() => copyCred(a.email || '')}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
@@ -1028,13 +983,13 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-1.5">
               <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Formateur créé — transmettez-lui ses identifiants :</span>
+                <span>Lien de définition du mot de passe du formateur :</span>
               </p>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono">{createdCred.email}</code>
-                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold">{createdCred.password}</code>
+                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold break-all">{createdCred.resetLink}</code>
                 <button
-                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.password}`)}
+                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.resetLink}`)}
                   className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
                   title="Copier"
                 >
@@ -1367,7 +1322,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
           {/* Liste des tests */}
           {testsLoading ? (
-            <p className="text-xs text-slate-400 text-center py-6">Chargement…</p>
+            <SkeletonLoader label="Chargement des tests…" rows={3} />
           ) : doc.tests.length === 0 ? (
             <div className="p-8 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
               <Award className="w-8 h-8 text-slate-300 mx-auto" />
@@ -1986,7 +1941,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </p>
             </div>
             <button
-              onClick={() => setShowModuleForm((v) => !v)}
+              onClick={() => { setEditingModule(null); setShowModuleForm((v) => !v); }}
               className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
             >
               {showModuleForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -2076,8 +2031,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                 <p className="text-[10px] text-slate-500">
                   Le module apparaît immédiatement dans le catalogue et dans les performances du formateur sélectionné.
                 </p>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-500 transition">
-                  Publier le module
+                <button type="submit" disabled={busy} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-500 transition">
+                  {editingModule ? 'Enregistrer les modifications' : 'Publier le module'}
                 </button>
               </div>
             </form>
@@ -2091,7 +2046,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </div>
             ) : (
               courses.slice(0, 60).map((c) => {
-                const author = moduleAuthors[c.id];
+                const author = c.authorId ? { id: c.authorId, name: c.authorName || c.authorId } : moduleAuthors[c.id];
                 return (
                   <div key={c.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center space-x-3 min-w-0">
@@ -2111,6 +2066,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       </span>
                       <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">{c.studentsCount} apprenants</span>
                       <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">★ {c.rating}</span>
+                      {c.id.startsWith('ADM-') && <><button disabled={busy} title="Modifier le module" onClick={() => { setEditingModule(c); setModForm({ title: c.title, category: c.category, level: c.level, duration: c.duration, trainerId: c.authorId || '', targetAudience: c.targetAudience, legalRef: c.legalRef, description: c.description }); setShowModuleForm(true); }} className="p-2 text-blue-600"><Pencil className="w-4 h-4" /></button><button disabled={busy} title="Supprimer le module" onClick={async () => { if (!onDeleteCourse || !window.confirm('Supprimer le module ' + c.title + ' ?')) return; setBusy(true); try { await onDeleteCourse(c.id); toast('Module supprimé.'); } catch (error) { toast(error instanceof Error ? error.message : 'Suppression impossible.'); } finally { setBusy(false); } }} className="p-2 text-red-600"><Trash2 className="w-4 h-4" /></button></>}
                     </div>
                   </div>
                 );

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -73,7 +74,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
     setActiveTest(null);
     (async () => {
       try {
-        const res = await fetch('/api/level-tests');
+        const res = await authenticatedFetch('/api/level-tests');
         const data = await res.json();
         const actives: AdminLevelTest[] = (data.tests || []).filter(
           (t: AdminLevelTest) => t && t.active && Array.isArray(t.questions) && t.questions.length > 0
@@ -94,18 +95,8 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
 
   const startAdminTest = (test: AdminLevelTest) => {
     setActiveTest(test);
-    // Questions et options mélangées à chaque passage
-    setQuestions(
-      randomizeQuestions(
-        test.questions.map((q, i) => ({
-          id: i,
-          question: q.question,
-          options: q.options,
-          correctIndex: Math.min(q.answer, q.options.length - 1),
-          legalRef: q.legalRef || test.moduleCode || 'Test de niveau',
-        }))
-      )
-    );
+    // Server grades canonical option indexes; answer keys never reach the learner.
+    setQuestions(test.questions.map((q,i) => ({ id: i, question: q.question, options: q.options, correctIndex: -1, legalRef: q.legalRef || test.moduleCode || 'Test de niveau' })));
     setCurrentQIndex(0);
     setSelectedAnswers({});
     setResult(null);
@@ -159,39 +150,16 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
     try {
       // ---- Test de validation de niveau (créé par l'administrateur) ----
       if (activeTest) {
-        const correct = questions.filter((q) => selectedAnswers[q.id] === q.correctIndex).length;
-        const score = Math.round((correct / Math.max(1, questions.length)) * 100);
-        const passed = score >= activeTest.passPct;
-        try {
-          await fetch('/api/level-tests/attempt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              testId: activeTest.id,
-              profileId: currentProfile.id,
-              candidateName: currentProfile.name,
-              score,
-              passed,
-            }),
-          });
-        } catch {
-          /* enregistrement best-effort */
-        }
-        const wrong = questions.filter((q) => selectedAnswers[q.id] !== q.correctIndex);
-        const diagnostic = passed
-          ? `Validation ${activeTest.level} RÉUSSIE : ${correct}/${questions.length} bonnes réponses, seuil de ${activeTest.passPct}%. ${activeTest.level === 'Approfondi' && activeTest.moduleCode ? `Module ${activeTest.moduleCode} — niveau Approfondi validé selon les modules.` : `Niveau ${activeTest.level} validé.`}`
-          : `Validation ${activeTest.level} non atteinte : ${correct}/${questions.length} (${score}%) pour un seuil de ${activeTest.passPct}%. Révisez le module concerné puis repassez le test.`;
-        setResult({
-          score,
-          level: activeTest.level,
-          diagnostic,
-          strengths: questions
-            .filter((q) => selectedAnswers[q.id] === q.correctIndex)
-            .slice(0, 5)
-            .map((q) => q.question),
-          weaknesses: wrong.slice(0, 5).map((q) => q.question),
-          recommendedModuleIds: [],
+        const response = await authenticatedFetch('/api/level-tests/attempt', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testId: activeTest.id, answers: activeTest.questions.map((_,i) => selectedAnswers[i]) }),
         });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Enregistrement impossible.');
+        const { score, passed, correct } = data.attempt;
+        setResult({ score, level: activeTest.level,
+          diagnostic: (passed ? 'Validation réussie' : 'Seuil non atteint') + ' : ' + correct + '/' + questions.length + ' bonnes réponses, seuil ' + activeTest.passPct + '%.',
+          strengths: [], weaknesses: [], recommendedModuleIds: [] });
         // Affectation du niveau à l'utilisateur connecté : uniquement si le test est réussi
         if (passed) {
           onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level, levelLabels(peekLevelSettings())), score, {
@@ -227,7 +195,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       setResult(data);
       onUpdateProfileLevel(data.level as any, data.score);
     } catch (err) {
-      console.error(err);
+      window.alert(err instanceof Error ? err.message : 'Évaluation impossible. Réessayez.');
     } finally {
       setIsSubmitting(false);
     }

@@ -19,7 +19,8 @@ import {
 import { 
   AnalyticsDashboard 
 } from './components/AnalyticsDashboard';
-import { AdminSpace } from './components/AdminSpace';
+import { SkeletonLoader } from './components/SkeletonLoader';
+const AdminSpace = React.lazy(() => import('./components/AdminSpace').then(m => ({ default: m.AdminSpace })));
 import { 
   LegalDocsViewer 
 } from './components/LegalDocsViewer';
@@ -76,6 +77,7 @@ import {
   rejectCgpmpAccountRequestByArmp,
   fetchCustomCoursesFromFirestore,
   saveCustomCourseToFirestore,
+  deleteCustomCourseFromFirestore,
   fetchAllUserProfilesFromFirestore,
   testFirestoreConnection,
   firebaseLogout 
@@ -122,9 +124,7 @@ export default function App() {
   const [firestoreProfiles, setFirestoreProfiles] = useState<UserProfile[]>([]);
 
   // Authentication & Session State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!localStorage.getItem('armp_session_profile');
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [pendingCourseForAuth, setPendingCourseForAuth] = useState<CourseModule | null>(null);
 
@@ -246,26 +246,11 @@ export default function App() {
   useEffect(() => {
     setPreloaderStatus("Vérification de la session et des accès institutionnels...");
 
-    // Immediate local cache hydration to prevent UI flash
-    const cachedSession = localStorage.getItem('armp_session_profile');
-    if (cachedSession) {
-      try {
-        const parsed = JSON.parse(cachedSession) as UserProfile;
-        if (parsed && parsed.role) {
-          setCurrentRole(parsed.role);
-          setProfiles(prev => ({
-            ...prev,
-            [parsed.role]: parsed
-          }));
-          setIsAuthenticated(true);
-        }
-      } catch (e) {
-        console.warn("Could not read cached profile:", e);
-      }
-    }
+    const preloadingTimeout = window.setTimeout(() => setIsAppLoading(false), 12000);
 
     // Subscribe to Firebase Auth state
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsAuthenticated(false);
       if (firebaseUser) {
         setPreloaderStatus(`Chargement du profil sécurisé (${firebaseUser.email || 'Agent'})...`);
         try {
@@ -286,7 +271,7 @@ export default function App() {
           setPreloaderStatus("Synchronisation des dossiers CGPMP & visas DFAT...");
           const [firestoreReqs, remoteCourses, remoteProfiles, remoteCgpmpAccounts] = await Promise.all([
             fetchTrainingRequestsFromFirestore().catch(() => []),
-            fetchCustomCoursesFromFirestore().catch(() => []),
+            fetchCustomCoursesFromFirestore().catch(() => null),
             fetchAllUserProfilesFromFirestore().catch(() => []),
             fetchCgpmpAccountRequestsFromFirestore().catch(() => [])
           ]);
@@ -303,19 +288,12 @@ export default function App() {
               return Array.from(map.values());
             });
           }
-          if (remoteCourses && remoteCourses.length > 0) {
-            setCourses(prev => {
-              const officialMap = new Map<string, CourseModule>();
-              COURSES_DATA.forEach(c => officialMap.set(c.id, normalizeCourseToAnimation(c)));
-              const map = new Map<string, CourseModule>(officialMap);
-              prev.forEach(c => {
-                if (!map.has(c.id)) map.set(c.id, normalizeCourseToAnimation(c));
-              });
-              remoteCourses.forEach(c => {
-                if (!map.has(c.id)) map.set(c.id, normalizeCourseToAnimation(c));
-              });
-              return Array.from(map.values());
-            });
+          if (remoteCourses !== null) {
+            const map = new Map<string, CourseModule>();
+            COURSES_DATA.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
+            remoteCourses.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
+            setCourses(Array.from(map.values()));
+            localStorage.setItem('armp_courses_custom', JSON.stringify(remoteCourses));
           }
           if (remoteProfiles && remoteProfiles.length > 0) {
             setFirestoreProfiles(remoteProfiles);
@@ -323,7 +301,8 @@ export default function App() {
         } catch (err) {
           console.warn("Erreur chargement données Firestore:", err);
         }
-      } else if (!cachedSession) {
+      } else {
+        localStorage.removeItem('armp_session_profile');
         setIsAuthenticated(false);
       }
 
@@ -337,7 +316,7 @@ export default function App() {
       }, 400);
     });
 
-    return () => unsubscribe();
+    return () => { window.clearTimeout(preloadingTimeout); unsubscribe(); };
   }, []);
 
   const currentProfile = profiles[currentRole] || profiles['cgpmp_member'];
@@ -398,7 +377,13 @@ export default function App() {
   };
 
   // Handle successful login from Firebase
-  const handleLoginSuccess = (profile: UserProfile) => {
+  const handleLoginSuccess = async (profile: UserProfile) => {
+    if (!auth.currentUser || auth.currentUser.uid !== profile.id) {
+      showToast('Connectez-vous avec un compte Firebase réel.');
+      setIsAuthModalOpen(true); return;
+    }
+    try { profile = await getOrInitUserProfile(auth.currentUser); }
+    catch { showToast('Profil Firebase indisponible.'); return; }
     setCurrentRole(profile.role);
     setProfiles(prev => ({
       ...prev,
@@ -441,6 +426,9 @@ export default function App() {
 
   // Fast institutional demo login
   const handleDemoLogin = (role: UserRole) => {
+    if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO !== 'true') {
+      showToast('Connexion de démonstration désactivée. Utilisez un compte Firebase.'); return;
+    }
     setCurrentRole(role);
     setIsAuthenticated(true);
     setIsAuthModalOpen(false);
@@ -539,6 +527,7 @@ export default function App() {
 
   // Role Switch Handler
   const handleRoleChange = (newRole: UserRole) => {
+    if (isAuthenticated && newRole !== currentProfile.role) { showToast('Votre rôle est attribué par le superadministrateur.'); return; }
     setCurrentRole(newRole);
     const targetProf = profiles[newRole];
     if (targetProf) {
@@ -778,9 +767,10 @@ export default function App() {
   };
 
   // Trainer Course Authoring Handler (persists to localStorage + Firestore)
-  const handleAddCustomCourse = (newCourse: CourseModule) => {
+  const handleAddCustomCourse = async (newCourse: CourseModule) => {
+    await saveCustomCourseToFirestore(newCourse);
     setCourses((prev) => {
-      const updated = [newCourse, ...prev];
+      const updated = [newCourse, ...prev.filter(c => c.id !== newCourse.id)];
       try {
         const customOnes = updated.filter(c => !COURSES_DATA.some(d => d.id === c.id));
         localStorage.setItem('armp_courses_custom', JSON.stringify(customOnes));
@@ -789,7 +779,7 @@ export default function App() {
       }
       return updated;
     });
-    saveCustomCourseToFirestore(newCourse).catch(err => console.warn("Could not sync custom course to Firestore:", err));
+
     // Attribution de l'auteur pour les performances des formateurs (si pas déjà attribué)
     try {
       const authors = readModuleAuthors();
@@ -800,6 +790,15 @@ export default function App() {
     showToast(`Formation "${newCourse.title}" publiée et sauvegardée au catalogue officiel !`);
   };
 
+  const handleDeleteCustomCourse = async (id: string) => {
+    if (COURSES_DATA.some(c => c.id === id)) throw new Error('Les cours officiels sont protégés.');
+    await deleteCustomCourseFromFirestore(id);
+    setCourses(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      localStorage.setItem('armp_courses_custom', JSON.stringify(updated.filter(c => !COURSES_DATA.some(d => d.id === c.id))));
+      return updated;
+    });
+  };
   // CGPMP Request Handlers
   const handleSubmitRequest = async (newReq: TrainingRequest) => {
     setRequests((prev) => [newReq, ...prev]);
@@ -1285,7 +1284,7 @@ export default function App() {
         {activeTab === 'admin' && (
           isAuthenticated && (currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') ? (
             <div className="px-4 sm:px-6 lg:px-8 py-8">
-              <AdminSpace
+              <React.Suspense fallback={<SkeletonLoader label="Chargement de l’espace administrateur…" />}><AdminSpace
                 currentProfile={currentProfile}
                 courses={courses}
                 requests={requests}
@@ -1293,7 +1292,8 @@ export default function App() {
                 firestoreProfiles={firestoreProfiles}
                 onShowToast={showToast}
                 onAddCourse={handleAddCustomCourse}
-              />
+                onDeleteCourse={handleDeleteCustomCourse}
+              /></React.Suspense>
             </div>
           ) : (
             <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
