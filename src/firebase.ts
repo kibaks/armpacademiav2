@@ -507,14 +507,14 @@ export async function checkExistingRegisteredUser(params: {
 
 // Update user profile in Firestore
 export async function syncUserProfileToFirestore(profile: UserProfile): Promise<void> {
-  saveProfileToLocalRegistry(profile);
-  if (!auth.currentUser) {
-    return;
+  if (!auth.currentUser || auth.currentUser.uid !== profile.id) {
+    throw new Error('Une session Firebase correspondant au profil est requise.');
   }
   const path = `users/${profile.id}`;
   try {
     const userDocRef = doc(db, 'users', profile.id);
-    await setDoc(userDocRef, profile, { merge: true });
+    await setDoc(userDocRef, JSON.parse(JSON.stringify(profile)), { merge: true });
+    saveProfileToLocalRegistry(profile);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }

@@ -505,8 +505,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       };
       if (onUpdateProfile) await onUpdateProfile(updated);
       onShowToast?.('Photo ajoutée à votre galerie et persistée dans Firestore ✓');
-    } catch {
-      onShowToast?.("Erreur lors de l'ajout de la photo.");
+    } catch (error) {
+      onShowToast?.(error instanceof Error ? error.message : "Erreur lors de l'ajout de la photo.");
     } finally {
       setIsGalleryUploading(false);
       e.target.value = '';
@@ -2645,7 +2645,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               <input
                 ref={imageInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif,image/webp"
                 className="hidden"
                 onChange={handleImageFileChange}
               />
@@ -3248,7 +3248,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             <input
               ref={galleryInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/gif,image/webp"
               className="hidden"
               onChange={handleGalleryPhotoUpload}
             />
@@ -3689,7 +3689,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isCoverUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
                   <Upload className="w-4 h-4" />
                   <span>{isCoverUploading ? 'Envoi vers Academia…' : coverDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
-                  <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFileUpload} disabled={isCoverUploading} />
+                  <input ref={coverInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleCoverFileUpload} disabled={isCoverUploading} />
                 </label>
                 <p className="text-[10px] text-slate-500">Stockée en public /storage/academia/covers/… • visible immédiatement après enregistrement</p>
               </div>
@@ -3762,7 +3762,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isAvatarUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
                   <Upload className="w-4 h-4" />
                   <span>{isAvatarUploading ? 'Envoi vers Academia…' : avatarDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
-                  <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarPickerFileChange} disabled={isAvatarUploading} />
+                  <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarPickerFileChange} disabled={isAvatarUploading} />
                 </label>
                 <p className="text-[10px] text-slate-500">Stockée en public /storage/academia/avatars/… • visible immédiatement</p>
               </div>

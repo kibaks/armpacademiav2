@@ -1,3 +1,4 @@
+import { storageRouter } from '../backend/storage';
 import { adminRouter, learningRouter, authenticate, requireAdmin } from '../backend/admin';
 import express from 'express';
 import dotenv from 'dotenv';
@@ -36,6 +37,7 @@ app.use((req, _res, next) => {
 
 
 app.disable('x-powered-by');
+app.use('/api/storage', storageRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
 app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {

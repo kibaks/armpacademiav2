@@ -455,16 +455,9 @@ export default function App() {
 
   // Profile Update (saves to Firestore & local state)
   const handleUpdateProfile = async (updated: UserProfile) => {
-    setProfiles(prev => ({
-      ...prev,
-      [updated.role]: updated
-    }));
+    await syncUserProfileToFirestore(updated);
+    setProfiles(prev => ({ ...prev, [updated.role]: updated }));
     localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    try {
-      await syncUserProfileToFirestore(updated);
-    } catch (err) {
-      console.warn("Could not sync profile to Firestore:", err);
-    }
   };
 
   // Two-Factor Authentication (2FA) Toggle in Profile

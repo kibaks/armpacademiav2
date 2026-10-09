@@ -1,3 +1,4 @@
+import { storageRouter } from './backend/storage';
 import { adminRouter, learningRouter, authenticate, requireAdmin, services } from './backend/admin';
 import express from 'express';
 import fs from 'fs';
@@ -44,6 +45,7 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '25mb' }));
 app.disable('x-powered-by');
+app.use('/api/storage', storageRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
 app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {
