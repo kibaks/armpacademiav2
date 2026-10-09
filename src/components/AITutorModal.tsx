@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
 import {
@@ -1402,7 +1403,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     if (!voiceSettings) return;
     setVoiceSettingsMsg('Enregistrement…');
     try {
-      const res = await fetch('/api/tts/settings', {
+      const res = await authenticatedFetch('/api/tts/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -907,6 +907,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const handleDirectLoginForRole = (role: UserRole) => {
+    if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO !== 'true') {
+      setStepError('Utilisez votre compte Firebase pour vous connecter.'); return;
+    }
     const targetProf = (allProfiles && allProfiles[role]) || DEMO_PROFILES[role];
     if (targetProf) {
       onShowToast?.(`Connexion réussie : Bienvenue ${targetProf.name} (${targetProf.roleTitle}).`);

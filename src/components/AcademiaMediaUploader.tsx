@@ -38,7 +38,7 @@ export const AcademiaMediaUploader: React.FC<Props> = ({
   const inferredAccept =
     accept ||
     (kind === 'image'
-      ? 'image/*'
+      ? 'image/jpeg,image/png,image/gif,image/webp'
       : kind === 'video'
       ? 'video/*'
       : kind === 'audio'
@@ -50,7 +50,7 @@ export const AcademiaMediaUploader: React.FC<Props> = ({
     (kind === 'image' ? 'Importer une image' : kind === 'video' ? 'Importer une vidéo' : kind === 'audio' ? 'Importer un audio' : 'Importer un média');
 
   const inferredHint =
-    hint || `Glisser-déposer ou cliquer — Images, vidéos, audios → Academia 137.184.59.184 (max ${maxSizeMo} Mo)`;
+    hint || (kind === 'image' ? 'JPG, JPEG, PNG, GIF ou WebP — maximum 3 Mo' : `Glisser-déposer ou cliquer — Images, vidéos, audios → Academia 137.184.59.184 (max ${maxSizeMo} Mo)`);
 
   const handleFiles = async (files: FileList | null) => {
     const file = files?.[0];

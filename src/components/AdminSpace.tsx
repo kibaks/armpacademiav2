@@ -1,6 +1,13 @@
+import { AdminProfileHeader } from './AdminProfileHeader';
+import { AdminPagination } from './AdminPagination';
+import { downloadAdminCsv } from '../utils/adminExport';
+import { adminApi, authenticatedFetch } from '../lib/adminApi';
+import { SkeletonLoader } from './SkeletonLoader';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldCheck,
+  Download,
+  Search,
   Users,
   GraduationCap,
   Plus,
@@ -24,7 +31,6 @@ import {
 import { UserProfile, CourseModule, TrainingRequest, NiveauValidation, UserRole } from '../types';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { ROLE_CREATION_CONFIG } from './AuthModal';
-import { saveProfileToLocalRegistry } from '../firebase';
 import { computeUserLearningStats } from '../utils/learningStats';
 import { readModuleAuthors, recordModuleAuthor, ModuleAuthor } from '../utils/moduleAuthors';
 import {
@@ -79,7 +85,8 @@ interface AdminSpaceProps {
   allProfiles: Record<string, UserProfile>;
   firestoreProfiles?: UserProfile[];
   onShowToast?: (msg: string) => void;
-  onAddCourse?: (course: CourseModule) => void;
+  onDeleteCourse?: (id: string) => Promise<void>;
+  onAddCourse?: (course: CourseModule) => void | Promise<void>;
 }
 
 const NIVEAUX: NiveauValidation[] = ['Initiation', 'Approfondi', 'Avancé'];
@@ -114,10 +121,9 @@ const emptyDraft = (): {
   ],
 });
 
-const genPassword = () =>
-  'FRM-' + Math.random().toString(36).slice(2, 6).toUpperCase() + Math.floor(10 + Math.random() * 89);
 
-const REGISTRY_KEY = 'academia_registered_users_v1';
+
+
 
 export const AdminSpace: React.FC<AdminSpaceProps> = ({
   currentProfile,
@@ -127,15 +133,32 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   firestoreProfiles,
   onShowToast,
   onAddCourse,
+  onDeleteCourse,
 }) => {
   const [view, setView] = useState<'espace' | 'dashboard'>('espace');
   const [section, setSection] = useState<
-    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules'
+    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules' | 'audit' | 'systeme'
   >('tableau');
 
   // ---------- Tous les comptes (backend) ----------
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<any[]>([]);
+  const [systemHealth, setSystemHealth] = useState<any>(null);
+  const [panelLoading, setPanelLoading] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<UserProfile[]>([]);
   const [acctSearch, setAcctSearch] = useState('');
+  const [acctStatus, setAcctStatus] = useState('tous');
+  const [acctPage, setAcctPage] = useState(1);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [panelRevision, setPanelRevision] = useState(0);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditAction, setAuditAction] = useState('tous');
+  const [moduleSearch, setModuleSearch] = useState('');
+  const [moduleCategory, setModuleCategory] = useState('toutes');
+  const [modulePage, setModulePage] = useState(1);
   const [acctRoleFilter, setAcctRoleFilter] = useState<string>('tous');
   const [roleLocked, setRoleLocked] = useState(false);
 
@@ -151,7 +174,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     roleTitle: 'Formateur',
     role: 'formateur' as UserRole,
   });
-  const [createdCred, setCreatedCred] = useState<{ email: string; password: string } | null>(null);
+  const [createdCred, setCreatedCred] = useState<{ email: string; resetLink: string } | null>(null);
 
   // ---------- Tests de niveau ----------
   const [doc, setDoc] = useState<LevelTestDoc>({ tests: [], attempts: [] });
@@ -165,6 +188,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const [lrnLevel, setLrnLevel] = useState('tous');
 
   // ---------- Modules de formation (ajout super admin) ----------
+  const [editingModule, setEditingModule] = useState<CourseModule | null>(null);
   const [showModuleForm, setShowModuleForm] = useState(false);
   const [modForm, setModForm] = useState({
     title: '',
@@ -186,63 +210,34 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
   const toast = (m: string) => onShowToast?.(m);
 
-  const readRegistry = (): Record<string, UserProfile> => {
+  const refreshAccounts = useCallback(async () => {
+    setAccountsLoading(true); setAccountsError(null);
     try {
-      const raw = localStorage.getItem(REGISTRY_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  };
-
-  const refreshAccounts = useCallback(() => {
-    const merged = new Map<string, UserProfile>();
-    Object.values(readRegistry()).forEach((p) => {
-      if (p && p.id) merged.set(p.id, p);
-    });
-    Object.values(allProfiles || {}).forEach((p) => {
-      if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
-    });
-    (firestoreProfiles || []).forEach((p) => {
-      if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
-    });
-    setAccounts(Array.from(merged.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-  }, [allProfiles, firestoreProfiles]);
-
-  const refreshTrainers = useCallback(() => {
-    const merged = new Map<string, UserProfile>();
-    try {
-      const raw = localStorage.getItem(REGISTRY_KEY);
-      if (raw) {
-        const map: Record<string, UserProfile> = JSON.parse(raw);
-        Object.values(map).forEach((p) => {
-          if (p && p.role === 'formateur' && p.id) merged.set(p.id, p);
-        });
-      }
-    } catch {
-      /* registry illisible */
-    }
-    Object.values(allProfiles || {}).forEach((p) => {
-      if (p && p.role === 'formateur' && p.id && !merged.has(p.id)) merged.set(p.id, p);
-    });
-    setTrainers(Array.from(merged.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-  }, [allProfiles]);
+      const data = await adminApi('/users');
+      const users = (data.users as UserProfile[]).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+      setAccounts(users); setUpdatedAt(new Date().toISOString()); setTrainers(users.filter(p => p.role === 'formateur'));
+      if (data.limited) setAccountsError('Affichage limité aux 500 premiers comptes.');
+    } catch (error) { setAccountsError(error instanceof Error ? error.message : 'Chargement impossible.'); }
+    finally { setAccountsLoading(false); }
+  }, []);
+  const refreshTrainers = refreshAccounts;
 
   const refreshTests = useCallback(async () => {
     setTestsLoading(true);
     try {
-      const res = await fetch('/api/level-tests');
+      const res = await authenticatedFetch('/api/level-tests');
+      if (!res.ok) throw new Error('Chargement des tests refusé.');
       const data = await res.json();
       setDoc({ tests: data.tests || [], attempts: data.attempts || [] });
+      setTestError(null);
     } catch {
-      /* serveur absent */
+      setTestError('Chargement des tests impossible. Vérifiez la connexion et la configuration du serveur.');
     } finally {
       setTestsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshTrainers();
     refreshAccounts();
     refreshTests();
     fetch('/api/level-settings')
@@ -274,81 +269,49 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     setSection(locked ? 'formateurs' : 'utilisateurs');
   };
 
-  const handleCreateTrainer = (e: React.FormEvent) => {
-    e.preventDefault();
-    const prenom = trainerForm.prenom.trim();
-    const nom = trainerForm.nom.trim();
-    const email = trainerForm.email.trim().toLowerCase();
-    if (!prenom || !nom) return toast('⚠️ Prénom et nom requis');
-    if (!email.includes('@')) return toast('⚠️ Adresse email invalide');
-    const password = genPassword();
-    const role = trainerForm.role || 'formateur';
-    const profile: UserProfile = {
-      id: `${role === 'formateur' ? 'TRN' : 'ACC'}-${Date.now().toString(36).toUpperCase()}`,
-      name: `${prenom} ${nom}`,
-      nom: nom.toUpperCase(),
-      prenom,
-      email,
-      role,
-      roleTitle: trainerForm.roleTitle.trim() || ROLE_CREATION_CONFIG[role]?.label || 'Compte',
-      institution: trainerForm.institution.trim() || 'ARMP-RDC',
-      phone: trainerForm.phone.trim(),
-      avatarUrl: '',
-      level: 'Non évalué',
-      completedModulesCount: 0,
-      certificationsCount: 0,
-      offlineDownloads: [],
-      joinDate: new Date().toLocaleDateString('fr-FR'),
-    };
+  const handleCreateTrainer = async (e: React.FormEvent) => {
+    e.preventDefault(); if (busy) return;
+    const { prenom, nom, email, role, institution, phone, roleTitle } = trainerForm;
+    if (!prenom.trim() || !nom.trim()) return toast('Prénom et nom requis.');
+    setBusy(true);
     try {
-      saveProfileToLocalRegistry(profile);
-    } catch {
-      /* quota */
-    }
-    refreshTrainers();
-    refreshAccounts();
-    setCreatedCred({ email, password });
-    setShowTrainerForm(false);
-    toast(`✅ Compte ${ROLE_CREATION_CONFIG[role]?.label || role} créé pour ${profile.name}`);
+      const data = await adminApi('/users', 'POST', { name: [prenom.trim(),nom.trim()].join(' '), email, role, institution, phone, roleTitle });
+      setCreatedCred({ email: data.profile.email, resetLink: data.resetLink });
+      setShowTrainerForm(false); await refreshAccounts(); toast('Compte Firebase créé. Transmettez le lien de définition du mot de passe au titulaire.');
+    } catch (error) { toast(error instanceof Error ? error.message : 'Création impossible.'); }
+    finally { setBusy(false); }
   };
-
-  const handleChangeRole = (acc: UserProfile, role: UserRole) => {
-    try {
-      const map = readRegistry();
-      const uidKey = `uid:${acc.id}`;
-      const emailKey = acc.email ? `email:${acc.email.trim().toLowerCase()}` : '';
-      if (map[uidKey]) map[uidKey] = { ...map[uidKey], role };
-      if (emailKey && map[emailKey]) map[emailKey] = { ...map[emailKey], role };
-      localStorage.setItem(REGISTRY_KEY, JSON.stringify(map));
-    } catch {
-      /* quota */
-    }
-    refreshAccounts();
-    refreshTrainers();
-    toast(`🔁 ${acc.name} → ${ROLE_CREATION_CONFIG[role]?.label || role}`);
+  const mutateAccount = async (path: string, method: string, body?: unknown) => {
+    if (busy) return; setBusy(true);
+    try { const data = await adminApi(path, method, body); await refreshAccounts(); return data; }
+    catch (error) { toast(error instanceof Error ? error.message : 'Opération impossible.'); }
+    finally { setBusy(false); }
   };
-
-  const handleResetPassword = (acc: UserProfile) => {
-    const password = genPassword();
-    setCreatedCred({ email: acc.email, password });
-    toast(`🔑 Nouveau mot de passe généré pour ${acc.name}`);
+  const handleChangeRole = async (acc: UserProfile, role: UserRole) => {
+    if (!window.confirm('Modifier le rôle de ' + acc.name + ' ? Sa session sera révoquée.')) return;
+    if (await mutateAccount('/users/' + encodeURIComponent(acc.id), 'PATCH', { role })) toast('Rôle mis à jour.');
   };
-
-  const handleDeleteTrainer = (t: UserProfile) => {
-    if (!window.confirm(`Supprimer le formateur ${t.name} ?`)) return;
-    try {
-      const raw = localStorage.getItem(REGISTRY_KEY);
-      const map: Record<string, UserProfile> = raw ? JSON.parse(raw) : {};
-      delete map[`uid:${t.id}`];
-      if (t.email) delete map[`email:${t.email.trim().toLowerCase()}`];
-      localStorage.setItem(REGISTRY_KEY, JSON.stringify(map));
-    } catch {
-      /* ignore */
-    }
-    refreshTrainers();
-    refreshAccounts();
-    toast(`🗑 Compte ${t.name} supprimé`);
+  const handleResetPassword = async (acc: UserProfile) => {
+    const data = await mutateAccount('/users/' + encodeURIComponent(acc.id) + '/reset-password', 'POST');
+    if (data) { setCreatedCred({ email: acc.email, resetLink: data.resetLink }); toast('Lien de réinitialisation généré.'); }
   };
+  const handleDeleteTrainer = async (acc: UserProfile) => {
+    if (!window.confirm('Supprimer définitivement le compte Firebase de ' + acc.name + ' ?')) return;
+    if (await mutateAccount('/users/' + encodeURIComponent(acc.id), 'DELETE')) toast('Compte supprimé.');
+  };
+  const handleToggleAccount = async (acc: UserProfile) => {
+    const disabled = !(acc as UserProfile & { disabled?: boolean }).disabled;
+    if (!window.confirm((disabled ? 'Suspendre ' : 'Réactiver ') + acc.name + ' ?')) return;
+    if (await mutateAccount('/users/' + encodeURIComponent(acc.id), 'PATCH', { disabled })) toast(disabled ? 'Compte suspendu.' : 'Compte réactivé.');
+  };
+  useEffect(() => {
+    if (section !== 'audit' && section !== 'systeme') return;
+    let cancelled = false; setPanelLoading(true); setPanelError(null);
+    adminApi(section === 'audit' ? '/audit' : '/health').then(data => {
+      if (!cancelled) { if (section === 'audit') setAuditEntries(data.entries); else setSystemHealth(data); }
+    }).catch(error => { if (!cancelled) setPanelError(error.message); }).finally(() => { if (!cancelled) setPanelLoading(false); });
+    return () => { cancelled = true; };
+  }, [section, panelRevision]);
 
   const copyCred = async (text: string) => {
     try {
@@ -362,7 +325,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // ---------- Niveaux (libellés + seuils) : paramétrage ----------
   const saveLevelSettings = async () => {
     try {
-      const res = await fetch('/api/level-settings', {
+      const res = await authenticatedFetch('/api/level-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(levelSettings),
@@ -384,14 +347,14 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // ---------- Tests : persistance ----------
   const persistDoc = async (next: LevelTestDoc, successMsg?: string) => {
     try {
-      const res = await fetch('/api/level-tests', {
+      const res = await authenticatedFetch('/api/level-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(next),
       });
       const data = await res.json();
       if (data.ok) {
-        setDoc({ tests: data.tests || [], attempts: data.attempts || [] });
+        setDoc(previous => ({ tests: data.tests || [], attempts: previous.attempts }));
         if (successMsg) toast(successMsg);
         return true;
       }
@@ -566,6 +529,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               <div className="flex justify-end">
                 <button
                   type="submit"
+                  disabled={busy || currentProfile.role !== 'super_admin'}
                   className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
@@ -614,7 +578,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const NONE_PERM: Record<string, boolean> = Object.fromEntries(PERMISSION_COLS.map((c) => [c.key, false]));
   const PERMISSION_MATRIX: Record<string, Record<string, boolean>> = {
     super_admin: ALL_PERM,
-    dfat_admin: ALL_PERM,
+    dfat_admin: { ...ALL_PERM, accounts: false, trainers: false },
     formateur: { ...NONE_PERM, modules: true },
   };
   const permissionRow = (role: string) => PERMISSION_MATRIX[role] || NONE_PERM;
@@ -629,7 +593,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
   // Performances des formateurs en fonction des modules ajoutés
   const trainerPerf = trainers.map((t) => {
-    const mods = courses.filter((c) => moduleAuthors[c.id]?.id === t.id);
+    const mods = courses.filter((c) => (c.authorId || moduleAuthors[c.id]?.id) === t.id);
     const students = mods.reduce((s, c) => s + (c.studentsCount || 0), 0);
     const rated = mods.filter((c) => (c.rating || 0) > 0);
     const avgRating = rated.length ? rated.reduce((s, c) => s + c.rating, 0) / rated.length : null;
@@ -697,14 +661,14 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
 
   // ---------- Ajout d'un module de formation (super admin) ----------
-  const handleAddModule = (e: React.FormEvent) => {
+  const handleAddModule = async (e: React.FormEvent) => {
     e.preventDefault();
     const title = modForm.title.trim();
     if (!title) return toast('⚠️ Intitulé du module requis');
     const seq = String(courses.length + 1).padStart(3, '0');
     const course: CourseModule = {
-      id: `ADM-${Date.now().toString(36).toUpperCase()}`,
-      code: `MDL-${seq}`,
+      id: editingModule?.id || `ADM-${Date.now().toString(36).toUpperCase()}`,
+      code: editingModule?.code || `MDL-${seq}`,
       title,
       category: modForm.category,
       targetAudience: modForm.targetAudience.length ? modForm.targetAudience : ['particulier'],
@@ -734,24 +698,33 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
     const author: ModuleAuthor = trainer
       ? { id: trainer.id, name: trainer.name }
       : { id: currentProfile.id, name: currentProfile.name };
-    if (onAddCourse) {
-      onAddCourse(course);
-    } else {
-      try {
-        const raw = localStorage.getItem('armp_courses_custom');
-        const list: CourseModule[] = raw ? JSON.parse(raw) : [];
-        list.unshift(course);
-        localStorage.setItem('armp_courses_custom', JSON.stringify(list));
-      } catch {
-        /* quota */
-      }
-    }
+    if (!onAddCourse) return toast('Publication indisponible.');
+    setBusy(true);
+    try { await onAddCourse({ ...course, ...(editingModule ? { lessons: editingModule.lessons, quiz: editingModule.quiz, coverImage: editingModule.coverImage, chaptersCount: editingModule.chaptersCount, studentsCount: editingModule.studentsCount, rating: editingModule.rating } : {}), authorId: author.id, authorName: author.name }); }
+    catch (error) { toast(error instanceof Error ? error.message : 'Publication impossible.'); return; }
+    finally { setBusy(false); }
     recordModuleAuthor(course.id, author);
     setModuleAuthors(readModuleAuthors());
     setModForm({ ...modForm, title: '', legalRef: '', description: '' });
-    setShowModuleForm(false);
+    setShowModuleForm(false); setEditingModule(null);
     toast(`📚 Module « ${title} » ajouté${trainer ? ` — auteur : ${trainer.name}` : ''}`);
   };
+
+  const filteredAccounts = accounts.filter(a => {
+    const q = acctSearch.trim().toLocaleLowerCase('fr');
+    return (!q || [a.name, a.email, a.institution].some(v => (v || '').toLocaleLowerCase('fr').includes(q)))
+      && (acctRoleFilter === 'tous' || a.role === acctRoleFilter)
+      && (acctStatus === 'tous' || (acctStatus === 'suspendus') === !!(a as UserProfile & { disabled?: boolean }).disabled);
+  });
+  const accountPages = Math.max(1, Math.ceil(filteredAccounts.length / 20));
+  const accountPage = Math.min(acctPage, accountPages);
+  const visibleAccounts = filteredAccounts.slice((accountPage - 1) * 20, accountPage * 20);
+  const filteredModules = courses.filter(c => (!moduleSearch.trim() || [c.title, c.code, c.authorName].some(v => (v || '').toLocaleLowerCase('fr').includes(moduleSearch.trim().toLocaleLowerCase('fr')))) && (moduleCategory === 'toutes' || c.category === moduleCategory));
+  const modulePages = Math.max(1, Math.ceil(filteredModules.length / 20));
+  const currentModulePage = Math.min(modulePage, modulePages);
+  const filteredAudit = auditEntries.filter(e => (auditAction === 'tous' || e.action === auditAction) && [e.action, e.actor, e.target].some(v => String(v || '').toLowerCase().includes(auditSearch.trim().toLowerCase())));
+  const exportAccounts = () => downloadAdminCsv('comptes-armp.csv', [['Nom', 'Email', 'Institution', 'Rôle', 'Statut'], ...filteredAccounts.map(a => [a.name, a.email, a.institution, ROLE_CREATION_CONFIG[a.role]?.label || a.role, (a as any).disabled ? 'Suspendu' : 'Actif'])]);
+  const exportModules = () => downloadAdminCsv('modules-armp.csv', [['Code', 'Titre', 'Catégorie', 'Niveau', 'Durée', 'Auteur'], ...filteredModules.map(c => [c.code, c.title, c.category, c.level, c.duration, c.authorName || 'Cours officiel'])]);
 
   // VUE : DASHBOARD (bascule)
   // ================================================================
@@ -792,31 +765,12 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // ================================================================
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* En-tête + bascule de mode */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-blue-900 text-white border border-blue-800/60 shadow-md">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 rounded-xl bg-amber-400/15 border border-amber-400/40">
-            <ShieldCheck className="w-6 h-6 text-amber-300" />
-          </div>
-          <div>
-            <h2 className="text-lg font-extrabold tracking-tight">Espace Super Administrateur</h2>
-            <p className="text-[11px] text-blue-200/80">
-              {currentProfile.name} • {currentProfile.roleTitle} — pilotage : comptes, formateurs, apprenants, modules & tests
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2 bg-white/10 rounded-xl p-1">
-          <span className="px-3 py-1.5 rounded-lg bg-white/15 text-xs font-black">Espace</span>
-          <button
-            onClick={() => setView('dashboard')}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-100 hover:bg-white/10 transition"
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" />
-            <span>Mode Dashboard</span>
-          </button>
-        </div>
-      </div>
+      <AdminProfileHeader profile={currentProfile} loading={accountsLoading || testsLoading || panelLoading} updatedAt={updatedAt} onRefresh={() => { void refreshAccounts(); void refreshTests(); setPanelRevision(n => n + 1); }} onDashboard={() => setView('dashboard')} />
 
+      {accountsError && <div role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900">{accountsError} <button onClick={refreshAccounts} className="underline font-bold">Réessayer</button></div>}
+      {section === 'tests' && testError && <div role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900">{testError} <button onClick={refreshTests} className="underline font-bold">Recharger les tests</button></div>}
+      {accountsLoading && <SkeletonLoader label="Chargement des comptes…" rows={3} />}
+      {busy && <p role="status" className="text-sm text-blue-600">Opération en cours…</p>}
       {/* Mini statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -836,7 +790,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       </div>
 
       {/* Navigation sections */}
-      <div className="flex flex-wrap gap-x-1 gap-y-0 border-b border-slate-200 dark:border-slate-800">
+      <div aria-label="Rubriques de l’administration" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
         {(
           [
             { id: 'tableau', label: 'Tableau de bord', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -846,16 +800,19 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             { id: 'permissions', label: 'Permissions & rôles', icon: <KeyRound className="w-4 h-4" /> },
             { id: 'tests', label: 'Tests de validation', icon: <Award className="w-4 h-4" /> },
             { id: 'performances', label: 'Performances', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'audit', label: 'Journal des actions', icon: <ShieldCheck className="w-4 h-4" /> },
+            { id: 'systeme', label: 'État des services', icon: <Power className="w-4 h-4" /> },
             { id: 'modules', label: 'Modules de formation', icon: <BookOpen className="w-4 h-4" /> },
           ] as const
         ).map((s) => (
           <button
             key={s.id}
+            aria-current={section === s.id ? 'page' : undefined}
             onClick={() => setSection(s.id)}
-            className={`flex items-center space-x-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 -mb-px transition ${
+            className={`flex items-center space-x-1.5 px-3.5 min-h-11 py-2.5 rounded-xl text-xs font-bold transition ${
               section === s.id
-                ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                ? 'bg-blue-700 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
             }`}
           >
             {s.icon}
@@ -864,6 +821,11 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
         ))}
       </div>
 
+      {(section === 'audit' || section === 'systeme') && <section className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+        <h3 className="font-bold">{section === 'audit' ? 'Journal des actions administratives' : 'État des services'}</h3>
+        {section === 'audit' && <div className="flex flex-wrap gap-2"><input aria-label="Rechercher dans le journal" value={auditSearch} onChange={e => setAuditSearch(e.target.value)} placeholder="Action, auteur ou cible…" className="min-h-11 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800" /><select aria-label="Filtrer les actions" value={auditAction} onChange={e => setAuditAction(e.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800"><option value="tous">Toutes les actions</option>{Array.from(new Set(auditEntries.map(e => e.action as string))).sort().map(a => <option key={a} value={a}>{a}</option>)}</select><button disabled={panelLoading || !!panelError || !filteredAudit.length} onClick={() => downloadAdminCsv('journal-armp.csv', [['Date', 'Action', 'Auteur', 'Cible'], ...filteredAudit.map(e => [e.date, e.action, e.actor, e.target])])} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" />Exporter CSV</button></div>}
+        {panelLoading ? <SkeletonLoader rows={4} /> : panelError ? <p role="alert">{panelError} <button onClick={() => setPanelRevision(n => n + 1)} className="font-bold underline">Réessayer</button></p> : section === 'audit' ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Date</th><th className="text-left">Action</th><th className="text-left">Auteur</th><th className="text-left">Cible</th></tr></thead><tbody>{filteredAudit.map(entry => <tr key={entry.id} className="border-t"><td className="p-2">{new Date(entry.date).toLocaleString('fr-FR')}</td><td>{entry.action}</td><td>{entry.actor}</td><td>{entry.target}</td></tr>)}</tbody></table>{!filteredAudit.length && <p>Aucune action correspondante parmi les 100 dernières.</p>}</div> : systemHealth && <dl className="grid grid-cols-2 gap-3"><dt>Base de données</dt><dd>{systemHealth.firestore}</dd><dt>Authentification</dt><dd>{systemHealth.identity}</dd><dt>Persistance</dt><dd>{systemHealth.persistence}</dd></dl>}
+      </section>}
       {/* ============================================================ */}
       {/* SECTION GESTION DES UTILISATEURS — backend, gérée par le super admin */}
       {/* ============================================================ */}
@@ -873,7 +835,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des utilisateurs</h3>
               <p className="text-xs text-slate-500">
-                Tous les comptes de la plateforme — le super administrateur crée, change les rôles et supprime n'importe quel compte (formateurs, agents, administration…).
+                Créez les comptes et gérez leurs accès. Votre compte et les superadministrateurs existants sont protégés.
               </p>
             </div>
             <button
@@ -889,13 +851,13 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-1.5">
               <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Compte créé — identifiants à transmettre :</span>
+                <span>Lien de définition ou réinitialisation du mot de passe :</span>
               </p>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono">{createdCred.email}</code>
-                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold">{createdCred.password}</code>
+                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold break-all">{createdCred.resetLink}</code>
                 <button
-                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.password}`)}
+                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.resetLink}`)}
                   className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
                   title="Copier"
                 >
@@ -914,13 +876,15 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={acctSearch}
-              onChange={(e) => setAcctSearch(e.target.value)}
+              onChange={(e) => { setAcctSearch(e.target.value); setAcctPage(1); }}
+              aria-label="Rechercher un compte"
               placeholder="Rechercher — nom, email ou institution…"
               className="flex-1 min-w-[14rem] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
             />
             <select
               value={acctRoleFilter}
-              onChange={(e) => setAcctRoleFilter(e.target.value)}
+              onChange={(e) => { setAcctRoleFilter(e.target.value); setAcctPage(1); }}
+              aria-label="Filtrer les comptes par rôle"
               className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold"
             >
               <option value="tous">Tous les rôles</option>
@@ -928,47 +892,36 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                 <option key={k} value={k}>{v.label}</option>
               ))}
             </select>
+            <select aria-label="Filtrer les comptes par statut" value={acctStatus} onChange={e => { setAcctStatus(e.target.value); setAcctPage(1); }} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold dark:border-slate-700 dark:bg-slate-800"><option value="tous">Tous les statuts</option><option value="actifs">Actifs</option><option value="suspendus">Suspendus</option></select>
+            <button disabled={accountsLoading || !filteredAccounts.length} onClick={exportAccounts} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-bold disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
             <span className="text-[11px] font-bold text-slate-400">
-              {accounts.filter((a) => {
-                const q = acctSearch.trim().toLowerCase();
-                const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
-                const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
-                return okQ && okR;
-              }).length} / {accounts.length} comptes
+              {filteredAccounts.length} / {accounts.length} comptes
             </span>
           </div>
 
           {/* Liste de tous les comptes */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-            {accounts.filter((a) => {
-              const q = acctSearch.trim().toLowerCase();
-              const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
-              const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
-              return okQ && okR;
-            }).length === 0 ? (
+            {filteredAccounts.length === 0 ? (
               <div className="p-8 text-center space-y-2">
                 <Users className="w-8 h-8 text-slate-300 mx-auto" />
                 <p className="text-sm font-bold text-slate-500">Aucun compte trouvé</p>
                 <p className="text-xs text-slate-400">Créez un compte ou élargissez la recherche.</p>
               </div>
             ) : (
-              accounts.filter((a) => {
-                const q = acctSearch.trim().toLowerCase();
-                const okQ = !q || [a.name, a.email, a.institution].some((v) => (v || '').toLowerCase().includes(q));
-                const okR = acctRoleFilter === 'tous' || a.role === acctRoleFilter;
-                return okQ && okR;
-              }).map((a) => (
+              visibleAccounts.map((a) => (
                 <div key={a.id || a.email} className="p-3 flex flex-wrap items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center font-black text-xs shrink-0">
                     {(a.name || '?').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{a.name}</p>
+                    <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold text-slate-900 dark:text-white truncate">{a.name}</p><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{(a as any).disabled ? "Suspendu" : "Actif"}</span></div>
                     <p className="text-[11px] text-slate-500 truncate">
                       {a.email} • {a.institution || '—'} {a.roleTitle ? `• ${a.roleTitle}` : ''}
                     </p>
                   </div>
                   <select
+                    disabled={busy || currentProfile.role !== 'super_admin' || a.id === currentProfile.id || a.role === 'super_admin'}
+                    aria-label={"Rôle de " + a.name}
                     value={a.role}
                     onChange={(e) => handleChangeRole(a, e.target.value as UserRole)}
                     className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-bold shrink-0"
@@ -978,7 +931,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       <option key={k} value={k}>{v.label}</option>
                     ))}
                   </select>
-                  <div className="flex items-center space-x-1 shrink-0">
+                  <div className="flex items-center space-x-1 shrink-0"><button disabled={busy || currentProfile.role !== 'super_admin' || a.id === currentProfile.id || a.role === 'super_admin'} onClick={() => handleToggleAccount(a)} className="p-1.5 rounded-lg text-amber-600 disabled:opacity-40" title={(a as any).disabled ? 'Réactiver le compte' : 'Suspendre le compte'}><Power className="w-4 h-4" /></button>
                     <button
                       onClick={() => copyCred(a.email || '')}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
@@ -989,7 +942,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                     <button
                       onClick={() => handleResetPassword(a)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50"
-                      title="Générer un nouveau mot de passe"
+                      title="Générer un lien de réinitialisation"
+                      disabled={busy || currentProfile.role !== 'super_admin'}
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
@@ -997,6 +951,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       onClick={() => handleDeleteTrainer(a)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
                       title="Supprimer le compte"
+                      disabled={busy || currentProfile.role !== 'super_admin' || a.id === currentProfile.id || a.role === 'super_admin'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1005,6 +960,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               ))
             )}
           </div>
+          <AdminPagination page={accountPage} pages={accountPages} count={filteredAccounts.length} onChange={setAcctPage} />
         </div>
       )}
 
@@ -1013,7 +969,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Gestion des formateurs</h3>
-              <p className="text-xs text-slate-500">L'administrateur crée les formateurs — ils se connectent avec l'email + mot de passe généré.</p>
+              <p className="text-xs text-slate-500">Créez les formateurs et générez leur lien de définition du mot de passe.</p>
             </div>
             <button
               onClick={() => (showTrainerForm && roleLocked ? setShowTrainerForm(false) : openCreateForm('formateur', true))}
@@ -1028,13 +984,13 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 space-y-1.5">
               <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Formateur créé — transmettez-lui ses identifiants :</span>
+                <span>Lien de définition du mot de passe du formateur :</span>
               </p>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono">{createdCred.email}</code>
-                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold">{createdCred.password}</code>
+                <code className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 font-mono font-bold break-all">{createdCred.resetLink}</code>
                 <button
-                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.password}`)}
+                  onClick={() => copyCred(`${createdCred.email} / ${createdCred.resetLink}`)}
                   className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
                   title="Copier"
                 >
@@ -1367,7 +1323,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 
           {/* Liste des tests */}
           {testsLoading ? (
-            <p className="text-xs text-slate-400 text-center py-6">Chargement…</p>
+            <SkeletonLoader label="Chargement des tests…" rows={3} />
           ) : doc.tests.length === 0 ? (
             <div className="p-8 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
               <Award className="w-8 h-8 text-slate-300 mx-auto" />
@@ -1585,7 +1541,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             ).map((q) => (
               <button
                 key={q.id}
-                onClick={() => setSection(q.id)}
+                onClick={() => { if (q.id === 'utilisateurs') openCreateForm('particulier', false); else if (q.id === 'formateurs') openCreateForm('formateur', true); else { setSection(q.id); if (q.id === 'modules') { setEditingModule(null); setShowModuleForm(true); } if (q.id === 'tests') { setDraft(emptyDraft()); setShowTestForm(true); } } }}
                 className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-amber-400 hover:text-amber-600 transition"
               >
                 {q.label}
@@ -1986,7 +1942,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
               </p>
             </div>
             <button
-              onClick={() => setShowModuleForm((v) => !v)}
+              onClick={() => { setEditingModule(null); setShowModuleForm((v) => !v); }}
               className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-black hover:bg-blue-800 transition shadow-sm"
             >
               {showModuleForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -2076,22 +2032,27 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                 <p className="text-[10px] text-slate-500">
                   Le module apparaît immédiatement dans le catalogue et dans les performances du formateur sélectionné.
                 </p>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-500 transition">
-                  Publier le module
+                <button type="submit" disabled={busy} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-500 transition">
+                  {editingModule ? 'Enregistrer les modifications' : 'Publier le module'}
                 </button>
               </div>
             </form>
           )}
 
+          <div className="flex flex-wrap gap-2">
+            <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-800"><Search className="h-4 w-4 shrink-0 text-slate-500" /><input aria-label="Rechercher un module" value={moduleSearch} onChange={e => { setModuleSearch(e.target.value); setModulePage(1); }} placeholder="Titre, code ou auteur…" className="min-h-11 w-full min-w-0 bg-transparent text-sm" /></label>
+            <select aria-label="Catégorie des modules" value={moduleCategory} onChange={e => { setModuleCategory(e.target.value); setModulePage(1); }} className="rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800"><option value="toutes">Toutes les catégories</option>{Array.from(new Set(courses.map(c => c.category))).sort().map(c => <option key={c} value={c}>{c}</option>)}</select>
+            <button disabled={!filteredModules.length} onClick={exportModules} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-bold disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
+          </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-            {courses.length === 0 ? (
+            {filteredModules.length === 0 ? (
               <div className="p-8 text-center space-y-2">
                 <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-sm font-bold text-slate-500">Aucun module dans le catalogue</p>
+                <p className="text-sm font-bold text-slate-500">Aucun module ne correspond à la recherche</p>
               </div>
             ) : (
-              courses.slice(0, 60).map((c) => {
-                const author = moduleAuthors[c.id];
+              filteredModules.slice((currentModulePage - 1) * 20, currentModulePage * 20).map((c) => {
+                const author = c.authorId ? { id: c.authorId, name: c.authorName || c.authorId } : moduleAuthors[c.id];
                 return (
                   <div key={c.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center space-x-3 min-w-0">
@@ -2111,12 +2072,14 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
                       </span>
                       <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">{c.studentsCount} apprenants</span>
                       <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">★ {c.rating}</span>
+                      {c.id.startsWith('ADM-') && <><button disabled={busy} title="Modifier le module" onClick={() => { setEditingModule(c); setModForm({ title: c.title, category: c.category, level: c.level, duration: c.duration, trainerId: c.authorId || '', targetAudience: c.targetAudience, legalRef: c.legalRef, description: c.description }); setShowModuleForm(true); }} className="p-2 text-blue-600"><Pencil className="w-4 h-4" /></button><button disabled={busy} title="Supprimer le module" onClick={async () => { if (!onDeleteCourse || !window.confirm('Supprimer le module ' + c.title + ' ?')) return; setBusy(true); try { await onDeleteCourse(c.id); toast('Module supprimé.'); } catch (error) { toast(error instanceof Error ? error.message : 'Suppression impossible.'); } finally { setBusy(false); } }} className="p-2 text-red-600"><Trash2 className="w-4 h-4" /></button></>}
                     </div>
                   </div>
                 );
               })
             )}
           </div>
+          <AdminPagination page={currentModulePage} pages={modulePages} count={filteredModules.length} onChange={setModulePage} />
         </div>
       )}
     </div>

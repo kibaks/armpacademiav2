@@ -1,3 +1,5 @@
+import { storageRouter } from '../backend/storage';
+import { adminRouter, learningRouter, authenticate, requireAdmin } from '../backend/admin';
 import express from 'express';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
@@ -33,6 +35,15 @@ app.use((req, _res, next) => {
   next();
 });
 
+
+app.disable('x-powered-by');
+app.use('/api/storage', storageRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api', learningRouter);
+app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {
+ if (req.method === 'GET') return next();
+ authenticate(req, res, () => requireAdmin(req, res, next));
+});
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;
 function getAIClient(): GoogleGenAI | null {
@@ -1044,16 +1055,8 @@ app.get(['/api/tts/settings', '/tts/settings'], (_req, res) => {
   });
 });
 
-app.post(['/api/tts/settings', '/tts/settings'], (req, res) => {
-  res.json({
-    ok: true,
-    ...(req.body || DEFAULT_TTS_SETTINGS),
-    availability: {
-      elevenlabs: !!process.env.ELEVENLABS_API_KEY,
-      neural: true,
-      gemini: !!process.env.GEMINI_API_KEY,
-    },
-  });
+app.post(['/api/tts/settings', '/tts/settings'], (_req, res) => {
+  res.status(501).json({ ok: false, error: 'Le paramétrage vocal persistant n’est pas disponible sur cette instance Vercel.' });
 });
 
 // ------------------------------------------------------------------

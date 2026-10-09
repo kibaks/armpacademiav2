@@ -1,3 +1,5 @@
+import { storageRouter } from './backend/storage';
+import { adminRouter, learningRouter, authenticate, requireAdmin, services } from './backend/admin';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -42,6 +44,15 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '25mb' }));
+app.disable('x-powered-by');
+app.use('/api/storage', storageRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api', learningRouter);
+app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {
+ if (req.method === 'GET') return next();
+ authenticate(req, res, () => requireAdmin(req, res, next));
+});
+
 
 // Lazy initialize Gemini AI client (supports dynamic API_KEY from paid_model_flow as well as GEMINI_API_KEY)
 let aiClient: GoogleGenAI | null = null;
@@ -1647,174 +1658,6 @@ app.post('/api/tts/settings', (req, res) => {
   }
 });
 
-// ============================================================================
-// TESTS DE VALIDATION DE NIVEAU — créés par l'Espace Administrateur
-// Niveaux : Initiation · Approfondi (selon les modules) · Avancé
-// Persistance dans level-tests.json (gitignoré), contrat simple GET/POST.
-// ============================================================================
-const LEVEL_TESTS_FILE = path.join(process.cwd(), 'level-tests.json');
-type NiveauValidationServer = 'Initiation' | 'Approfondi' | 'Avancé';
-const NIVEAUX_VALIDATION: NiveauValidationServer[] = ['Initiation', 'Approfondi', 'Avancé'];
-
-interface LevelTestQuestion {
-  id: string;
-  question: string;
-  options: string[];
-  answer: number;
-  legalRef?: string;
-}
-interface LevelTest {
-  id: string;
-  title: string;
-  level: NiveauValidationServer;
-  moduleCode?: string;
-  passPct: number;
-  active: boolean;
-  questions: LevelTestQuestion[];
-  createdAt: string;
-}
-interface LevelTestAttempt {
-  id: string;
-  testId: string;
-  testTitle: string;
-  level: NiveauValidationServer;
-  moduleCode?: string;
-  profileId: string;
-  candidateName: string;
-  score: number;
-  passed: boolean;
-  date: string;
-}
-interface LevelTestDoc {
-  tests: LevelTest[];
-  attempts: LevelTestAttempt[];
-}
-
-function normalizeLevelTests(raw: any): LevelTestDoc {
-  const tests: LevelTest[] = [];
-  if (Array.isArray(raw?.tests)) {
-    for (const t of raw.tests) {
-      if (!t || typeof t.id !== 'string' || !t.id) continue;
-      const level = (NIVEAUX_VALIDATION as string[]).includes(t?.level)
-        ? (t.level as NiveauValidationServer)
-        : 'Initiation';
-      const questions: LevelTestQuestion[] = [];
-      if (Array.isArray(t?.questions)) {
-        t.questions.forEach((q: any, i: number) => {
-          if (!q || typeof q.question !== 'string' || !q.question.trim()) return;
-          const options = Array.isArray(q.options)
-            ? q.options.filter((o: any) => typeof o === 'string' && o.trim()).map((o: string) => o.trim())
-            : [];
-          if (options.length < 2) return;
-          const answer = Number.isInteger(q.answer) && q.answer >= 0 && q.answer < options.length ? q.answer : 0;
-          questions.push({
-            id: typeof q.id === 'string' && q.id ? q.id : `${t.id}-q${i + 1}`,
-            question: q.question.trim(),
-            options,
-            answer,
-            legalRef: typeof q.legalRef === 'string' ? q.legalRef : undefined,
-          });
-        });
-      }
-      if (questions.length === 0) continue;
-      const passPct =
-        typeof t.passPct === 'number' && t.passPct >= 1 && t.passPct <= 100 ? Math.round(t.passPct) : 60;
-      tests.push({
-        id: t.id,
-        title: typeof t.title === 'string' && t.title.trim() ? t.title.trim() : `Test ${level}`,
-        level,
-        moduleCode: typeof t.moduleCode === 'string' && t.moduleCode ? t.moduleCode : undefined,
-        passPct,
-        active: t.active !== false,
-        questions,
-        createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
-      });
-    }
-  }
-  const attempts: LevelTestAttempt[] = [];
-  if (Array.isArray(raw?.attempts)) {
-    for (const a of raw.attempts.slice(0, 500)) {
-      if (!a || typeof a.testId !== 'string' || typeof a.score !== 'number') continue;
-      attempts.push({
-        id: typeof a.id === 'string' && a.id ? a.id : `att-${attempts.length + 1}`,
-        testId: a.testId,
-        testTitle: typeof a.testTitle === 'string' ? a.testTitle : '',
-        level: (NIVEAUX_VALIDATION as string[]).includes(a?.level)
-          ? (a.level as NiveauValidationServer)
-          : 'Initiation',
-        moduleCode: typeof a.moduleCode === 'string' ? a.moduleCode : undefined,
-        profileId: typeof a.profileId === 'string' ? a.profileId : '',
-        candidateName: typeof a.candidateName === 'string' ? a.candidateName.slice(0, 120) : 'Anonyme',
-        score: Math.max(0, Math.min(100, Math.round(a.score))),
-        passed: !!a.passed,
-        date: typeof a.date === 'string' ? a.date : new Date().toISOString(),
-      });
-    }
-  }
-  return { tests, attempts };
-}
-
-function loadLevelTests(): LevelTestDoc {
-  try {
-    if (!fs.existsSync(LEVEL_TESTS_FILE)) return { tests: [], attempts: [] };
-    return normalizeLevelTests(JSON.parse(fs.readFileSync(LEVEL_TESTS_FILE, 'utf8')));
-  } catch {
-    return { tests: [], attempts: [] };
-  }
-}
-
-function saveLevelTests(doc: LevelTestDoc): void {
-  fs.writeFileSync(LEVEL_TESTS_FILE, JSON.stringify(doc, null, 2));
-}
-
-app.get('/api/level-tests', (_req, res) => {
-  res.json(loadLevelTests());
-});
-
-// Sauvegarde complète (création / édition / activation / suppression par l'admin)
-app.post('/api/level-tests', (req, res) => {
-  try {
-    const doc = normalizeLevelTests(req.body || {});
-    saveLevelTests(doc);
-    console.log(`[Level Tests] sauvegardé: ${doc.tests.length} test(s), ${doc.attempts.length} tentative(s)`);
-    res.json({ ok: true, ...doc });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || 'erreur inconnue' });
-  }
-});
-
-// Enregistrement du résultat d'un candidat (passage du test)
-app.post('/api/level-tests/attempt', (req, res) => {
-  try {
-    const b = req.body || {};
-    if (typeof b.testId !== 'string' || typeof b.score !== 'number') {
-      return res.status(400).json({ ok: false, error: 'testId et score requis' });
-    }
-    const doc = loadLevelTests();
-    const test = doc.tests.find((t) => t.id === b.testId);
-    if (!test) return res.status(404).json({ ok: false, error: 'test introuvable' });
-    const attempt: LevelTestAttempt = {
-      id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      testId: test.id,
-      testTitle: test.title,
-      level: test.level,
-      moduleCode: test.moduleCode,
-      profileId: typeof b.profileId === 'string' ? b.profileId : '',
-      candidateName: typeof b.candidateName === 'string' ? b.candidateName.slice(0, 120) : 'Anonyme',
-      score: Math.max(0, Math.min(100, Math.round(b.score))),
-      passed: !!b.passed,
-      date: new Date().toISOString(),
-    };
-    doc.attempts.unshift(attempt);
-    if (doc.attempts.length > 500) doc.attempts.length = 500;
-    saveLevelTests(doc);
-    console.log(`[Level Tests] tentative: ${attempt.candidateName} → ${test.title} = ${attempt.score}% ${attempt.passed ? '✓' : '✗'}`);
-    res.json({ ok: true, attempt, tests: doc.tests, attempts: doc.attempts });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || 'erreur inconnue' });
-  }
-});
-
 // Unified server-side synthesis with caching & in-flight deduplication (100% Vivienne HD)
 async function getOrSynthesizeTtsPayload(
   rawText: string,
@@ -2281,35 +2124,19 @@ function normalizeLevelSettings(raw: any): LevelSettings {
   };
 }
 
-function loadLevelSettings(): LevelSettings {
+async function loadLevelSettings(): Promise<LevelSettings> {
   try {
-    if (!fs.existsSync(LEVEL_SETTINGS_FILE)) return { ...DEFAULT_LEVEL_SETTINGS };
-    return normalizeLevelSettings(JSON.parse(fs.readFileSync(LEVEL_SETTINGS_FILE, 'utf8')));
-  } catch {
-    return { ...DEFAULT_LEVEL_SETTINGS };
-  }
+    const snap = await services().db.collection('settings').doc('levels').get();
+    return snap.exists ? normalizeLevelSettings(snap.data()) : DEFAULT_LEVEL_SETTINGS;
+  } catch { return DEFAULT_LEVEL_SETTINGS; }
 }
 
-function levelFromScore(score: number, s: LevelSettings = loadLevelSettings()): string {
+function levelFromScore(score: number, s: LevelSettings = DEFAULT_LEVEL_SETTINGS): string {
   if (score >= s.expert) return s.labels.expert;
   if (score >= s.avance) return s.labels.avance;
   if (score >= s.intermediaire) return s.labels.intermediaire;
   return s.labels.debutant;
 }
-
-app.get('/api/level-settings', (_req, res) => {
-  res.json(loadLevelSettings());
-});
-
-app.post('/api/level-settings', (req, res) => {
-  try {
-    const next = normalizeLevelSettings(req.body);
-    fs.writeFileSync(LEVEL_SETTINGS_FILE, JSON.stringify(next, null, 2));
-    res.json({ ok: true, settings: next });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || 'write failed' });
-  }
-});
 
 // ============================================================================
 // 2FA — code OTP à usage unique (authentification à double facteur)
@@ -2322,7 +2149,7 @@ app.post('/api/2fa/send', async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email.includes('@')) return res.status(400).json({ ok: false, error: 'Adresse email invalide.' });
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(crypto.randomInt(100000, 1000000));
     otpStore.set(email, { code, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
     let delivered = false;
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -2343,7 +2170,11 @@ app.post('/api/2fa/send', async (req, res) => {
         delivered = false;
       }
     }
-    res.json({ ok: true, delivered, ...(delivered ? {} : { devCode: code }) });
+    if (!delivered && process.env.NODE_ENV === 'production') {
+      otpStore.delete(email);
+      return res.status(503).json({ ok: false, error: 'Envoi du code indisponible.' });
+    }
+    res.json({ ok: true, delivered, ...(delivered || process.env.NODE_ENV === 'production' ? {} : { devCode: code }) });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e?.message || 'send failed' });
   }
@@ -2381,7 +2212,7 @@ app.post('/api/ai/placement-quiz', async (req, res) => {
         // Fallback calculation — niveau piloté par les seuils paramétrables
         const correctCount = answers.filter((a: any) => a.isCorrect).length;
         const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const lvCfg = loadLevelSettings();
+        const lvCfg = await loadLevelSettings();
         const level = levelFromScore(score, lvCfg);
         return res.json({
           score,
@@ -2391,7 +2222,7 @@ app.post('/api/ai/placement-quiz', async (req, res) => {
         });
       }
 
-      const lvNow = loadLevelSettings();
+      const lvNow = await loadLevelSettings();
       const levelEnum = [lvNow.labels.debutant, lvNow.labels.intermediaire, lvNow.labels.avance, lvNow.labels.expert]
         .map((v) => JSON.stringify(v))
         .join(' | ');
@@ -2422,7 +2253,7 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure :
 
         const parsed = JSON.parse(evalResponse.text || '{}');
         // Le niveau rendu est toujours recalculé sur les seuils/libellés paramétrables
-        const lvAi = loadLevelSettings();
+        const lvAi = await loadLevelSettings();
         if (Number.isFinite(+parsed.score)) {
           parsed.level = levelFromScore(+parsed.score, lvAi);
         } else {
@@ -2437,7 +2268,7 @@ Retourne UNIQUEMENT un objet JSON valide avec cette structure :
         console.warn('[Placement Quiz] AI evaluation fallback activated:', err?.message);
         const correctCount = answers.filter((a: any) => a.isCorrect).length;
         const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const lvCfg = loadLevelSettings();
+        const lvCfg = await loadLevelSettings();
         const level = levelFromScore(score, lvCfg);
         return res.json({
           score,

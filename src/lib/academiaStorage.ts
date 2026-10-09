@@ -1,3 +1,5 @@
+import { auth } from '../firebase';
+import { MAX_IMAGE_BYTES, imageMime, IMAGE_EXTENSIONS } from '../../shared/imageUpload';
 /**
  * Academia Storage API — Service centralisé pour images | vidéos | audios
  * Stockage 100% serveur 137.184.59.184 (pas S3 / Firestore)
@@ -11,9 +13,7 @@ export const ACADEMIA_API_URL =
   (import.meta as any).env?.VITE_ACADEMIA_API_URL ||
   'https://academia.137.184.59.184.nip.io';
 
-export const ACADEMIA_API_KEY =
-  (import.meta as any).env?.VITE_ACADEMIA_API_KEY ||
-  '741e42fe4ba17dd1e2a892b16483d4d000f6788e2f3f1a555b086975a95d73ff';
+
 
 const API = `${ACADEMIA_API_URL}/api`;
 
@@ -57,13 +57,13 @@ export interface UploadOptions {
 export const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100 Mo
 
 const EXT_BY_KIND: Record<MediaKind, string[]> = {
-  image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'svg'],
+  image: IMAGE_EXTENSIONS,
   video: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wav'],
   audio: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'webm'],
 };
 
 const ALL_ALLOWED = [
-  'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif',
+  'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp',
   'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp',
   'txt', 'csv', 'rtf', 'zip', 'rar', '7z',
   'mp3', 'mp4', 'wav', 'avi', 'mov', 'webm', 'mkv', 'json', 'xml',
@@ -96,13 +96,46 @@ export function isExtensionAllowed(fileName: string): boolean {
 
 function headers(): Record<string, string> {
   const h: Record<string, string> = {};
-  if (ACADEMIA_API_KEY) h['X-API-KEY'] = ACADEMIA_API_KEY;
+
   return h;
 }
 
 // =============================================================================
 // CORE — UPLOAD (multipart) & BASE64 fallback
 // =============================================================================
+
+async function uploadImageThroughApp(file: File, opts: UploadOptions): Promise<AcademiaFile> {
+  if (!imageMime(file.name)) throw new Error('Formats acceptés : JPG, JPEG, PNG, GIF et WebP.');
+  if (file.size > MAX_IMAGE_BYTES) throw new Error('Image trop volumineuse : maximum 3 Mo. Réduisez sa taille.');
+  if (!file.size) throw new Error('Le fichier image est vide.');
+  if (!auth.currentUser) throw new Error('Connectez-vous pour importer une image.');
+  const token = await auth.currentUser.getIdToken();
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/storage/images');
+    xhr.timeout = 60000;
+    xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('X-Upload-Filename', encodeURIComponent(file.name));
+    xhr.setRequestHeader('X-Upload-Category', opts.category || 'images');
+    xhr.setRequestHeader('X-Upload-Visibility', opts.visibility || 'public');
+    if (opts.entityId) xhr.setRequestHeader('X-Upload-Entity', opts.entityId);
+    if (opts.description) xhr.setRequestHeader('X-Upload-Description', encodeURIComponent(opts.description));
+    xhr.upload.onprogress = e => { if (e.lengthComputable) opts.onProgress?.(Math.min(99, Math.round(e.loaded / e.total * 100))); };
+    xhr.onload = () => {
+      try {
+        const payload = JSON.parse(xhr.responseText || '{}');
+        if (xhr.status < 200 || xhr.status >= 300) throw new Error(payload.message || payload.error || 'Upload refusé (' + xhr.status + ').');
+        if (!payload.data?.url) throw new Error('Réponse du serveur de stockage invalide.');
+        opts.onProgress?.(100); resolve(payload.data);
+      } catch (error) { reject(error instanceof Error ? error : new Error('Réponse d’upload invalide.')); }
+    };
+    xhr.onerror = () => reject(new Error('Connexion interrompue pendant l’upload. Réessayez.'));
+    xhr.ontimeout = () => reject(new Error('Délai d’upload dépassé. Réessayez.'));
+    xhr.onabort = () => reject(new Error('Upload annulé.'));
+    xhr.send(file);
+  });
+}
 
 export async function uploadFile(
   file: File,
@@ -116,6 +149,8 @@ export async function uploadFile(
     uploadedBy,
     onProgress,
   } = opts;
+
+  if (inferKindFromFile(file) === 'image') return uploadImageThroughApp(file, opts);
 
   // Validations côté client
   if (file.size > MAX_SIZE_BYTES) {
@@ -193,6 +228,11 @@ export async function uploadBase64(
   opts: UploadOptions = {}
 ): Promise<AcademiaFile> {
   const clean = base64.includes(',') ? base64.split(',')[1] : base64;
+  const mime = imageMime(fileName);
+  if (mime) {
+    const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+    return uploadFile(new File([bytes], fileName, { type: mime }), opts);
+  }
   const res = await fetch(`${API}/files`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers() },

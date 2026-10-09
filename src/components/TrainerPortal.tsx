@@ -98,7 +98,7 @@ interface TrainerPortalProps {
   currentProfile: UserProfile;
   allProfiles?: Record<string, UserProfile>;
   courses: CourseModule[];
-  onAddCourse: (newCourse: CourseModule) => void;
+  onAddCourse: (newCourse: CourseModule) => void | Promise<void>;
   onPreviewCourse: (course: CourseModule) => void;
   onOpenCoursePlayer: (course: CourseModule) => void;
   onSwitchToTrainerRole?: () => void;
@@ -361,9 +361,10 @@ L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'éval
     setTrainerNotice(`Le module animé généré par l'IA a été chargé dans l'Éditeur de Cours (Étape 2) ✓`);
   };
 
-  const handlePublishAiGeneratedCourse = () => {
+  const handlePublishAiGeneratedCourse = async () => {
     if (!aiGeneratedCourse) return;
-    onAddCourse(aiGeneratedCourse);
+    try { await onAddCourse(aiGeneratedCourse); }
+    catch (error) { setTrainerNotice(error instanceof Error ? error.message : 'Publication impossible.'); return; }
     setTrainerNotice(`Module animé « ${aiGeneratedCourse.title} » publié au catalogue national ACADEMIA ITECH ✓`);
   };
 
@@ -930,7 +931,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   };
 
   // Submit and Publish New Course
-  const handlePublishCourse = () => {
+  const handlePublishCourse = async () => {
     if (!newCourseTitle.trim()) {
       setTrainerNotice("Veuillez renseigner l'intitulé de la formation avant publication.");
       return;
@@ -955,7 +956,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       quiz: quizList
     };
 
-    onAddCourse(createdCourse);
+    try { await onAddCourse(createdCourse); }
+    catch (error) { setTrainerNotice(error instanceof Error ? error.message : 'Publication impossible.'); return; }
     setActiveTab('courses');
     setAuthoringStep(1);
     setNewCourseTitle('');
