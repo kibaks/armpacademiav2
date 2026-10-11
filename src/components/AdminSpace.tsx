@@ -76,6 +76,7 @@ interface LevelTestAttempt {
 interface LevelTestDoc {
   tests: LevelTest[];
   attempts: LevelTestAttempt[];
+  attemptsLimited?: boolean;
 }
 
 interface AdminSpaceProps {
@@ -213,10 +214,18 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const refreshAccounts = useCallback(async () => {
     setAccountsLoading(true); setAccountsError(null);
     try {
-      const data = await adminApi('/users');
-      const users = (data.users as UserProfile[]).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+      const collected = new Map<string, UserProfile>();
+      const cursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        const data = await adminApi('/users?limit=500' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''));
+        for (const user of data.users as UserProfile[]) collected.set(user.id, user);
+        cursor = data.nextCursor || null;
+        if (cursor && cursors.has(cursor)) throw new Error('Pagination interrompue : le serveur a répété une page.');
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+      const users = [...collected.values()].sort((a,b) => (a.name || '').localeCompare(b.name || ''));
       setAccounts(users); setUpdatedAt(new Date().toISOString()); setTrainers(users.filter(p => p.role === 'formateur'));
-      if (data.limited) setAccountsError('Affichage limité aux 500 premiers comptes.');
     } catch (error) { setAccountsError(error instanceof Error ? error.message : 'Chargement impossible.'); }
     finally { setAccountsLoading(false); }
   }, []);
@@ -228,7 +237,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       const res = await authenticatedFetch('/api/level-tests');
       if (!res.ok) throw new Error('Chargement des tests refusé.');
       const data = await res.json();
-      setDoc({ tests: data.tests || [], attempts: data.attempts || [] });
+      setDoc({ tests: data.tests || [], attempts: data.attempts || [], attemptsLimited: !!data.attemptsLimited });
       setTestError(null);
     } catch {
       setTestError('Chargement des tests impossible. Vérifiez la connexion et la configuration du serveur.');
@@ -354,7 +363,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
       });
       const data = await res.json();
       if (data.ok) {
-        setDoc(previous => ({ tests: data.tests || [], attempts: previous.attempts }));
+        setDoc(previous => ({ tests: data.tests || [], attempts: previous.attempts, attemptsLimited: previous.attemptsLimited }));
         if (successMsg) toast(successMsg);
         return true;
       }
@@ -1462,6 +1471,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Tableau de bord</h3>
               <p className="text-xs text-slate-500">Vue d'ensemble de la plateforme — comptes, apprenants, modules, tests et validations.</p>
+              {doc.attemptsLimited && <p className="text-xs text-amber-700 dark:text-amber-300">Les indicateurs des tests portent sur les 500 tentatives les plus récentes.</p>}
             </div>
             <button
               onClick={() => setView('dashboard')}

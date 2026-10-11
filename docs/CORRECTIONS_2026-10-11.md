@@ -25,12 +25,12 @@ Ce lot corrige du code, contrairement au précédent commit qui ajoutait uniquem
 ## Vérifications
 
 - Node **22**, TypeScript : `npm run lint`.
-- **47 tests applicatifs** : `npm test` (Firebase et relais email simulés pour les tests HTTP ; aucun email réel envoyé).
+- **50 tests applicatifs** : `npm test` (Firebase et relais email simulés pour les tests HTTP ; aucun email réel envoyé).
 - **5 tests de règles** avec les véritables émulateurs Firestore et Storage et Java 21 : `npm run test:rules`. Vérification des résultats non falsifiables, des permissions de formateur, des anciens jetons sans MFA et du refus des accès directs au bucket.
 - `npm run build`, génération de la banque canonique depuis le catalogue et `npm run check:api` : démarrage du bundle ESM et accès non authentifiés refusés.
 - Chromium : ouverture de la page publique et contrôle des erreurs JavaScript. Ce contrôle ne remplace pas les parcours authentifiés avec les services réels.
 
-Le bundle principal reste volumineux (environ 2,35 Mo non compressés). L’avertissement de découpage Vite reste ouvert.
+Le bundle principal reste volumineux (environ 2,06 Mo non compressés après chargement différé des espaces profil/formateur, contre environ 2,36 Mo auparavant). L’avertissement de découpage Vite reste ouvert.
 
 ## Points encore ouverts
 
@@ -49,8 +49,8 @@ Le bundle principal reste volumineux (environ 2,35 Mo non compressés). L’aver
 | F19 | Publication différée et erreurs explicites. Dépend encore de la sécurisation du stockage (F06). |
 | F20 | Promesse hors ligne retirée ; véritable cache des contenus et lecteur hors ligne non implémentés. |
 | F21–F23 | CI, tests applicatifs/règles, configuration commune, `ws` explicite et serveur hors dossier public. Parcours navigateur authentifiés de production non exécutés. |
-| F24–F25 | Découpage du client, pagination exhaustive et atomicité de toutes les mutations administratives encore ouverts. |
-| F26 | Révision enregistrée. Refus des soumissions devenues obsolètes et politique détaillée de reprise encore ouverts. |
+| F24–F25 | Profil/formateur chargés à la demande ; réduction du bundle principal d’environ 12 %. Pagination des comptes administratifs/formateurs ajoutée au-delà de 500 comptes. Le découpage complet, la pagination de l’historique des tentatives/audit et l’atomicité de toutes les mutations administratives restent ouverts. |
+| F26 | Révision aléatoire de banque persistée et contrôlée transactionnellement pour les tests de niveau. Les soumissions obsolètes sont refusées avec 409 et le questionnaire est rechargé. Modifier un test invalide tous les questionnaires de cette banque déjà ouverts. La politique des reprises et le contrat de révision des quiz de cours restent ouverts. |
 | F27 | Échec au quiz : seules les leçons réellement marquées restent terminées. |
 
 ## Mise en service
@@ -91,3 +91,15 @@ Aucun déploiement de production ni fusion dans `main` n’est effectué par ce 
 Choix retenu : le JWT ID Firebase pour Google et email/mot de passe, avec vérification Firebase Admin côté serveur. Aucun second émetteur JWT ni compte parallèle. Le profil/rôle suit maintenant le renouvellement du jeton ; les réponses d’anciennes sessions sont ignorées. Les requêtes authentifiées restent sur l’origine de l’application et sont annulées si le compte change pendant le renouvellement. L’ancien callback simulant l’activation MFA par un booléen a été retiré. Voir `AUTHENTIFICATION.md`.
 
 47 tests applicatifs passent, dont 5 nouveaux tests sur le transport JWT, les changements de compte et le rejet réel d’un JWT non signé par Firebase Admin. Les 5 tests de règles du lot précédent restent inchangés.
+
+
+## Quatrième lot : questionnaires obsolètes, comptes paginés et chargement différé
+
+- Les tests de niveau publiés portent une révision aléatoire persistée. Le serveur compare celle du navigateur à celle de la banque dans la transaction de correction. Une soumission absente/obsolète reçoit `409 TEST_OBSOLETE` sans résultat ni changement de niveau. L’interface recharge la banque et permet de recommencer.
+- La révision ne contient pas d’empreinte des bonnes réponses, pour éviter d’exposer une petite banque à une attaque par énumération des réponses. Les anciennes banques reçoivent une révision stable sans perdre leurs questions. Toute sauvegarde administrative renouvelle la révision de banque, même si certains tests restent identiques.
+- Les résultats des listes administratives sont désormais fusionnés depuis `learningRecords` ; les anciens scores/niveaux déclarés dans les profils sont écartés. Les indicateurs de tests affichent leur limite lorsqu’il existe plus de 500 tentatives.
+- L’API comptes utilise un curseur de document et des pages de 500 au maximum. Le panneau administratif récupère les pages suivantes et ne présente plus les 500 premiers comptes comme une liste complète. Les IDs retournés sont les IDs canoniques Firestore. Les lectures successives restent une vue vivante : un compte créé après une première page peut nécessiter un rafraîchissement.
+- Profil et studio/formateur sont chargés uniquement lorsque leur espace est ouvert. Leur écran de chargement et un message avec rechargement en cas d’échec évitent un écran blanc. Le bundle principal passe d’environ 2,36 à 2,06 Mo non compressés ; il reste à découper davantage.
+- 50 tests applicatifs passent, dont contrôle de 501 comptes, refus d’une révision ancienne après changement de la bonne réponse et migration d’une banque historique. Les règles restent celles vérifiées par les cinq tests émulateurs du deuxième lot. Compilation, démarrage API et chargement navigateur des modules différés vérifiés localement.
+
+Les prérequis Firebase/Vercel, les anciens fichiers privés, la révocation de clé et les autres lignes ouvertes du tableau ne sont pas clôturés par ce lot.

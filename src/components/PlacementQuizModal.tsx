@@ -28,6 +28,7 @@ interface PlacementQuizModalProps {
 
 interface AdminLevelTest {
   id: string;
+  version: string;
   title: string;
   level: NiveauValidation;
   moduleCode?: string;
@@ -153,9 +154,18 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       if (activeTest) {
         const response = await authenticatedFetch('/api/level-tests/attempt', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ testId: activeTest.id, answers: activeTest.questions.map((_,i) => selectedAnswers[i]) }),
+          body: JSON.stringify({ testId: activeTest.id, version: activeTest.version, answers: activeTest.questions.map((_,i) => selectedAnswers[i]) }),
         });
         const data = await response.json();
+        if (response.status === 409 && data.code === 'TEST_OBSOLETE') {
+          const updated = await authenticatedFetch('/api/level-tests');
+          const config = await updated.json();
+          if (!updated.ok) throw new Error('Questionnaire modifié. Fermez puis rouvrez cette fenêtre pour recharger les questions.');
+          setAdminTests((config.tests || []).filter((test: AdminLevelTest) => test.active));
+          setActiveTest(null); setSelectedAnswers({}); setCurrentQIndex(0); setQuestions([]); setResult(null); setMode('select');
+          window.alert('Le questionnaire a été modifié. Les questions ont été rechargées ; choisissez le test pour recommencer.');
+          return;
+        }
         if (!response.ok) throw new Error(data.error || 'Enregistrement impossible.');
         const { score, passed, correct } = data.attempt;
         setResult({ score, level: activeTest.level,

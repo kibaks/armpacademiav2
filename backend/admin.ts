@@ -1,9 +1,10 @@
 import { Router, type Request, type RequestHandler } from 'express';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldPath } from 'firebase-admin/firestore';
 import config from '../firebase-applet-config.json' with { type: 'json' };
 import crypto from 'node:crypto';
+import { emptyResults, omitResults } from '../shared/results';
 
 export function services() {
   const app = getApps().find(a => a.name === 'academia-admin') || initializeApp({
@@ -46,9 +47,18 @@ const audit = async (req: AuthRequest, action: string, target: string) => {
 };
 export const adminRouter = Router();
 adminRouter.use(authenticate, requireAdmin);
-adminRouter.get('/users', wrap(async (_req, res) => {
-  const snap = await services().db.collection('users').limit(500).get();
-  res.json({ users: snap.docs.map(d => ({ ...d.data(), id: d.id })), limited: snap.size === 500 });
+adminRouter.get('/users', wrap(async (req, res) => {
+  const limit = req.query.limit === undefined ? 500 : Number(req.query.limit);
+  const cursor = req.query.cursor;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500 || (cursor !== undefined && (typeof cursor !== 'string' || !cursor.length || cursor.length > 128 || cursor.includes('/')))) return res.status(400).json({ error: 'Limite ou curseur invalide.' });
+  const db = services().db;
+  let query = db.collection('users').orderBy(FieldPath.documentId());
+  if (cursor) query = query.startAfter(cursor);
+  const snap = await query.limit(limit + 1).get();
+  const page = snap.docs.slice(0, limit);
+  const records = page.length ? await db.getAll(...page.map(doc => db.collection('learningRecords').doc(doc.id))) : [];
+  const trusted = new Map(records.map(record => [record.id, record.exists ? record.data() : {}]));
+  res.json({ users: page.map(doc => ({ ...omitResults(doc.data()), ...emptyResults(), ...trusted.get(doc.id), id: doc.id })), nextCursor: snap.docs.length > limit ? page.at(-1)!.id : null, limited: snap.docs.length > limit });
 }));
 adminRouter.post('/users', superOnly, wrap(async (req, res) => {
   const b = req.body;
@@ -129,12 +139,21 @@ learningRouter.post('/level-settings', authenticate, requireAdmin, wrap(async (r
 }));
 learningRouter.get('/level-tests', authenticate, wrap(async (req, res) => {
   const db = services().db;
-  const snap = await db.collection('settings').doc('levelTests').get();
-  const tests = snap.data()?.tests || [];
+  const ref = db.collection('settings').doc('levelTests');
+  const config = await db.runTransaction(async transaction => {
+    const snap = await transaction.get(ref);
+    const existing = snap.data() || {};
+    const revision = existing.revision || crypto.randomUUID();
+    if (!existing.revision) transaction.set(ref, { revision }, { merge: true });
+    return { tests: existing.tests || [], revision };
+  });
+  // Random revision reveals no answer-key hash. Editing the bank invalidates
+  // papers already open in the browser, including answer-only changes.
+  const tests = (config.tests || []).map((test: any) => ({ ...test, version: config.revision }));
   const admin = ['super_admin', 'dfat_admin'].includes(req.identity!.role);
   if (admin) {
-    const attempts = await db.collection('levelTestAttempts').orderBy('date', 'desc').limit(500).get();
-    return res.json({ tests, attempts: attempts.docs.map(d => d.data()) });
+    const attempts = await db.collection('levelTestAttempts').orderBy('date', 'desc').limit(501).get();
+    return res.json({ tests, attempts: attempts.docs.slice(0, 500).map(d => d.data()), attemptsLimited: attempts.docs.length > 500 });
   }
   res.json({ tests: tests.filter((t: any) => t.active).map((t: any) => ({ ...t, questions: t.questions.map(({ answer, ...q }: any) => q) })), attempts: [] });
 }));
@@ -143,9 +162,11 @@ learningRouter.post('/level-tests', authenticate, requireAdmin, wrap(async (req,
   const valid = Array.isArray(tests) && tests.length <= 100 && new Set(tests.map(t => t?.id)).size === tests.length && tests.every(t => t && typeof t.id === 'string' && /^[\w-]{1,128}$/.test(t.id) && typeof t.title === 'string' && t.title.trim() && t.title.length <= 250 && ['Initiation', 'Approfondi', 'Avancé'].includes(t.level) && (t.level !== 'Approfondi' || typeof t.moduleCode === 'string' && t.moduleCode.trim()) && Number.isInteger(t.passPct) && t.passPct >= 1 && t.passPct <= 100 && typeof t.active === 'boolean' && Array.isArray(t.questions) && t.questions.length > 0 && t.questions.length <= 100 && t.questions.every((q: any) => typeof q.question === 'string' && q.question.trim() && q.question.length <= 2000 && Array.isArray(q.options) && q.options.length === 4 && q.options.every((o: any) => typeof o === 'string' && o.trim() && o.length <= 1000) && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < 4));
   if (!valid) return res.status(400).json({ error: 'Tests invalides : vérifiez les questions, réponses et seuils.' });
   // Attempts are immutable here: an administrator editing tests cannot overwrite results.
-  await services().db.collection('settings').doc('levelTests').set({ tests });
+  const revision = crypto.randomUUID();
+  const stored = tests.map(({ version, ...test }: any) => test);
+  await services().db.collection('settings').doc('levelTests').set({ tests: stored, revision });
   await audit(req, 'tests.update', 'levelTests');
-  res.json({ ok: true, tests });
+  res.json({ ok: true, tests: stored.map((test: any) => ({ ...test, version: revision })) });
 }));
 learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) => {
   const db = services().db;
@@ -155,6 +176,8 @@ learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) 
     const snap = await transaction.get(ref);
     const test = (snap.data()?.tests || []).find((t: any) => t.id === req.body.testId && t.active);
     if (!test) throw new Error('test-unavailable');
+    const version = snap.data()?.revision;
+    if (!version || typeof req.body.version !== 'string' || req.body.version !== version) throw new Error('test-obsolete');
     const answers = req.body.answers;
     if (!Array.isArray(answers) || answers.length !== test.questions.length || !answers.every(a => Number.isInteger(a) && a >= 0 && a < 4)) throw new Error('answers-invalid');
     const correct = test.questions.filter((q: any, i: number) => q.answer === answers[i]).length;
@@ -162,7 +185,6 @@ learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) 
     const settings = (await transaction.get(db.collection('settings').doc('levels'))).data() || defaults;
     const recordRef = db.collection('learningRecords').doc(req.identity!.uid);
     const previous = (await transaction.get(recordRef)).data() || {};
-    const version = crypto.createHash('sha256').update(JSON.stringify(test)).digest('hex');
     const result = { id: attemptRef.id, testId: test.id, testTitle: test.title, level: test.level, moduleCode: test.moduleCode || '', profileId: req.identity!.uid, candidateName: req.identity!.name || req.identity!.email || 'Apprenant', score, passed: score >= test.passPct, correct, version, date: new Date().toISOString() };
     if (result.passed) {
       const key = test.level === 'Initiation' ? 'debutant' : test.level === 'Approfondi' ? 'intermediaire' : 'avance';
@@ -173,6 +195,7 @@ learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) 
   res.json({ ok: true, attempt });
 }));
 learningRouter.use((error: any, _req: any, res: any, _next: any) => {
+  if (error.message === 'test-obsolete') { res.status(409).json({ error: 'Le questionnaire a été modifié. Rechargez les questions avant de recommencer.', code: 'TEST_OBSOLETE' }); return; }
   const bad = ['test-unavailable', 'answers-invalid'].includes(error.message);
   res.status(bad ? 400 : 503).json({ error: bad ? 'Test indisponible ou réponses incomplètes.' : 'Service de formation indisponible.' });
 });

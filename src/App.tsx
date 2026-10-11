@@ -1,3 +1,4 @@
+import { DeferredPanel } from './components/DeferredPanel';
 import { scopedStorage } from './lib/scopedStorage';
 import React, { useState, useEffect } from 'react';
 import { 
@@ -43,12 +44,8 @@ import {
 import {
   CourseAnimaticModal
 } from './components/CourseAnimaticModal';
-import { 
-  UserProfileView 
-} from './components/UserProfileView';
-import { 
-  TrainerPortal 
-} from './components/TrainerPortal';
+const UserProfileView = React.lazy(() => import('./components/UserProfileView').then(module => ({ default: module.UserProfileView })));
+const TrainerPortal = React.lazy(() => import('./components/TrainerPortal').then(module => ({ default: module.TrainerPortal })));
 import { InstitutionalPreloader } from './components/InstitutionalPreloader';
 import { ArmpLogo } from './components/ArmpLogo';
 
@@ -1086,7 +1083,7 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <UserProfileView key={currentProfile.id}
+              <DeferredPanel key={currentProfile.id} label="Chargement du profil…"><UserProfileView key={currentProfile.id}
                 currentProfile={currentProfile}
                 allProfiles={profiles}
                 onSelectRole={handleRoleChange}
@@ -1102,7 +1099,7 @@ export default function App() {
                 onShowToast={showToast}
                 initialTab={profileSubTab}
                 onTabChange={(tab) => setProfileSubTab(tab)}
-              />
+              /></DeferredPanel>
             )}
           </div>
         )}
@@ -1163,7 +1160,7 @@ export default function App() {
         {/* TAB 6: ESPACE FORMATEUR & STUDIO — réservé formateur connecté uniquement (pas en déconnecté) */}
         {(activeTab === 'formateur' || activeTab === 'studio-formateur') && (
           isAuthenticated && currentProfile.role === 'formateur' ? (
-            <TrainerPortal key={currentProfile.id}
+            <DeferredPanel key={currentProfile.id} label="Chargement de l’espace formateur…"><TrainerPortal key={currentProfile.id}
               currentProfile={currentProfile}
               allProfiles={profiles}
               courses={courses}
@@ -1172,7 +1169,7 @@ export default function App() {
               onOpenCoursePlayer={handleOpenCourse}
               onSwitchToTrainerRole={() => handleRoleChange('formateur')}
               isDarkMode={isDarkMode}
-            />
+            /></DeferredPanel>
           ) : (
             <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
               <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center mx-auto">
@@ -1197,7 +1194,7 @@ export default function App() {
         {activeTab === 'admin' && (
           isAuthenticated && (currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') ? (
             <div className="px-4 sm:px-6 lg:px-8 py-8">
-              <React.Suspense fallback={<SkeletonLoader label="Chargement de l’espace administrateur…" />}><AdminSpace
+              <DeferredPanel key={currentProfile.id} label="Chargement de l’espace administrateur…"><AdminSpace
                 currentProfile={currentProfile}
                 courses={courses}
                 requests={requests}
@@ -1206,7 +1203,7 @@ export default function App() {
                 onShowToast={showToast}
                 onAddCourse={handleAddCustomCourse}
                 onDeleteCourse={handleDeleteCustomCourse}
-              /></React.Suspense>
+              /></DeferredPanel>
             </div>
           ) : (
             <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
