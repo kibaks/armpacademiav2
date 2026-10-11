@@ -1,3 +1,5 @@
+import { scopedStorage } from '../lib/scopedStorage';
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Play,
@@ -141,7 +143,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const effectiveUserProfile = useMemo(() => {
     if (currentProfile?.name) return currentProfile;
     try {
-      const raw = localStorage.getItem('armp_session_profile');
+      const raw = scopedStorage.getItem('armp_session_profile');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed?.name) return parsed as UserProfile;
@@ -828,7 +830,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       try {
         setFlowVideoStatus('generating');
         setFlowStatusMessage('Génération vidéo Google Flow (Veo HD) d’Aïsha en cours…');
-        const startRes = await fetch('/api/ai/flow-video/start', {
+        const startRes = await authenticatedFetch('/api/ai/flow-video/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -845,7 +847,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
         const startData = await startRes.json();
         if (startData.done && startData.videoUrl) {
-          setFlowVideoUrl(startData.videoUrl);
+          await loadFlowVideo(startData.videoUrl);
           setFlowVideoStatus('ready');
           setFlowStatusMessage('Vidéo Google Flow (Veo HD) prête & synchronisée avec la voix');
           return;
@@ -866,7 +868,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         const pollTimer = window.setInterval(async () => {
           attempts += 1;
           try {
-            const stRes = await fetch('/api/ai/flow-video/status', {
+            const stRes = await authenticatedFetch('/api/ai/flow-video/status', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ operationName: opName })
@@ -882,7 +884,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
             const stData = await stRes.json();
             if (stData.done && stData.videoUrl) {
               window.clearInterval(pollTimer);
-              setFlowVideoUrl(stData.videoUrl);
+              await loadFlowVideo(stData.videoUrl);
               setFlowVideoStatus('ready');
               setFlowStatusMessage('Vidéo Google Flow (Veo HD) active & synchronisée avec Vivienne HD');
             } else if (stData.fallback === 'live_neural' || attempts >= 25) {
@@ -904,6 +906,16 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     },
     [safeTitle, userPrecedence.spokenFullName]
   );
+
+  const loadFlowVideo = async (url: string) => {
+    if (!url.startsWith('/api/ai/flow-video/')) throw new Error('Source vidéo inattendue.');
+    const response = await authenticatedFetch(url, { signal: AbortSignal.timeout(60000) });
+    if (!response.ok) throw new Error('Vidéo indisponible.');
+    setFlowVideoUrl(URL.createObjectURL(await response.blob()));
+  };
+  useEffect(() => () => {
+    if (flowVideoUrl?.startsWith('blob:')) URL.revokeObjectURL(flowVideoUrl);
+  }, [flowVideoUrl]);
 
   // Keep 60 FPS WebGL Wav2Lip engine active by default
   useEffect(() => {

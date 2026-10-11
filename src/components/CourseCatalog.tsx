@@ -992,7 +992,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                 {isFiltersLocked ? `Certifiant Officiel ARMP (${profileConfig.shortLabel})` : 'Certifiant Officiel ARMP'}
               </option>
               <option value="DFAT">Requiert Approbation DFAT (CGPMP)</option>
-              <option value="Downloaded">Téléchargés en local (Hors-ligne)</option>
+              <option value="Downloaded">Cours enregistrés</option>
             </select>
           </div>
 
@@ -1131,7 +1131,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                                   ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200'
                                   : 'text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                               }`}
-                              title={isDownloaded ? 'Téléchargé hors-ligne' : 'Sauvegarder pour consultation hors-ligne'}
+                              title={isDownloaded ? 'Cours enregistré' : 'Enregistrer ce cours'}
                             >
                               <DownloadCloud className="w-3.5 h-3.5" />
                             </button>
@@ -1336,7 +1336,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                             ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200'
                             : 'text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
-                        title={isDownloaded ? 'Disponible hors-ligne' : 'Sauvegarder en local'}
+                        title={isDownloaded ? 'Cours enregistré' : 'Enregistrer ce cours'}
                       >
                         <DownloadCloud className="w-4 h-4" />
                       </button>

@@ -1,8 +1,8 @@
 {
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "installCommand": "npm install --legacy-peer-deps",
+  "outputDirectory": "dist/client",
+  "installCommand": "npm ci",
   "rewrites": [
     {
       "source": "/api/:path*",

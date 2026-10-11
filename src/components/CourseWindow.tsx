@@ -1,3 +1,5 @@
+import { scopedStorage } from '../lib/scopedStorage';
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -125,7 +127,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
   const [autoReadLessons, setAutoReadLessons] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('academia_course_autoread') === 'true';
+      return scopedStorage.getItem('academia_course_autoread') === 'true';
     } catch {
       return false;
     }
@@ -138,10 +140,10 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       if (Array.isArray(fromProfile) && fromProfile.length > 0) {
         return new Set(fromProfile);
       }
-      const saved = localStorage.getItem(`armp_completed_lessons_${course.id}`);
-      return saved ? new Set(JSON.parse(saved)) : new Set([0]);
+      const saved = scopedStorage.getItem(`armp_completed_lessons_${course.id}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set<number>();
     } catch {
-      return new Set([0]);
+      return new Set<number>();
     }
   });
 
@@ -150,7 +152,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [validatingLessonIndex, setValidatingLessonIndex] = useState<number>(0);
   const [validatedLessonIndexes, setValidatedLessonIndexes] = useState<Set<number>>(() => {
     try {
-      const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+      const saved = scopedStorage.getItem(`armp_validated_lessons_${course.id}`);
       return saved ? new Set<number>(JSON.parse(saved)) : new Set<number>();
     } catch {
       return new Set<number>();
@@ -197,7 +199,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   ];
   const [qaItems, setQaItems] = useState<QAItem[]>(() => {
     try {
-      const saved = localStorage.getItem(`armp_qa_${course.id}`);
+      const saved = scopedStorage.getItem(`armp_qa_${course.id}`);
       if (saved) return JSON.parse(saved);
     } catch {}
     return defaultQA;
@@ -213,7 +215,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
           [...remote, ...prev].forEach(item => map.set(item.id, item));
           const merged = Array.from(map.values());
           try {
-            localStorage.setItem(`armp_qa_${course.id}`, JSON.stringify(merged));
+            scopedStorage.setItem(`armp_qa_${course.id}`, JSON.stringify(merged));
           } catch {}
           return merged;
         });
@@ -295,7 +297,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     try {
       const key = `armp_notes_${course.id}_${activeLessonIndex}`;
       const fromProfile = currentProfile.notesByCourse?.[key];
-      const saved = fromProfile ?? localStorage.getItem(key);
+      const saved = fromProfile ?? scopedStorage.getItem(key);
       setNotes(saved || '');
     } catch {
       setNotes('');
@@ -305,7 +307,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const handleSaveNotes = () => {
     try {
       const key = `armp_notes_${course.id}_${activeLessonIndex}`;
-      localStorage.setItem(key, notes);
+      scopedStorage.setItem(key, notes);
       onSaveCourseNote?.(course.id, activeLessonIndex, notes);
       setNotesSavedToast(true);
       setTimeout(() => setNotesSavedToast(false), 2000);
@@ -357,7 +359,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     const pct = Math.min(100, Math.round((arr.length / Math.max(1, safeLessons.length)) * 100));
     setCompletedLessons(next);
     try {
-      localStorage.setItem(`armp_completed_lessons_${course.id}`, JSON.stringify(arr));
+      scopedStorage.setItem(`armp_completed_lessons_${course.id}`, JSON.stringify(arr));
     } catch {}
     onUpdateCourseProgress?.(course.id, pct, arr, undefined, nextActiveIndex ?? index);
   };
@@ -382,7 +384,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       const next = new Set(prev);
       next.add(lessonIdx);
       try {
-        localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+        scopedStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });
@@ -514,7 +516,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     const next = !autoReadLessons;
     setAutoReadLessons(next);
     try {
-      localStorage.setItem('academia_course_autoread', String(next));
+      scopedStorage.setItem('academia_course_autoread', String(next));
     } catch {}
     if (next && !isSpeaking) {
       const lessonId = `lesson-${course.id}-${activeLessonIndex}`;
@@ -533,19 +535,23 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     setSelectedAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
   };
 
-  const submitQuiz = () => {
-    let correct = 0;
-    safeQuiz.forEach((q, idx) => {
-      if (selectedAnswers[idx] === q.correctIndex) correct++;
-    });
-    const finalScore = Math.round((correct / Math.max(1, safeQuiz.length)) * 100);
-    setQuizScore(finalScore);
-    setIsQuizSubmitted(true);
-    const allLessonIndices = safeLessons.map((_, idx) => idx);
-    onUpdateCourseProgress?.(course.id, finalScore >= 70 ? 100 : progress, allLessonIndices, finalScore);
-    if (finalScore >= 70) {
-      onCompleteModule(course.id, finalScore);
-    }
+  const [isGrading, setIsGrading] = useState(false);
+  const submitQuiz = async () => {
+    if (isGrading) return;
+    setIsGrading(true);
+    try {
+      const response = await authenticatedFetch(`/api/courses/${encodeURIComponent(course.id)}/attempt`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers: safeQuiz.map((_, index) => selectedAnswers[index]) }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Résultat indisponible.');
+      const finalScore = data.score;
+      setQuizScore(finalScore);
+      setIsQuizSubmitted(true);
+      const completed = data.passed ? safeLessons.map((_, index) => index) : [...completedLessons];
+      onUpdateCourseProgress?.(course.id, data.passed ? 100 : progress, completed, finalScore);
+      if (data.passed) onCompleteModule(course.id, finalScore);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Correction impossible.');
+    } finally { setIsGrading(false); }
   };
 
   // Q&A (persisté dans Firestore + localStorage + réponse IA en direct avec voix d'Aïsha)
@@ -579,7 +585,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     setIsAskingTutorQA(true);
 
     try {
-      const res = await fetch('/api/ai/tutor', {
+      const res = await authenticatedFetch('/api/ai/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -617,7 +623,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       const nextList = [newQ, ...qaItems];
       setQaItems(nextList);
       try {
-        localStorage.setItem(`armp_qa_${course.id}`, JSON.stringify(nextList));
+        scopedStorage.setItem(`armp_qa_${course.id}`, JSON.stringify(nextList));
       } catch {}
       saveCourseQAToFirestore(newQ).catch(() => {});
 

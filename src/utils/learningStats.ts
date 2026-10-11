@@ -1,3 +1,4 @@
+import { scopedStorage } from '../lib/scopedStorage';
 import { CourseModule, RecentReadingItem, UserProfile } from '../types';
 
 export interface CourseChapterGraphPoint {
@@ -216,7 +217,7 @@ export function computeUserLearningStats(
       lessonIndices = Array.from(new Set(fromProfileLessons));
     } else if (typeof window !== 'undefined') {
       try {
-        const localRaw = localStorage.getItem(`armp_completed_lessons_${c.id}`);
+        const localRaw = scopedStorage.getItem(`armp_completed_lessons_${c.id}`);
         if (localRaw) {
           const parsed = JSON.parse(localRaw);
           if (Array.isArray(parsed)) {

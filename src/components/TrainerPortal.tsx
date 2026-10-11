@@ -1,3 +1,6 @@
+import { DEMO_PROFILES } from '../data/initialData';
+import { scopedStorage } from '../lib/scopedStorage';
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   GraduationCap,
@@ -156,7 +159,7 @@ export const TrainerPortal: React.FC<TrainerPortalProps> = ({
   const [learnerRoleFilter, setLearnerRoleFilter] = useState<'all' | 'cgpmp' | 'pme' | 'dgcmp' | 'other'>('all');
   const [trainerObservations, setTrainerObservations] = useState<Record<string, string>>(() => {
     try {
-      const saved = localStorage.getItem('academia_trainer_learner_observations');
+      const saved = scopedStorage.getItem('academia_trainer_learner_observations');
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -165,7 +168,7 @@ export const TrainerPortal: React.FC<TrainerPortalProps> = ({
   const [currentLearnerObservationInput, setCurrentLearnerObservationInput] = useState('');
   const [customCertifiedIds, setCustomCertifiedIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('academia_trainer_custom_certifications');
+      const saved = scopedStorage.getItem('academia_trainer_custom_certifications');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -264,7 +267,7 @@ L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'éval
     setAiGenerating(true);
     setTrainerNotice(null);
     try {
-      const response = await fetch('/api/ai/generate-animated-module', {
+      const response = await authenticatedFetch('/api/ai/generate-animated-module', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -448,6 +451,8 @@ Points cardinaux :
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordSecondsRef = useRef(0);
+  useEffect(() => { recordSecondsRef.current = recordSeconds; }, [recordSeconds]);
   const [cameraActive, setCameraActive] = useState(false);
   const [micActive, setMicActive] = useState(true);
   const [screenShareActive, setScreenShareActive] = useState(false);
@@ -482,7 +487,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   ];
   const [recordedVideos, setRecordedVideos] = useState<RecordedVideo[]>(() => {
     try {
-      const saved = localStorage.getItem('armp_studio_videos');
+      const saved = scopedStorage.getItem('armp_studio_videos');
       if (saved) return JSON.parse(saved);
     } catch {}
     return defaultStudioVideos;
@@ -517,7 +522,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   ];
   const [quizBankItems, setQuizBankItems] = useState<QuizBankItem[]>(() => {
     try {
-      const saved = localStorage.getItem('armp_quiz_bank');
+      const saved = scopedStorage.getItem('armp_quiz_bank');
       if (saved) return JSON.parse(saved);
     } catch {}
     return defaultQuizBank;
@@ -536,7 +541,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           const map = new Map<string, RecordedVideo>();
           [...remote, ...prev].forEach(v => map.set(v.id, v));
           const merged = Array.from(map.values());
-          try { localStorage.setItem('armp_studio_videos', JSON.stringify(merged)); } catch {}
+          try { scopedStorage.setItem('armp_studio_videos', JSON.stringify(merged)); } catch {}
           return merged;
         });
       }
@@ -548,7 +553,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           const map = new Map<string, QuizBankItem>();
           [...remote, ...prev].forEach(item => map.set(item.id, item));
           const merged = Array.from(map.values());
-          try { localStorage.setItem('armp_quiz_bank', JSON.stringify(merged)); } catch {}
+          try { scopedStorage.setItem('armp_quiz_bank', JSON.stringify(merged)); } catch {}
           return merged;
         });
       }
@@ -571,7 +576,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     };
     const next = [item, ...quizBankItems];
     setQuizBankItems(next);
-    try { localStorage.setItem('armp_quiz_bank', JSON.stringify(next)); } catch {}
+    try { scopedStorage.setItem('armp_quiz_bank', JSON.stringify(next)); } catch {}
     saveQuizBankItemToFirestore(item).catch(() => {});
     setNewQbQuestion('');
     setNewQbAnswer('');
@@ -581,7 +586,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
 
   // Calculs dynamiques et réels des KPIs Formateur
   const profilesArray = allProfiles ? Object.values(allProfiles) : [currentProfile];
-  const learnerProfiles = profilesArray.filter(p => p.role !== 'formateur' && p.role !== 'dfat_admin');
+  const demoIds = new Set(Object.values(DEMO_PROFILES).map(profile => profile.id));
+  const learnerProfiles = profilesArray.filter(p => !demoIds.has(p.id) && !['formateur', 'dfat_admin', 'super_admin'].includes(p.role));
   const totalStudentsCount = learnerProfiles.length;
   const certifiedLearnersCount = learnerProfiles.filter(p => 
     (p.certificationsCount || 0) > 0 || 
@@ -593,48 +599,17 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     (p.completedModulesCount && p.completedModulesCount > 0)
   ).length;
   const avgSuccessRate = Number(
-    (learnerProfiles.reduce((acc, p) => acc + (p.placementScore || 80), 0) / Math.max(1, learnerProfiles.length)).toFixed(1)
+    (learnerProfiles.reduce((acc, p) => acc + (p.placementScore ?? 0), 0) / Math.max(1, learnerProfiles.length)).toFixed(1)
   );
 
   // Calcul du suivi par apprenant pour un cours donné
   const computeLearnerCourseProgress = (learner: UserProfile, course: CourseModule) => {
-    const certKey = `${learner.id}_${course.id}`;
-    const isCustomCertified = customCertifiedIds.includes(certKey) || customCertifiedIds.includes(`${learner.id}_${course.code}`);
-    
-    let progressPct = 0;
-    if (isCustomCertified) {
-      progressPct = 100;
-    } else if (learner.courseProgress?.[course.id] !== undefined) {
-      progressPct = learner.courseProgress[course.id];
-    } else if (learner.courseProgress?.[course.code] !== undefined) {
-      progressPct = learner.courseProgress[course.code];
-    } else if (learner.completedCourseIds?.includes(course.id) || learner.completedCourseIds?.includes(course.code)) {
-      progressPct = 100;
-    } else {
-      const hash = Math.abs((learner.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 17 + course.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 23) % 100);
-      progressPct = hash < 20 ? 35 : (hash > 80 ? 92 : hash);
-    }
-
-    const totalLessons = Math.max(1, course.lessons.length);
-    const completedLessonsCount = progressPct >= 100 
-      ? totalLessons 
-      : Math.min(totalLessons, Math.max(1, Math.round((progressPct / 100) * totalLessons)));
-
-    const isCertified = progressPct >= 100 || isCustomCertified || Boolean(learner.certificates && learner.certificates.some(c => c.courseId === course.id || c.courseCode === course.code));
-
-    let quizScore = 80;
-    if (isCertified) {
-      quizScore = 90 + (learner.name.length % 9);
-    } else if (learner.quizScoresByCourse?.[course.id] !== undefined) {
-      quizScore = learner.quizScoresByCourse[course.id];
-    } else if (learner.placementScore) {
-      quizScore = Math.max(65, Math.min(96, Math.round(learner.placementScore * 0.95 + (progressPct * 0.1))));
-    } else {
-      quizScore = Math.round(68 + (progressPct * 0.28));
-    }
-
-    const studyTime = `${Math.round(progressPct * 0.08 + 2)}h ${((learner.name.length * 9) % 45) + 10}min`;
-    const lastActive = learner.lastActiveDate || (progressPct > 75 ? "Aujourd'hui à 10:30" : "Il y a 2 jours");
+    const isCertified = Boolean(learner.certificates?.some(c => c.courseId === course.id));
+    const progressPct = isCertified ? 100 : (learner.courseProgress?.[course.id] || 0);
+    const completedLessonsCount = learner.completedLessonsByCourse?.[course.id]?.length || 0;
+    const quizScore = learner.quizScoresByCourse?.[course.id] ?? 0;
+    const studyTime = 'Non mesuré par cours';
+    const lastActive = learner.lastActiveDate || 'Non renseigné';
 
     return {
       profile: learner,
@@ -651,17 +626,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
 
   // Liste des apprenants inscrits selon le cours sélectionné
   const getEnrolledLearners = (courseId: string) => {
-    if (courseId === 'all') {
-      return learnerProfiles.map((lp, idx) => {
-        const assignedCourse = courses[idx % courses.length] || courses[0];
-        return computeLearnerCourseProgress(lp, assignedCourse);
-      });
-    }
-
-    const targetCourse = courses.find(c => c.id === courseId || c.code === courseId) || courses[0];
-    if (!targetCourse) return [];
-
-    return learnerProfiles.map(lp => computeLearnerCourseProgress(lp, targetCourse));
+    const selectedCourses = courseId === 'all' ? courses : courses.filter(course => course.id === courseId || course.code === courseId);
+    return learnerProfiles.flatMap(learner => selectedCourses.filter(course => learner.courseProgress?.[course.id] !== undefined || learner.completedCourseIds?.includes(course.id)).map(course => computeLearnerCourseProgress(learner, course)));
   };
 
   const handleSaveLearnerObservation = (learnerId: string, courseId: string, text: string) => {
@@ -669,40 +635,32 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     const next = { ...trainerObservations, [key]: text };
     setTrainerObservations(next);
     try {
-      localStorage.setItem('academia_trainer_learner_observations', JSON.stringify(next));
+      scopedStorage.setItem('academia_trainer_learner_observations', JSON.stringify(next));
     } catch {}
     setTrainerNotice(`Observation pédagogique enregistrée pour ${selectedLearnerForModal?.profile.name || 'l\'apprenant'} ✓`);
     setTimeout(() => setTrainerNotice(null), 3500);
   };
 
   const handleGrantCertification = (learnerId: string, courseId: string) => {
-    const key = `${learnerId}_${courseId}`;
-    if (!customCertifiedIds.includes(key)) {
-      const next = [...customCertifiedIds, key];
-      setCustomCertifiedIds(next);
-      try {
-        localStorage.setItem('academia_trainer_custom_certifications', JSON.stringify(next));
-      } catch {}
-      setTrainerNotice(`Attestation Homologuée DFAT validée avec succès pour cet apprenant ✓`);
-      setTimeout(() => setTrainerNotice(null), 4000);
-      if (selectedLearnerForModal) {
-        setSelectedLearnerForModal({
-          ...selectedLearnerForModal,
-          isCertified: true,
-          progressPct: 100,
-          completedLessonsCount: selectedLearnerForModal.course.lessons.length,
-          quizScore: Math.max(90, selectedLearnerForModal.quizScore)
-        });
-      }
-    }
+    setTrainerNotice('Les attestations sont délivrées après un quiz validé par le serveur. La validation manuelle n’est pas disponible.');
   };
   const [videoUploading, setVideoUploading] = useState(false);
+  const [unpublishedRecording, setUnpublishedRecording] = useState<{ url: string; name: string } | null>(null);
+  useEffect(() => () => { if (unpublishedRecording) URL.revokeObjectURL(unpublishedRecording.url); }, [unpublishedRecording]);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
 
   // Video recording refs
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const activeStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.onstop = null;
+      if (mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+    }
+    activeStreamRef.current?.getTracks().forEach(track => track.stop());
+  }, []);
   const prompterContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Timer for Recording
@@ -745,6 +703,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           audio: micActive
         });
         if (videoPreviewRef.current) {
+          activeStreamRef.current = stream;
           videoPreviewRef.current.srcObject = stream;
           videoPreviewRef.current.play();
         }
@@ -777,6 +736,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           audio: micActive
         });
         if (videoPreviewRef.current) {
+          activeStreamRef.current = stream;
           videoPreviewRef.current.srcObject = stream;
           videoPreviewRef.current.play();
         }
@@ -809,43 +769,41 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             }
           };
           recorder.onstop = async () => {
-            const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const vidId = `VID-${Date.now().toString().slice(-4)}`;
+            const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || 'video/webm' });
+            const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+            const vidId = `VID-${crypto.randomUUID()}`;
             const newVid: RecordedVideo = {
               id: vidId,
               title: `Prise de cours #${recordedVideos.length + 1} (${new Date().toLocaleTimeString('fr-FR')})`,
-              duration: formatTime(recordSeconds),
-              blobUrl: url,
+              duration: formatTime(recordSecondsRef.current),
+              blobUrl: '',
               date: "À l'instant",
               courseCode: newCourseCode
             };
-            setRecordedVideos(prev => {
-              const next = [newVid, ...prev];
-              try { localStorage.setItem('armp_studio_videos', JSON.stringify(next)); } catch {}
-              return next;
-            });
-            saveStudioVideoToFirestore({ ...newVid, authorId: currentProfile.id }).catch(() => {});
             // → Upload vers Academia Storage (137.184.59.184) — vidéos
             try {
               setVideoUploading(true);
-              const fileName = `masterclass_${newCourseCode}_${Date.now()}.webm`;
+              const fileName = `masterclass_${newCourseCode}_${Date.now()}.${extension}`;
               const acad = await uploadBlob(blob, fileName, {
                 category: 'studio_videos',
-                visibility: 'private',
+                visibility: 'public',
                 entityId: newCourseCode,
                 description: `Masterclass ${newCourseCode} — ${newVid.title}`,
                 uploadedBy: currentProfile.email,
                 onProgress: setVideoUploadProgress,
               });
+              const durable = { ...newVid, academiaUrl: acad.url, academiaId: acad.id, blobUrl: acad.url, authorId: currentProfile.id };
+              await saveStudioVideoToFirestore(durable);
               setRecordedVideos(prev => {
-                const updated = prev.map(v => v.id === vidId ? { ...v, academiaUrl: acad.url, academiaId: acad.id, blobUrl: acad.url } : v);
-                try { localStorage.setItem('armp_studio_videos', JSON.stringify(updated)); } catch {}
+                const updated = [durable, ...prev];
+                try { scopedStorage.setItem('armp_studio_videos', JSON.stringify(updated)); } catch {}
                 return updated;
               });
-              saveStudioVideoToFirestore({ ...newVid, academiaUrl: acad.url, academiaId: acad.id, blobUrl: acad.url, authorId: currentProfile.id }).catch(() => {});
+              setUnpublishedRecording(null);
+              setTrainerNotice('Vidéo téléversée et enregistrée.');
             } catch (e: any) {
-              console.warn('Upload Academia vidéo échoué', e);
+              setUnpublishedRecording({ url: URL.createObjectURL(blob), name: `prise_${vidId}.${extension}` });
+              setTrainerNotice('La prise n’a pas été publiée. Téléchargez-la pour la conserver et réessayez.');
             } finally {
               setVideoUploading(false);
             }
@@ -865,21 +823,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       } else {
-        // Fallback recorded item for simulation
-        const fallbackVid: RecordedVideo = {
-          id: `VID-${Date.now().toString().slice(-4)}`,
-          title: `Masterclass ARMP #${recordedVideos.length + 1}`,
-          duration: formatTime(recordSeconds || 74),
-          blobUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-          date: "À l'instant",
-          courseCode: newCourseCode
-        };
-        setRecordedVideos(prev => {
-          const next = [fallbackVid, ...prev];
-          try { localStorage.setItem('armp_studio_videos', JSON.stringify(next)); } catch {}
-          return next;
-        });
-        saveStudioVideoToFirestore({ ...fallbackVid, authorId: currentProfile.id }).catch(() => {});
+        setTrainerNotice('Aucun enregistrement disponible. Vérifiez la caméra ou le partage d’écran.');
       }
     }
   };
@@ -967,6 +911,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} pb-24 transition-colors`}>
+      {unpublishedRecording && <a href={unpublishedRecording.url} download={unpublishedRecording.name} className="block p-3 rounded-xl bg-amber-100 text-amber-900 font-semibold">Télécharger la prise non publiée</a>}
+
       
       {/* ========================================================================= */}
       {/* 1. HEADER FULL WIDTH — COVER + AVATAR + TABS (full bleed, content en container) */}
@@ -2124,7 +2070,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                         </div>
                       ))}
                     </div>
-                    {/* Upload personnalisé vers Academia 137.184.59.184 */}
+                    {/* Upload personnalisé vers stockage sécurisé */}
                     <div className="mt-3 space-y-2">
                       <AcademiaMediaUploader
                         kind="image"
@@ -2132,7 +2078,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                         visibility="public"
                         entityId={newCourseCode}
                         label="Téléverser votre propre couverture (Academia)"
-                        hint="Image stockée sur 137.184.59.184 • JPG/PNG/WebP • 100 Mo max • URL publique /storage/academia/covers/..."
+                        hint="Image publique • JPG/PNG/WebP • 3 Mo maximum"
                         onUploaded={(f) => { setNewCourseCover(f.url); setCoverFile(f); }}
                         onError={(m) => alert(m)}
                       />

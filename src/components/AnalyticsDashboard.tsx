@@ -1,3 +1,6 @@
+import { DEMO_PROFILES } from '../data/initialData';
+import { scopedStorage } from '../lib/scopedStorage';
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart3, 
@@ -20,7 +23,6 @@ import {
   Trash2,
   Eye
 } from 'lucide-react';
-import { INSTITUTIONAL_ANALYTICS } from '../data/initialData';
 import { CourseModule, TrainingRequest, UserProfile, SavedAnalyticsReport } from '../types';
 import {
   saveAnalyticsReportToFirestore,
@@ -45,17 +47,17 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   onShowToast
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
-    return localStorage.getItem('armp_analytics_period') || 'Trimestre 3 - 2026';
+    return scopedStorage.getItem('armp_analytics_period') || 'Trimestre 3 - 2026';
   });
   const [selectedInstitutionFilter, setSelectedInstitutionFilter] = useState<string>(() => {
-    return localStorage.getItem('armp_analytics_inst_filter') || 'Toutes';
+    return scopedStorage.getItem('armp_analytics_inst_filter') || 'Toutes';
   });
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // Persisted AI Executive Reports (localStorage + Firestore)
   const [savedReports, setSavedReports] = useState<SavedAnalyticsReport[]>(() => {
     try {
-      const cached = localStorage.getItem('armp_saved_analytics_reports');
+      const cached = scopedStorage.getItem('armp_saved_analytics_reports');
       return cached ? JSON.parse(cached) : [];
     } catch {
       return [];
@@ -64,11 +66,11 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('armp_analytics_period', selectedPeriod);
+    scopedStorage.setItem('armp_analytics_period', selectedPeriod);
   }, [selectedPeriod]);
 
   useEffect(() => {
-    localStorage.setItem('armp_analytics_inst_filter', selectedInstitutionFilter);
+    scopedStorage.setItem('armp_analytics_inst_filter', selectedInstitutionFilter);
   }, [selectedInstitutionFilter]);
 
   // Load persisted reports from Firestore on mount
@@ -84,7 +86,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             });
             const merged = Array.from(map.values()).sort((a, b) => b.id.localeCompare(a.id));
             try {
-              localStorage.setItem('armp_saved_analytics_reports', JSON.stringify(merged));
+              scopedStorage.setItem('armp_saved_analytics_reports', JSON.stringify(merged));
             } catch {}
             return merged;
           });
@@ -103,168 +105,37 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     const map = new Map<string, UserProfile>();
     Object.values(allProfiles).forEach((p) => map.set(p.id || p.role, p));
     firestoreProfiles.forEach((p) => map.set(p.id || p.role, p));
-    return Array.from(map.values());
+    const demoIds = new Set(Object.values(DEMO_PROFILES).map(profile => profile.id));
+    return Array.from(map.values()).filter(profile => !demoIds.has(profile.id));
   }, [allProfiles, firestoreProfiles]);
 
-  // Period multiplier for realistic temporal comparison
-  const periodFactor = useMemo(() => {
-    if (selectedPeriod === 'Trimestre 2 - 2026') return 0.82;
-    if (selectedPeriod === 'Année Budgétaire 2026') return 2.35;
-    return 1.0; // Trimestre 3 - 2026
-  }, [selectedPeriod]);
-
-  // Dynamic live telemetry computed from actual profiles, courses, and CGPMP requests
+  // Aggregate only available records. Missing historical/competency data stays empty.
   const dynamicStats = useMemo(() => {
-    const extraCompletedModules = combinedProfiles.reduce((acc, p) => acc + (p.completedModulesCount || 0), 0);
-    const extraCerts = combinedProfiles.reduce((acc, p) => acc + (p.certificationsCount || 0), 0);
-    const extraMinutes = combinedProfiles.reduce((acc, p) => acc + (p.totalStudyMinutes || 0), 0);
-    const requestParticipants = requests.reduce((acc, r) => acc + (Number(r.participantsCount) || 0), 0);
-
-    const avgPlacement =
-      combinedProfiles.length > 0
-        ? Math.round(
-            combinedProfiles.reduce((acc, p) => acc + (p.placementScore || 82), 0) /
-              combinedProfiles.length
-          )
-        : 84;
-
-    const totalLearners = Math.round(
-      INSTITUTIONAL_ANALYTICS.totalLearners * periodFactor +
-        combinedProfiles.length * 4 +
-        requestParticipants
-    );
-
-    const globalPassRate = Math.min(
-      98,
-      Math.max(
-        72,
-        Math.round((INSTITUTIONAL_ANALYTICS.globalPassRate * 0.7) + (avgPlacement * 0.3))
-      )
-    );
-
-    const uniqueInstitutions = new Set([
-      ...INSTITUTIONAL_ANALYTICS.breakdownByInstitution.map((i) => i.name),
-      ...combinedProfiles.map((p) => p.institution).filter(Boolean),
-      ...requests.map((r) => r.ministereOrEntite).filter(Boolean)
-    ]);
-
-    const activeInstitutions =
-      Math.round(INSTITUTIONAL_ANALYTICS.activeInstitutions * (periodFactor > 1 ? 1.15 : 1)) +
-      Math.max(0, uniqueInstitutions.size - 5);
-
-    const hoursDelivered = Math.round(
-      INSTITUTIONAL_ANALYTICS.hoursDelivered * periodFactor +
-        extraCompletedModules * 6 +
-        Math.round(extraMinutes / 60) +
-        Math.max(0, courses.length - 6) * 18
-    );
-
-    // Breakdown by institution enriched with real requests & profile completions
-    const breakdownByInstitution = INSTITUTIONAL_ANALYTICS.breakdownByInstitution
-      .map((inst) => {
-        const matchingReqs = requests.filter((r) =>
-          (r.ministereOrEntite || '').toLowerCase().includes(inst.name.split(' ')[1]?.toLowerCase() || '___') ||
-          (r.cgpmpCellule || '').toLowerCase().includes(inst.name.split(' ')[0]?.toLowerCase() || '___')
-        );
-        const addedLearners = matchingReqs.reduce((s, r) => s + (Number(r.participantsCount) || 0), 0);
-        const matchingProfiles = combinedProfiles.filter((p) =>
-          (p.institution || '').toLowerCase().includes(inst.name.split(' ')[0]?.toLowerCase() || '___')
-        );
-        const addedCerts = matchingProfiles.reduce((s, p) => s + (p.certificationsCount || 0), 0);
-
-        const learners = Math.round(inst.learners * periodFactor) + addedLearners;
-        const completed = Math.round(inst.completed * periodFactor) + addedCerts;
-        const passRate = Math.min(98, Math.max(68, Math.round((completed / Math.max(1, learners)) * 100)));
-
-        return {
-          ...inst,
-          learners,
-          completed,
-          passRate
-        };
-      })
-      .filter((inst) =>
-        selectedInstitutionFilter === 'Toutes' ? true : inst.name === selectedInstitutionFilter
-      );
-
-    // Dynamic competency axes enriched by completed courses in each category
-    const categoryBoosts: Record<string, number> = {};
-    courses.forEach((c) => {
-      const doneCount = combinedProfiles.filter((p) =>
-        p.completedCourseIds?.includes(c.id)
-      ).length;
-      categoryBoosts[c.category] = (categoryBoosts[c.category] || 0) + doneCount;
+    const profiles = combinedProfiles.filter(profile => selectedInstitutionFilter === 'Toutes' || profile.institution === selectedInstitutionFilter);
+    const actualRequests = requests.filter(request => selectedInstitutionFilter === 'Toutes' || request.ministereOrEntite === selectedInstitutionFilter);
+    const scores = profiles.flatMap(profile => Object.values(profile.quizScoresByCourse || {})).filter(Number.isFinite);
+    const institutions = [...new Set(profiles.map(profile => profile.institution).filter(Boolean))];
+    const breakdownByInstitution = institutions.map(name => {
+      const members = profiles.filter(profile => profile.institution === name);
+      const results = members.flatMap(profile => Object.values(profile.quizScoresByCourse || {})).filter(Number.isFinite);
+      return { name, learners: members.length, completed: members.reduce((sum, profile) => sum + (profile.certificationsCount || 0), 0), passRate: results.length ? Math.round(results.filter(score => score >= 70).length / results.length * 100) : 0 };
     });
-
-    const competencyAxes = INSTITUTIONAL_ANALYTICS.competencyAxes.map((ax, idx) => {
-      const boost =
-        idx === 0
-          ? (categoryBoosts['Passation'] || 0)
-          : idx === 1
-          ? (categoryBoosts['Passation'] || 0) + (categoryBoosts['Réglementation'] || 0)
-          : idx === 2
-          ? (categoryBoosts['Contrôle'] || 0)
-          : idx === 3
-          ? (categoryBoosts['Contentieux'] || 0)
-          : (categoryBoosts['Gestion & Audit'] || 0);
-      return {
-        axis: ax.axis,
-        score: Math.min(99, ax.score + Math.min(8, boost + (extraCerts > 3 ? 2 : 0)))
-      };
-    });
-
-    // Monthly Evolution Series (6 months) for interactive SVG chart
-    const baseMonths =
-      selectedPeriod === 'Trimestre 2 - 2026'
-        ? [
-            { month: 'Jan', learners: 145, certs: 112, passRate: 77 },
-            { month: 'Fév', learners: 172, certs: 138, passRate: 80 },
-            { month: 'Mar', learners: 198, certs: 160, passRate: 81 },
-            { month: 'Avr', learners: 220, certs: 182, passRate: 83 },
-            { month: 'Mai', learners: 248, certs: 208, passRate: 84 },
-            { month: 'Juin', learners: 276 + extraCerts * 2, certs: 234 + extraCerts, passRate: globalPassRate }
-          ]
-        : [
-            { month: 'Avr', learners: 195, certs: 158, passRate: 81 },
-            { month: 'Mai', learners: 230, certs: 190, passRate: 83 },
-            { month: 'Juin', learners: 264, certs: 222, passRate: 84 },
-            { month: 'Juil', learners: 298, certs: 254, passRate: 85 },
-            { month: 'Août', learners: 335, certs: 289, passRate: 86 },
-            {
-              month: 'Sep',
-              learners: 372 + requestParticipants,
-              certs: 324 + extraCerts * 3,
-              passRate: globalPassRate
-            }
-          ];
-
-    // CGPMP Requests status breakdown
-    const approvedCount = requests.filter((r) => r.status === 'Approuvé par DFAT').length;
-    const pendingCount = requests.filter((r) => r.status === 'En attente').length;
-    const rejectedCount = requests.filter((r) => r.status === 'Rejeté').length;
-
     return {
-      totalLearners,
-      globalPassRate,
-      activeInstitutions,
-      hoursDelivered,
+      totalLearners: profiles.length,
+      globalPassRate: scores.length ? Math.round(scores.filter(score => score >= 70).length / scores.length * 100) : 0,
+      activeInstitutions: institutions.length,
+      hoursDelivered: Math.round(profiles.reduce((sum, profile) => sum + (profile.totalStudyMinutes || 0), 0) / 60),
       breakdownByInstitution,
-      competencyAxes,
-      monthlySeries: baseMonths,
-      cgpmpStats: {
-        total: requests.length,
-        approved: approvedCount,
-        pending: pendingCount,
-        rejected: rejectedCount,
-        totalParticipants: requestParticipants
-      }
+      competencyAxes: [] as { axis: string; score: number }[],
+      monthlySeries: [] as { month: string; learners: number; certs: number; passRate: number }[],
+      cgpmpStats: { total: actualRequests.length, approved: actualRequests.filter(request => request.status === 'Approuvé par DFAT').length, pending: actualRequests.filter(request => request.status === 'En attente').length, rejected: actualRequests.filter(request => request.status === 'Rejeté').length, totalParticipants: actualRequests.reduce((sum, request) => sum + (Number(request.participantsCount) || 0), 0) }
     };
-  }, [combinedProfiles, requests, courses, periodFactor, selectedInstitutionFilter]);
+  }, [combinedProfiles, requests, selectedInstitutionFilter]);
 
   const handleGenerateAIReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const res = await fetch('/api/ai/generate-report', {
+      const res = await authenticatedFetch('/api/ai/generate-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -288,7 +159,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           : [
               `Taux global de conformité et de réussite : ${dynamicStats.globalPassRate}%`,
               `${dynamicStats.cgpmpStats.approved} dossiers CGPMP homologués par visa DFAT (${dynamicStats.cgpmpStats.totalParticipants} agents inscrits)`,
-              `${dynamicStats.hoursDelivered.toLocaleString()} heures pédagogiques délivrées sur ${courses.length || 6} modules`
+              `${dynamicStats.hoursDelivered.toLocaleString()} heures d’étude déclarées sur ${courses.length || 6} modules`
             ],
         complianceScore: data.complianceScore || dynamicStats.globalPassRate,
         recommendationsDFAT:
@@ -299,7 +170,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       setSavedReports((prev) => {
         const updated = [newReport, ...prev];
         try {
-          localStorage.setItem('armp_saved_analytics_reports', JSON.stringify(updated));
+          scopedStorage.setItem('armp_saved_analytics_reports', JSON.stringify(updated));
         } catch {}
         return updated;
       });
@@ -350,6 +221,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-slate-500">Les totaux portent sur les profils chargés. La ventilation par période, l’historique et les compétences ne sont pas encore disponibles. Un taux de 0 avec aucun quiz signifie qu’aucun résultat n’est disponible.</p>
       
       {/* Top Header & AI Executive Report Action */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -359,7 +231,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <BarChart3 className="w-5 h-5" />
             </span>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Tableau de Bord Décisionnel Temps Réel • Direction DFAT
+              Tableau de Bord Décisionnel Données disponibles • Direction DFAT
             </h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -374,7 +246,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             className="text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500"
           >
             <option value="Toutes">Toutes les Cellules & Institutions</option>
-            {INSTITUTIONAL_ANALYTICS.breakdownByInstitution.map((inst) => (
+            {dynamicStats.breakdownByInstitution.map((inst) => (
               <option key={inst.name} value={inst.name}>
                 {inst.name}
               </option>

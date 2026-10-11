@@ -1,3 +1,5 @@
+import { scopedStorage } from '../lib/scopedStorage';
+import { authenticatedFetch } from '../lib/adminApi';
 // Expressive Neural Human Voice, Millisecond Word-Boundary Lip-Sync & Facial Gesture Engine
 // Supports ElevenLabs Multilingual v2 API + Studio Neural HD Voices (Vivienne / Denise / Eloise)
 // with real-time Web Audio AnalyserNode & exact millisecond WordBoundary synchronization
@@ -531,7 +533,7 @@ class SpeechService {
         const data = await res.json();
         this.browserFallbackEnabled = !!data.browserFallback;
         try {
-          localStorage.setItem('academia_browser_fallback', String(this.browserFallbackEnabled));
+          scopedStorage.setItem('academia_browser_fallback', String(this.browserFallbackEnabled));
         } catch {}
         return this.browserFallbackEnabled;
       }
@@ -539,7 +541,7 @@ class SpeechService {
       /* serveur en coupure → on garde la dernière valeur connue */
     }
     try {
-      const cached = localStorage.getItem('academia_browser_fallback');
+      const cached = scopedStorage.getItem('academia_browser_fallback');
       if (cached !== null) this.browserFallbackEnabled = cached === 'true';
     } catch {}
     return this.browserFallbackEnabled;
@@ -1639,7 +1641,7 @@ class SpeechService {
             const controller = new AbortController();
             const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
-            const response = await fetch('/api/ai/tts', {
+            const response = await authenticatedFetch('/api/ai/tts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1740,7 +1742,7 @@ class SpeechService {
 
       // 2. Then prewarm remaining sentences sequentially on server and client
       if (normalized.length > 1) {
-        fetch('/api/ai/tts/prewarm', {
+        authenticatedFetch('/api/ai/tts/prewarm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sentences: normalized.slice(1), voice: targetVoice }),

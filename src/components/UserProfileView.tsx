@@ -1,3 +1,5 @@
+import { NativeMfaSetup } from './NativeMfaSetup';
+import { scopedStorage } from '../lib/scopedStorage';
 import React, { useState, useRef } from 'react';
 import { 
   User, 
@@ -104,7 +106,6 @@ interface UserProfileViewProps {
   onOpenTuteur?: () => void;
   onCallTutor?: (action: 'chat' | 'call' | 'video' | 'voice', tutorId?: any) => void;
   onOpenCgpmpRequests?: () => void;
-  onToggleTwoFactor?: (enabled: boolean) => void;
   onUpdateProfile?: (profile: UserProfile) => Promise<void> | void;
   onShowToast?: (msg: string) => void;
   activeTab?: ProfileTab;
@@ -187,7 +188,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   onOpenTuteur,
   onCallTutor,
   onOpenCgpmpRequests,
-  onToggleTwoFactor,
   onUpdateProfile,
   onShowToast,
   activeTab,
@@ -212,12 +212,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     }
   };
 
-  // 2FA Security Modal
-  const [show2FASetupModal, setShow2FASetupModal] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
-  const [otp2FAHint, setOtp2FAHint] = useState<string | null>(null);
-  const [otp2FAError, setOtp2FAError] = useState<string | null>(null);
+  const [showNativeMfa, setShowNativeMfa] = useState(false);
 
   // Password reset state
   const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
@@ -267,51 +262,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   } | null>(null);
 
   // Facebook Feed Posts State (synchronisé avec Firestore + localStorage)
-  const defaultPosts: PostItem[] = [
-    {
-      id: 'post-1',
-      author: currentProfile.name,
-      roleTitle: currentProfile.roleTitle,
-      avatar: currentProfile.avatarUrl,
-      timeAgo: 'Il y a 3 heures • Kinshasa • 🌐',
-      badgeTag: 'Certification Officielle',
-      content: "Fier d'avoir validé avec succès le module d'excellence ARMP MOD-002 sur « L'Élaboration du Plan de Passation des Marchés (PPM) et Rédaction des DAO Types ». Une étape clé pour la régularité des marchés publics de notre institution et la réduction des délais d'ANO DGCMP !",
-      certificateData: {
-        title: 'Élaboration du PPM et Rédaction des DAO Types ARMP',
-        code: 'CERT-ARMP-2026-0884',
-        score: currentProfile.placementScore || 92,
-        sealText: 'République Démocratique du Congo • Autorité de Régulation des Marchés Publics'
-      },
-      image: imgCoverSeminar,
-      likes: 38,
-      userLiked: false,
-      comments: [
-        {
-          id: 'c-1',
-          author: 'Me Christian Ilunga (DGCMP)',
-          avatar: imgMentor,
-          text: 'Toutes nos félicitations confrère ! La maîtrise des DAO types facilite grandement le contrôle a priori.',
-          timeAgo: 'Il y a 2h'
-        }
-      ]
-    },
-    {
-      id: 'post-2',
-      author: currentProfile.name,
-      roleTitle: currentProfile.roleTitle,
-      avatar: currentProfile.avatarUrl,
-      timeAgo: 'Hier à 14:30 • 🏛️',
-      badgeTag: 'Dossier CGPMP',
-      content: `Dossier de renforcement des capacités soumis à la DFAT/ARMP pour les membres de notre cellule (${currentProfile.institution}). La modernisation des procédures de la Loi 10/010 avance résolument grâce à ACADEMIA ITECH !`,
-      likes: 24,
-      userLiked: true,
-      comments: []
-    }
-  ];
+  const defaultPosts: PostItem[] = [];
 
   const [posts, setPosts] = useState<PostItem[]>(() => {
     try {
-      const saved = localStorage.getItem('armp_social_posts');
+      const saved = scopedStorage.getItem('armp_social_posts');
       if (saved) return JSON.parse(saved);
     } catch {}
     return defaultPosts;
@@ -327,7 +282,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           [...remote, ...prev].forEach(p => map.set(p.id, p as PostItem));
           const merged = Array.from(map.values());
           try {
-            localStorage.setItem('armp_social_posts', JSON.stringify(merged));
+            scopedStorage.setItem('armp_social_posts', JSON.stringify(merged));
           } catch {}
           return merged;
         });
@@ -358,6 +313,17 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [postVoiceSeconds, setPostVoiceSeconds] = useState(0);
   const postMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const postVoiceTimerRef = useRef<any>(null);
+  const postVoiceMounted = useRef(true);
+  React.useEffect(() => {
+    postVoiceMounted.current = true;
+    return () => {
+      postVoiceMounted.current = false;
+      if (postVoiceTimerRef.current) clearInterval(postVoiceTimerRef.current);
+      const recorder = postMediaRecorderRef.current;
+      if (recorder?.state === 'recording') recorder.stop();
+      recorder?.stream.getTracks().forEach(track => track.stop());
+    };
+  }, []);
 
   // Hidden File Inputs Refs
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -676,64 +642,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const is2FAActive = !!currentProfile.twoFactorEnabled;
 
   const handleOpen2FASetup = async () => {
-    setOtpInput('');
-    setOtp2FAError(null);
-    setOtp2FAHint(null);
-    setShow2FASetupModal(true);
-    // Envoi réel du code OTP
-    try {
-      const res = await fetch('/api/2fa/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentProfile.email }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setOtp2FAHint(
-          data.devCode
-            ? `Mode sans provider mail — code de test : ${data.devCode}`
-            : `Code envoyé à ${currentProfile.email} (valable 10 minutes).`
-        );
-      } else {
-        setOtp2FAError(data.error || 'Envoi du code impossible.');
-      }
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
-    }
-  };
-
-  const handleConfirm2FAActivation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsVerifying2FA(true);
-    setOtp2FAError(null);
-    try {
-      const res = await fetch('/api/2fa/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentProfile.email, code: otpInput }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setOtp2FAError(data.error || 'Code incorrect.');
-        return;
-      }
-      setShow2FASetupModal(false);
-      if (onToggleTwoFactor) {
-        onToggleTwoFactor(true);
-      }
-      onShowToast?.('Authentification à double facteur (2FA) activée.');
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
-    } finally {
-      setIsVerifying2FA(false);
-    }
+    setShowNativeMfa(true);
   };
 
   const handleDirectDisable2FA = () => {
-    if (onToggleTwoFactor) {
-      onToggleTwoFactor(false);
-    }
-    onShowToast?.('Authentification à double facteur (2FA) désactivée.');
+    setShowNativeMfa(true);
   };
 
   // Media Upload & Selection Handlers — Academia Storage (137.184.59.184)
@@ -771,7 +684,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     setMediaUploading('video');
     try {
       onShowToast?.(`Envoi vidéo « ${file.name} » vers Academia…`);
-      const acad = await uploadFile(file, { category: 'posts_videos', visibility: 'private', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      const acad = await uploadFile(file, { category: 'posts_videos', visibility: 'public', uploadedBy: currentProfile.email, entityId: currentProfile.id });
       setSelectedVideo(acad.url);
       setSelectedVideoName(file.name);
       setSelectedVideoFile(acad);
@@ -795,7 +708,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     setMediaUploading('audio');
     try {
       onShowToast?.(`Envoi audio « ${file.name} » vers Academia…`);
-      const acad = await uploadFile(file, { category: 'posts_audios', visibility: 'private', uploadedBy: currentProfile.email, entityId: currentProfile.id });
+      const acad = await uploadFile(file, { category: 'posts_audios', visibility: 'public', uploadedBy: currentProfile.email, entityId: currentProfile.id });
       setSelectedAudio(acad.url);
       setSelectedAudioName(file.name);
       setSelectedAudioFile(acad);
@@ -813,11 +726,12 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const startPostVoiceRecording = async () => {
     setPostVoiceSeconds(0);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      await generateAndUploadSynthesizedPostVoice();
+      onShowToast?.('Microphone indisponible. Vous pouvez importer un fichier audio.');
       return;
     }
+    let stream: MediaStream | undefined;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       const startedAt = Date.now();
@@ -834,14 +748,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           clearInterval(postVoiceTimerRef.current);
           postVoiceTimerRef.current = null;
         }
-        stream.getTracks().forEach((t) => t.stop());
+        stream?.getTracks().forEach((t) => t.stop());
         setIsRecordingPostVoice(false);
 
         const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
         const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-        const fileName = `voice_${Date.now()}.webm`;
-        const localUrl = URL.createObjectURL(blob);
-        setSelectedAudio(localUrl);
+        const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+        const fileName = `voice_${Date.now()}.${extension}`;
+        if (!postVoiceMounted.current) return;
         setSelectedAudioName(`Note vocale (${elapsed}s)`);
         setMediaPickerModal(null);
 
@@ -849,15 +763,19 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         try {
           const acad = await uploadBlob(blob, fileName, {
             category: 'posts_audios',
-            visibility: 'private',
+            visibility: 'public',
             uploadedBy: currentProfile.email,
             entityId: currentProfile.id
           });
           setSelectedAudio(acad.url);
           setSelectedAudioFile(acad);
           onShowToast?.(`Voice (${elapsed}s) enregistré et stocké sur Academia ✓`);
-        } catch {
-          onShowToast?.(`Voice (${elapsed}s) prêt à publier ✓`);
+        } catch (error: any) {
+          setSelectedAudio(null); setSelectedAudioName(null); setSelectedAudioFile(null);
+          const url = URL.createObjectURL(blob);
+          const download = document.createElement('a'); download.href = url; download.download = fileName; download.click();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+          onShowToast?.('Enregistrement téléchargé sur votre appareil, non publié : ' + (error.message || 'échec de l’import.'));
         } finally {
           setMediaUploading(null);
         }
@@ -867,7 +785,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       mr.start(250);
       setIsRecordingPostVoice(true);
     } catch {
-      await generateAndUploadSynthesizedPostVoice();
+      stream?.getTracks().forEach(track => track.stop());
+      onShowToast?.('Microphone indisponible. Vous pouvez importer un fichier audio.');
     }
   };
 
@@ -876,55 +795,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       postMediaRecorderRef.current.stop();
     } else {
       setIsRecordingPostVoice(false);
-    }
-  };
-
-  const generateAndUploadSynthesizedPostVoice = async () => {
-    const sampleRate = 22050;
-    const durationSec = 4;
-    const numSamples = sampleRate * durationSec;
-    const buffer = new ArrayBuffer(44 + numSamples * 2);
-    const view = new DataView(buffer);
-    const writeStr = (offset: number, str: string) => {
-      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-    };
-    writeStr(0, 'RIFF');
-    view.setUint32(4, 36 + numSamples * 2, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, 'data');
-    view.setUint32(40, numSamples * 2, true);
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate;
-      const env = 0.35 + 0.65 * Math.abs(Math.sin(2 * Math.PI * 3.0 * t));
-      const fade = Math.min(1, t / 0.08) * Math.min(1, (durationSec - t) / 0.15);
-      const wave = 0.5 * Math.sin(2 * Math.PI * 210 * t) + 0.25 * Math.sin(2 * Math.PI * 420 * t);
-      view.setInt16(44 + i * 2, wave * env * fade * 0.18 * 32767, true);
-    }
-    const blob = new Blob([buffer], { type: 'audio/wav' });
-    const localUrl = URL.createObjectURL(blob);
-    setSelectedAudio(localUrl);
-    setSelectedAudioName(`Note vocale ARMP (0:04)`);
-    setMediaPickerModal(null);
-    try {
-      const acad = await uploadBlob(blob, `voice_${Date.now()}.wav`, {
-        category: 'posts_audios',
-        visibility: 'private',
-        uploadedBy: currentProfile.email,
-        entityId: currentProfile.id
-      });
-      setSelectedAudio(acad.url);
-      setSelectedAudioFile(acad);
-      onShowToast?.('Note vocale générée et prête à publier ✓');
-    } catch {
-      onShowToast?.('Note vocale prête à publier ✓');
     }
   };
 
@@ -995,18 +865,20 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   // Create post in the Facebook feed (supports Text, Image, Video, Audio ou combinaisons — Academia + Firestore)
-  const handleCreatePost = (e: React.FormEvent) => {
+  const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPosting || mediaUploading || isRecordingPostVoice) return;
     if (!newPostText.trim() && !selectedImage && !selectedVideo && !selectedAudio) return;
+    if ([selectedImage, selectedVideo, selectedAudio].some(url => url?.startsWith('blob:') || url?.startsWith('data:'))) { onShowToast?.('Importez les médias avant de publier.'); return; }
     setIsPosting(true);
 
     const newPost: SocialPost = {
-      id: `post-${Date.now()}`,
+      id: `post-${crypto.randomUUID()}`,
       authorId: currentProfile.id,
       author: currentProfile.name,
       roleTitle: currentProfile.roleTitle,
       avatar: currentProfile.avatarUrl,
-      timeAgo: "À l'instant • 🌐 (Academia 137.184.59.184)",
+      timeAgo: "À l'instant • 🌐 (stockage sécurisé)",
       createdAt: new Date().toISOString(),
       content: newPostText.trim(),
       image: selectedImage || undefined,
@@ -1019,12 +891,16 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       comments: []
     };
 
+    try {
+      await savePostToFirestore(newPost);
+    } catch {
+      setIsPosting(false); onShowToast?.('Publication non enregistrée. Votre brouillon est conservé ; réessayez.'); return;
+    }
     const nextPosts = [newPost as PostItem, ...posts];
     setPosts(nextPosts);
     try {
-      localStorage.setItem('armp_social_posts', JSON.stringify(nextPosts));
+      scopedStorage.setItem('armp_social_posts', JSON.stringify(nextPosts));
     } catch {}
-    savePostToFirestore(newPost).catch(() => {});
 
     setNewPostText('');
     setSelectedImage(null);
@@ -1056,7 +932,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         return p;
       });
       try {
-        localStorage.setItem('armp_social_posts', JSON.stringify(next));
+        scopedStorage.setItem('armp_social_posts', JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -1086,7 +962,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         return p;
       });
       try {
-        localStorage.setItem('armp_social_posts', JSON.stringify(next));
+        scopedStorage.setItem('armp_social_posts', JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -2739,7 +2615,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold truncate">{selectedAudioName || 'Audio prêt'}</div>
                       <audio controls src={selectedAudio} className="w-full mt-1 h-8" />
-                      {selectedAudioFile && <span className="text-[10px] text-purple-600 font-bold">Academia 137.184.59.184 ✓ • {selectedAudioFile.size ? `${(selectedAudioFile.size/1024/1024).toFixed(1)} Mo` : ''}</span>}
+                      {selectedAudioFile && <span className="text-[10px] text-purple-600 font-bold">stockage sécurisé ✓ • {selectedAudioFile.size ? `${(selectedAudioFile.size/1024/1024).toFixed(1)} Mo` : ''}</span>}
                     </div>
                     <button type="button" onClick={handleRemoveAudio} className="p-1.5 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-600 shrink-0">
                       <X className="w-4 h-4" />
@@ -2751,7 +2627,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               {mediaUploading && (
                 <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-2">
                   <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  <span>Envoi {mediaUploading} vers Academia 137.184.59.184…</span>
+                  <span>Envoi {mediaUploading} vers stockage sécurisé…</span>
                 </div>
               )}
 
@@ -3305,7 +3181,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     Authentification à Double Facteur (2FA)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Protégez vos signatures et visas officiels de passation de marchés
+                    Ajoutez un code de votre application d’authentification à la connexion.
                   </p>
                 </div>
               </div>
@@ -3685,7 +3561,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
               {/* Upload perso vers Academia */}
               <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
-                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser votre propre couverture (Academia 137.184.59.184 — covers / public, 100 Mo)</p>
+                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser votre propre couverture (stockage sécurisé — covers / public, 3 Mo)</p>
                 <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isCoverUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
                   <Upload className="w-4 h-4" />
                   <span>{isCoverUploading ? 'Envoi vers Academia…' : coverDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
@@ -3758,7 +3634,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               </div>
 
               <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
-                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser une nouvelle photo (Academia 137.184.59.184 — avatars / public, 100 Mo)</p>
+                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser une nouvelle photo (stockage sécurisé — avatars / public, 3 Mo)</p>
                 <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isAvatarUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
                   <Upload className="w-4 h-4" />
                   <span>{isAvatarUploading ? 'Envoi vers Academia…' : avatarDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
@@ -3853,66 +3729,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         </div>
       )}
 
-      {/* 2FA Setup Modal */}
-      {show2FASetupModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-blue-600" />
-                <span>Configuration de la 2FA</span>
-              </h3>
-              <button onClick={() => setShow2FASetupModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {showNativeMfa && <NativeMfaSetup onClose={() => setShowNativeMfa(false)} />}
 
-            <div className="text-center space-y-3 text-xs">
-              <div className="w-32 h-32 mx-auto rounded-2xl bg-white p-2 border-2 border-slate-300 flex items-center justify-center shadow-inner">
-                <QrCode className="w-24 h-24 text-slate-900" />
-              </div>
-              <p className="text-slate-600 dark:text-slate-300">
-                Scannez ce QR Code avec Google Authenticator ou saisissez le code de vérification à 6 chiffres envoyé à votre adresse email.
-              </p>
-            </div>
-
-            {otp2FAHint && (
-              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-800 dark:text-blue-200 text-center">
-                {otp2FAHint}
-              </div>
-            )}
-            {otp2FAError && (
-              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-bold text-red-700 dark:text-red-300 text-center">
-                {otp2FAError}
-              </div>
-            )}
-
-            <form onSubmit={handleConfirm2FAActivation} className="space-y-3 pt-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otpInput}
-                onChange={(e) => setOtpInput(filterOtpMask(e.target.value))}
-                placeholder="Entrez le code à 6 chiffres (ex: 123456)"
-                className="w-full text-center tracking-widest text-lg font-mono px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
-                required
-              />
-
-              <button
-                type="submit"
-                disabled={isVerifying2FA || otpInput.length < 6}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-2"
-              >
-                {isVerifying2FA ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                <span>Confirmer et Activer la 2FA</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Media Picker Modal (Upload local file OR select from ARMP archives) */}
       {mediaPickerModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95 duration-150">
@@ -3926,7 +3744,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     {mediaPickerModal === 'image' ? 'Importer ou choisir une photo' : mediaPickerModal === 'video' ? 'Importer ou choisir une vidéo' : 'Importer ou choisir un audio'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {mediaPickerModal === 'audio' ? 'Audio stocké sur Academia 137.184.59.184 (audios, 100 Mo)' : 'Fichier depuis votre appareil — stockage Academia 137.184.59.184'}
+                    {mediaPickerModal === 'audio' ? 'Audio stocké sur stockage sécurisé (audios, 3 Mo)' : 'Fichier depuis votre appareil — stockage stockage sécurisé'}
                   </p>
                 </div>
               </div>
@@ -3944,8 +3762,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 {mediaPickerModal === 'image' 
                   ? 'Téléverser une image → Academia (images / public)'
                   : mediaPickerModal === 'video'
-                  ? 'Téléverser une vidéo → Academia (videos / privé, 100 Mo)'
-                  : 'Téléverser un audio → Academia (audios / privé, 100 Mo)'
+                  ? 'Téléverser une vidéo → Academia (vidéo publiée, 3 Mo)'
+                  : 'Téléverser un audio → Academia (audio publié, 3 Mo)'
                 }
               </div>
               <button

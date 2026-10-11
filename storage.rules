@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // All objects are served by the API after ownership/publication checks.
+    // In particular no Firebase download token is attached to uploaded objects.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

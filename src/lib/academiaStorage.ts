@@ -1,8 +1,9 @@
 import { auth } from '../firebase';
+import { currentSessionToken } from '../../shared/authenticatedRequest';
 import { MAX_IMAGE_BYTES, imageMime, IMAGE_EXTENSIONS } from '../../shared/imageUpload';
 /**
  * Academia Storage API — Service centralisé pour images | vidéos | audios
- * Stockage 100% serveur 137.184.59.184 (pas S3 / Firestore)
+ * Médias publics historiques : relais Academia. Fichiers privés : bucket Firebase, accès serveur contrôlé.
  * Docs : https://academia.137.184.59.184.nip.io/
  */
 
@@ -15,7 +16,7 @@ export const ACADEMIA_API_URL =
 
 
 
-const API = `${ACADEMIA_API_URL}/api`;
+const API = '/api/storage';
 
 // =============================================================================
 // TYPES
@@ -54,19 +55,19 @@ export interface UploadOptions {
 // =============================================================================
 // HELPERS
 // =============================================================================
-export const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100 Mo
+export const MAX_SIZE_BYTES = 3 * 1024 * 1024; // Limite compatible avec le relais Vercel
 
 const EXT_BY_KIND: Record<MediaKind, string[]> = {
   image: IMAGE_EXTENSIONS,
-  video: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wav'],
-  audio: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'webm'],
+  video: ['mp4', 'webm', 'mov'],
+  audio: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'webm'],
 };
 
 const ALL_ALLOWED = [
   'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp',
-  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp',
-  'txt', 'csv', 'rtf', 'zip', 'rar', '7z',
-  'mp3', 'mp4', 'wav', 'avi', 'mov', 'webm', 'mkv', 'json', 'xml',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'csv', 'zip',
+  'mp3', 'mp4', 'wav', 'mov', 'webm', 'ogg', 'm4a', 'flac', 'json',
 ];
 
 export function isAlreadyAcademiaUrl(url: string): boolean {
@@ -94,31 +95,36 @@ export function isExtensionAllowed(fileName: string): boolean {
   return ALL_ALLOWED.includes(ext);
 }
 
-function headers(): Record<string, string> {
-  const h: Record<string, string> = {};
-
-  return h;
+async function headers(): Promise<Record<string, string>> {
+  const { token } = await currentSessionToken(() => auth.currentUser);
+  return { Authorization: 'Bearer ' + token };
 }
 
 // =============================================================================
 // CORE — UPLOAD (multipart) & BASE64 fallback
 // =============================================================================
 
-async function uploadImageThroughApp(file: File, opts: UploadOptions): Promise<AcademiaFile> {
-  if (!imageMime(file.name)) throw new Error('Formats acceptés : JPG, JPEG, PNG, GIF et WebP.');
-  if (file.size > MAX_IMAGE_BYTES) throw new Error('Image trop volumineuse : maximum 3 Mo. Réduisez sa taille.');
+async function uploadThroughApp(file: File, opts: UploadOptions): Promise<AcademiaFile> {
+  if (!isExtensionAllowed(file.name)) throw new Error('Format de fichier non pris en charge.');
+  if (file.size > MAX_SIZE_BYTES) throw new Error('Fichier trop volumineux : maximum 3 Mo. Réduisez sa taille.');
   if (!file.size) throw new Error('Le fichier image est vide.');
   if (!auth.currentUser) throw new Error('Connectez-vous pour importer une image.');
-  const token = await auth.currentUser.getIdToken();
+  const { token, user } = await currentSessionToken(() => auth.currentUser);
+  const session = await fetch(`${API}/session`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+  if (auth.currentUser !== user) {
+    await fetch(`${API}/session`, { method: 'DELETE' });
+    throw new Error('La session a changé. Réessayez avec le compte connecté.');
+  }
+  if (!session.ok) throw new Error('Le stockage sécurisé est indisponible. Réessayez après reconnexion.');
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/storage/images');
+    xhr.open('POST', imageMime(file.name) && opts.visibility !== 'private' ? `${API}/images` : `${API}/files`);
     xhr.timeout = 60000;
     xhr.setRequestHeader('Authorization', 'Bearer ' + token);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.setRequestHeader('X-Upload-Filename', encodeURIComponent(file.name));
     xhr.setRequestHeader('X-Upload-Category', opts.category || 'images');
-    xhr.setRequestHeader('X-Upload-Visibility', opts.visibility || 'public');
+    xhr.setRequestHeader('X-Upload-Visibility', opts.visibility || (imageMime(file.name) ? 'public' : 'private'));
     if (opts.entityId) xhr.setRequestHeader('X-Upload-Entity', opts.entityId);
     if (opts.description) xhr.setRequestHeader('X-Upload-Description', encodeURIComponent(opts.description));
     xhr.upload.onprogress = e => { if (e.lengthComputable) opts.onProgress?.(Math.min(99, Math.round(e.loaded / e.total * 100))); };
@@ -141,62 +147,7 @@ export async function uploadFile(
   file: File,
   opts: UploadOptions = {}
 ): Promise<AcademiaFile> {
-  const {
-    category = 'divers',
-    visibility = inferKindFromFile(file) === 'image' ? 'public' : 'private',
-    entityId,
-    description,
-    uploadedBy,
-    onProgress,
-  } = opts;
-
-  if (inferKindFromFile(file) === 'image') return uploadImageThroughApp(file, opts);
-
-  // Validations côté client
-  if (file.size > MAX_SIZE_BYTES) {
-    throw new Error(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Limite 100 Mo.`);
-  }
-  if (!isExtensionAllowed(file.name)) {
-    throw new Error(`Extension .${file.name.split('.').pop()} non autorisée.`);
-  }
-
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('category', category);
-  fd.append('visibility', visibility);
-  if (entityId) fd.append('entity_id', entityId);
-  if (description) fd.append('description', description);
-  if (uploadedBy) fd.append('uploaded_by', uploadedBy);
-
-  // XHR pour progress (fetch ne gère pas upload progress)
-  return new Promise<AcademiaFile>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API}/files`);
-    Object.entries(headers()).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-
-    if (onProgress && xhr.upload) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
-    }
-
-    xhr.onload = () => {
-      try {
-        const json = JSON.parse(xhr.responseText || '{}');
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const data: AcademiaFile = json.data;
-          if (!data?.url) throw new Error('Réponse API invalide');
-          resolve(data);
-        } else {
-          reject(new Error(json.message || `Upload échoué (${xhr.status})`));
-        }
-      } catch (e: any) {
-        reject(new Error(e.message || 'Réponse API invalide'));
-      }
-    };
-    xhr.onerror = () => reject(new Error('Erreur réseau upload Academia'));
-    xhr.send(fd);
-  });
+  return uploadThroughApp(file, opts);
 }
 
 // Shorthands par type média
@@ -228,27 +179,8 @@ export async function uploadBase64(
   opts: UploadOptions = {}
 ): Promise<AcademiaFile> {
   const clean = base64.includes(',') ? base64.split(',')[1] : base64;
-  const mime = imageMime(fileName);
-  if (mime) {
-    const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
-    return uploadFile(new File([bytes], fileName, { type: mime }), opts);
-  }
-  const res = await fetch(`${API}/files`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers() },
-    body: JSON.stringify({
-      fileBase64: clean,
-      fileName,
-      category: opts.category || 'divers',
-      visibility: opts.visibility || 'private',
-      entity_id: opts.entityId,
-      description: opts.description,
-      uploaded_by: opts.uploadedBy,
-    }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `Base64 upload échoué (${res.status})`);
-  return json.data as AcademiaFile;
+  const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+  return uploadFile(new File([bytes], fileName, { type: imageMime(fileName) || 'application/octet-stream' }), opts);
 }
 
 // Si l'URL est déjà une URL Academia ou http externe, on la laisse.
@@ -287,41 +219,43 @@ export async function listFiles(params: {
   if (params.entityId) q.set('entity_id', params.entityId);
   if (params.visibility) q.set('visibility', params.visibility);
   if (params.limit) q.set('limit', String(params.limit));
-  const res = await fetch(`${API}/files?${q.toString()}`, { headers: headers() });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || 'listFiles échoué');
-  return json.data as AcademiaFile[];
+  const files: AcademiaFile[] = [];
+  for (let page = 0; page < 100; page++) {
+    const res = await fetch(`${API}/files?${q.toString()}`, { headers: await headers() });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || json.message || 'Lecture des fichiers refusée.');
+    files.push(...json.data);
+    if (!json.nextCursor) return files;
+    q.set('cursor', json.nextCursor);
+  }
+  throw new Error('Trop de fichiers : précisez la catégorie pour poursuivre la recherche.');
 }
 
 export async function getFile(id: string): Promise<AcademiaFile> {
-  const res = await fetch(`${API}/files/${id}`, { headers: headers() });
+  const res = await fetch(`${API}/files/${id}`, { headers: await headers() });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || 'getFile échoué');
+  if (!res.ok) throw new Error(json.error || json.message || 'Lecture du fichier refusée.');
   return json.data as AcademiaFile;
 }
 
 export async function deleteFile(id: string): Promise<void> {
   const res = await fetch(`${API}/files/${id}`, {
     method: 'DELETE',
-    headers: headers(),
+    headers: await headers(),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((json as any).message || 'delete échoué');
+  if (!res.ok) throw new Error((json as any).error || (json as any).message || 'Suppression refusée.');
 }
 
-export async function getStorageStats(category?: string) {
-  const q = category ? `?category=${encodeURIComponent(category)}` : '';
-  const res = await fetch(`${API}/storage-stats${q}`, { headers: headers() });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || 'stats échoué');
-  return json.data as { totalFiles: number; totalSize: number; byCategory: { category: string; count: number; size: string }[]; quota: number };
+export async function getStorageStats(_category?: string): Promise<{ totalFiles: number; totalSize: number; byCategory: { category: string; count: number; size: string }[]; quota: number }> {
+  throw new Error('Les statistiques exhaustives du stockage ne sont pas encore disponibles.');
 }
 
 export function downloadUrl(id: string): string {
-  return `${API}/files/${id}/download`;
+  return `${API}/files/${encodeURIComponent(id)}/content`;
 }
 export function previewUrl(id: string): string {
-  return `${API}/files/${id}/preview`;
+  return `${API}/files/${encodeURIComponent(id)}/content`;
 }
 
 // =============================================================================
@@ -329,8 +263,7 @@ export function previewUrl(id: string): string {
 // =============================================================================
 export function fileToPreviewUrl(file: AcademiaFile): string {
   // Pour <img> / <video> / <audio> : public → url direct, private → preview
-  if (file.visibility === 'public') return file.url;
-  return previewUrl(file.id);
+  return file.url;
 }
 
 // Pour migration: remplace les anciennes URLs (assets, data:, externes temporaires) par une URL academia si besoin

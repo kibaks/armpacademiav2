@@ -1,3 +1,5 @@
+import { DeferredPanel } from './components/DeferredPanel';
+import { scopedStorage } from './lib/scopedStorage';
 import React, { useState, useEffect } from 'react';
 import { 
   Header 
@@ -42,12 +44,8 @@ import {
 import {
   CourseAnimaticModal
 } from './components/CourseAnimaticModal';
-import { 
-  UserProfileView 
-} from './components/UserProfileView';
-import { 
-  TrainerPortal 
-} from './components/TrainerPortal';
+const UserProfileView = React.lazy(() => import('./components/UserProfileView').then(module => ({ default: module.UserProfileView })));
+const TrainerPortal = React.lazy(() => import('./components/TrainerPortal').then(module => ({ default: module.TrainerPortal })));
 import { InstitutionalPreloader } from './components/InstitutionalPreloader';
 import { ArmpLogo } from './components/ArmpLogo';
 
@@ -82,7 +80,8 @@ import {
   testFirestoreConnection,
   firebaseLogout 
 } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onIdTokenChanged } from 'firebase/auth';
+import { createSessionRevision } from '../shared/sessionRevision';
 
 import { 
   Bot, 
@@ -115,10 +114,10 @@ export default function App() {
 
   // Navigation & Role State (Persisted across page refreshes)
   const [activeTab, setActiveTab] = useState<string>(() => {
-    return localStorage.getItem('armp_active_tab') || 'accueil';
+    return scopedStorage.getItem('armp_active_tab') || 'accueil';
   });
   const [currentRole, setCurrentRole] = useState<UserRole>(() => {
-    return (localStorage.getItem('armp_current_role') as UserRole) || 'cgpmp_member';
+    return (scopedStorage.getItem('armp_current_role') as UserRole) || 'cgpmp_member';
   });
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>(DEMO_PROFILES);
   const [firestoreProfiles, setFirestoreProfiles] = useState<UserProfile[]>([]);
@@ -158,7 +157,7 @@ export default function App() {
     const officialNormalized = COURSES_DATA.map(normalizeCourseToAnimation);
     const officialIds = new Set(officialNormalized.map((c) => c.id));
     try {
-      const saved = localStorage.getItem('armp_courses_custom');
+      const saved = scopedStorage.getItem('armp_courses_custom');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -173,17 +172,17 @@ export default function App() {
     }
     return officialNormalized;
   });
-  const [requests, setRequests] = useState<TrainingRequest[]>(INITIAL_TRAINING_REQUESTS);
+  const [requests, setRequests] = useState<TrainingRequest[]>([]);
   const [cgpmpAccountRequests, setCgpmpAccountRequests] = useState<CgpmpAccountCreationRequest[]>(() => {
     return getLocalCgpmpAccountRequests();
   });
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('armp_theme');
+    const saved = scopedStorage.getItem('armp_theme');
     // Par défaut : MODE JOUR (light) — même si la machine est en nuit, on reste en clair
     if (saved === 'dark') return true;
     if (saved === 'light') return false;
     // Aucune préférence enregistrée → force light et nettoie
-    localStorage.setItem('armp_theme', 'light');
+    scopedStorage.setItem('armp_theme', 'light');
     document.documentElement.classList.remove('dark');
     return false;
   });
@@ -224,12 +223,12 @@ export default function App() {
 
   // 1. Persist Active Tab to localStorage
   useEffect(() => {
-    localStorage.setItem('armp_active_tab', activeTab);
+    scopedStorage.setItem('armp_active_tab', activeTab);
   }, [activeTab]);
 
   // 2. Persist Dark Mode & Apply Class
   useEffect(() => {
-    localStorage.setItem('armp_theme', isDarkMode ? 'dark' : 'light');
+    scopedStorage.setItem('armp_theme', isDarkMode ? 'dark' : 'light');
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -239,7 +238,7 @@ export default function App() {
 
   // 3. Persist Current Role
   useEffect(() => {
-    localStorage.setItem('armp_current_role', currentRole);
+    scopedStorage.setItem('armp_current_role', currentRole);
   }, [currentRole]);
 
   // 4. Initial Firebase Auth Subscription & Session Restoring on Page Refresh
@@ -248,22 +247,39 @@ export default function App() {
 
     const preloadingTimeout = window.setTimeout(() => setIsAppLoading(false), 12000);
 
-    // Subscribe to Firebase Auth state
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsAuthenticated(false);
+    // Refresh profile/claims when Firebase renews its JWT, not only on login.
+    const session = createSessionRevision(() => auth.currentUser?.uid || null);
+    let previousUid: string | null | undefined;
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
+      const uid = firebaseUser?.uid || null;
+      const isCurrent = session.begin(uid);
+      if (uid !== previousUid) {
+        previousUid = uid;
+        setIsAuthenticated(false);
+        setProfiles(DEMO_PROFILES);
+        setRequests([]);
+        setCgpmpAccountRequests([]);
+        setFirestoreProfiles([]);
+        setIsTutorOpen(false);
+      }
       if (firebaseUser) {
         setPreloaderStatus(`Chargement du profil sécurisé (${firebaseUser.email || 'Agent'})...`);
         try {
-          const userProfile = await getOrInitUserProfile(firebaseUser, currentRole);
+          const userProfile = await getOrInitUserProfile(firebaseUser);
+          if (!isCurrent()) return;
           setCurrentRole(userProfile.role);
           setProfiles(prev => ({
             ...prev,
             [userProfile.role]: userProfile
           }));
           setIsAuthenticated(true);
-          localStorage.setItem('armp_session_profile', JSON.stringify(userProfile));
+          scopedStorage.setItem('armp_session_profile', JSON.stringify(userProfile));
         } catch (err) {
+          if (!isCurrent()) return;
           console.error("Erreur de synchronisation Firestore profil:", err);
+          setIsAuthenticated(false);
+          setIsAppLoading(false);
+          return;
         }
 
         // Fetch persistent training requests, custom courses & all user profiles from Firestore when authenticated
@@ -275,6 +291,7 @@ export default function App() {
             fetchAllUserProfilesFromFirestore().catch(() => []),
             fetchCgpmpAccountRequestsFromFirestore().catch(() => [])
           ]);
+          if (!isCurrent()) return;
           if (remoteCgpmpAccounts && remoteCgpmpAccounts.length > 0) {
             setCgpmpAccountRequests(remoteCgpmpAccounts);
           }
@@ -293,7 +310,7 @@ export default function App() {
             COURSES_DATA.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
             remoteCourses.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
             setCourses(Array.from(map.values()));
-            localStorage.setItem('armp_courses_custom', JSON.stringify(remoteCourses));
+            scopedStorage.setItem('armp_courses_custom', JSON.stringify(remoteCourses));
           }
           if (remoteProfiles && remoteProfiles.length > 0) {
             setFirestoreProfiles(remoteProfiles);
@@ -302,21 +319,22 @@ export default function App() {
           console.warn("Erreur chargement données Firestore:", err);
         }
       } else {
-        localStorage.removeItem('armp_session_profile');
+        scopedStorage.removeItem('armp_session_profile');
         setIsAuthenticated(false);
       }
 
       // Verify connection to Firestore
       await testFirestoreConnection();
+      if (!isCurrent()) return;
 
       // Finish Preloading
       setPreloaderStatus("Système ACADEMIA ITECH opérationnel.");
       setTimeout(() => {
-        setIsAppLoading(false);
+        if (isCurrent()) setIsAppLoading(false);
       }, 400);
     });
 
-    return () => { window.clearTimeout(preloadingTimeout); unsubscribe(); };
+    return () => { session.invalidate(); window.clearTimeout(preloadingTimeout); unsubscribe(); };
   }, []);
 
   const currentProfile = profiles[currentRole] || profiles['cgpmp_member'];
@@ -384,6 +402,7 @@ export default function App() {
     }
     try { profile = await getOrInitUserProfile(auth.currentUser); }
     catch { showToast('Profil Firebase indisponible.'); return; }
+    if (auth.currentUser?.uid !== profile.id) return;
     setCurrentRole(profile.role);
     setProfiles(prev => ({
       ...prev,
@@ -391,10 +410,11 @@ export default function App() {
     }));
     setIsAuthenticated(true);
     setIsAuthModalOpen(false);
-    localStorage.setItem('armp_session_profile', JSON.stringify(profile));
+    scopedStorage.setItem('armp_session_profile', JSON.stringify(profile));
 
     // Also fetch training requests now that user is logged in
     fetchTrainingRequestsFromFirestore().then(firestoreReqs => {
+      if (auth.currentUser?.uid !== profile.id) return;
       if (firestoreReqs && firestoreReqs.length > 0) {
         setRequests(prev => {
           const map = new Map<string, TrainingRequest>();
@@ -433,7 +453,7 @@ export default function App() {
     setIsAuthenticated(true);
     setIsAuthModalOpen(false);
     const demoProf = profiles[role] || DEMO_PROFILES[role];
-    localStorage.setItem('armp_session_profile', JSON.stringify(demoProf));
+    scopedStorage.setItem('armp_session_profile', JSON.stringify(demoProf));
     showToast(`Session active : ${demoProf.roleTitle}`);
 
     if (pendingCourseForAuth) {
@@ -457,39 +477,23 @@ export default function App() {
   const handleUpdateProfile = async (updated: UserProfile) => {
     await syncUserProfileToFirestore(updated);
     setProfiles(prev => ({ ...prev, [updated.role]: updated }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+    scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
   };
 
-  // Two-Factor Authentication (2FA) Toggle in Profile
-  const handleToggleTwoFactor = async (enabled: boolean) => {
-    const updated: UserProfile = {
-      ...currentProfile,
-      twoFactorEnabled: enabled
-    };
-    setProfiles(prev => ({
-      ...prev,
-      [currentRole]: updated
-    }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    showToast(
-      enabled
-        ? "Sécurité renforcée : Authentification à double facteur (2FA) activée."
-        : "Authentification à double facteur (2FA) désactivée."
-    );
-    try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Failed to sync 2FA to Firestore", e);
-    }
-  };
 
   const handleLogout = async () => {
+    if (auth.currentUser) scopedStorage.clearAccount(auth.currentUser.uid);
     try {
       await firebaseLogout();
     } catch (e) {
       console.warn("Erreur lors de la déconnexion Firebase", e);
     }
-    localStorage.removeItem('armp_session_profile');
+    scopedStorage.removeItem('armp_session_profile');
+    setRequests([]);
+    setCgpmpAccountRequests([]);
+    setFirestoreProfiles([]);
+    setProfiles(DEMO_PROFILES);
+    setIsTutorOpen(false);
     setIsAuthenticated(false);
     setSelectedCourseForPlayer(null);
     setActiveTab('accueil');
@@ -513,7 +517,7 @@ export default function App() {
         ...prev,
         [currentRole]: updated
       }));
-      localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+      scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
       syncUserProfileToFirestore(updated).catch(() => {});
     }
   };
@@ -524,7 +528,7 @@ export default function App() {
     setCurrentRole(newRole);
     const targetProf = profiles[newRole];
     if (targetProf) {
-      localStorage.setItem('armp_session_profile', JSON.stringify(targetProf));
+      scopedStorage.setItem('armp_session_profile', JSON.stringify(targetProf));
       showToast(`Session basculée sur : ${targetProf.roleTitle} (${targetProf.institution})`);
     }
   };
@@ -548,108 +552,22 @@ export default function App() {
     score: number,
     validation?: { niveau: NiveauValidation; moduleCode?: string }
   ) => {
-    const lvlCfg = await getLevelSettings();
-    const levelKey = levelKeyFromLabel(level, lvlCfg);
-    const updated: UserProfile = {
-      ...currentProfile,
-      level,
-      levelKey,
-      placementScore: score,
-      ...(validation
-        ? {
-            niveauValidation: validation.niveau,
-            niveauxModules: validation.moduleCode
-              ? { ...(currentProfile.niveauxModules || {}), [validation.moduleCode]: validation.niveau }
-              : currentProfile.niveauxModules,
-          }
-        : {}),
-    };
-    setProfiles((prev) => ({
-      ...prev,
-      [currentRole]: updated
-    }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    showToast(
-      validation
-        ? `🎓 Niveau validé : ${validation.niveau}${validation.moduleCode ? ` (${validation.moduleCode})` : ''} — score ${score}%`
-        : `Niveau profil actualisé : ${level} (${score}%)`
-    );
+    if (!auth.currentUser) return;
     try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Could not sync quiz score to Firestore", e);
-    }
+      const updated = await getOrInitUserProfile(auth.currentUser);
+      setProfiles(prev => ({ ...prev, [updated.role]: updated }));
+      showToast(`Résultat enregistré : ${score}%.`);
+    } catch { showToast('Actualisation du niveau indisponible.'); }
   };
 
   // Module Completion Handler
   const handleCompleteModule = async (courseId: string, score?: number) => {
-    const courseObj = courses.find(c => c.id === courseId);
-    const prevCompletedIds = currentProfile.completedCourseIds || [];
-    const isNewCompletion = !prevCompletedIds.includes(courseId);
-    const nextCompletedIds = isNewCompletion ? [...prevCompletedIds, courseId] : prevCompletedIds;
-    const nextCourseProgress = { ...(currentProfile.courseProgress || {}), [courseId]: 100 };
-    const nextQuizScores = score !== undefined
-      ? { ...(currentProfile.quizScoresByCourse || {}), [courseId]: score }
-      : (currentProfile.quizScoresByCourse || {});
-
-    const existingCerts = currentProfile.certificates || [];
-    const hasCertAlready = existingCerts.some(c => c.courseId === courseId);
-    const nextCertificates = (!hasCertAlready && courseObj)
-      ? [
-          {
-            id: `CERT-${courseObj.code}-${Date.now().toString().slice(-4)}`,
-            courseId: courseObj.id,
-            courseCode: courseObj.code,
-            courseTitle: courseObj.title,
-            score: score || 90,
-            issuedAt: new Date().toLocaleDateString('fr-FR'),
-            sealNumber: `ARMP-RDC-${courseObj.code}-${Math.floor(100000 + Math.random() * 900000)}`
-          },
-          ...existingCerts
-        ]
-      : existingCerts;
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const isNewActiveDay = currentProfile.lastActiveDate !== todayStr;
-
-    const baseWithReading = courseObj
-      ? recordCourseReadingInProfile(
-          currentProfile,
-          courseObj,
-          Math.max(0, (courseObj.lessons?.length || 1) - 1),
-          100
-        )
-      : currentProfile;
-
-    const updated: UserProfile = {
-      ...baseWithReading,
-      completedModulesCount: Math.max(
-        isNewCompletion ? currentProfile.completedModulesCount + 1 : currentProfile.completedModulesCount,
-        nextCompletedIds.length
-      ),
-      certificationsCount: Math.max(
-        isNewCompletion ? currentProfile.certificationsCount + 1 : currentProfile.certificationsCount,
-        nextCertificates.length
-      ),
-      completedCourseIds: nextCompletedIds,
-      courseProgress: nextCourseProgress,
-      quizScoresByCourse: nextQuizScores,
-      certificates: nextCertificates,
-      totalStudyMinutes: (currentProfile.totalStudyMinutes || 180) + 45,
-      streakDays: isNewActiveDay ? (currentProfile.streakDays || 5) + 1 : (currentProfile.streakDays || 5),
-      lastActiveDate: todayStr
-    };
-    setProfiles((prev) => ({
-      ...prev,
-      [currentRole]: updated
-    }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    showToast(`Félicitations ! Votre attestation officielle ARMP a été générée et sauvegardée.`);
+    if (!auth.currentUser) return;
     try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Could not sync module completion to Firestore", e);
-    }
+      const updated = await getOrInitUserProfile(auth.currentUser);
+      setProfiles(prev => ({ ...prev, [updated.role]: updated }));
+      showToast('Résultat et attestation enregistrés par le serveur.');
+    } catch { showToast('Résultat sauvegardé, mais le profil ne peut pas être actualisé.'); }
   };
 
   // Persist granular course progress (lessons completed, percentage, quiz score, and last reading history)
@@ -697,7 +615,7 @@ export default function App() {
       ...prev,
       [currentRole]: updated
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+    scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
     try {
       await syncUserProfileToFirestore(updated);
     } catch (e) {
@@ -719,7 +637,7 @@ export default function App() {
       ...prev,
       [currentRole]: updated
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+    scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
     try {
       await syncUserProfileToFirestore(updated);
     } catch (e) {
@@ -743,13 +661,13 @@ export default function App() {
       ...prev,
       [currentRole]: updated
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+    scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
 
     const isNowDownloaded = !exists;
     showToast(
       isNowDownloaded
-        ? `Module sauvegardé en stockage local pour consultation hors-ligne (Province).`
-        : `Module retiré du stockage local.`
+        ? `Cours ajouté à vos favoris. La consultation nécessite une connexion.`
+        : `Cours retiré des favoris.`
     );
 
     try {
@@ -766,7 +684,7 @@ export default function App() {
       const updated = [newCourse, ...prev.filter(c => c.id !== newCourse.id)];
       try {
         const customOnes = updated.filter(c => !COURSES_DATA.some(d => d.id === c.id));
-        localStorage.setItem('armp_courses_custom', JSON.stringify(customOnes));
+        scopedStorage.setItem('armp_courses_custom', JSON.stringify(customOnes));
       } catch (err) {
         console.warn("Could not save custom course", err);
       }
@@ -788,7 +706,7 @@ export default function App() {
     await deleteCustomCourseFromFirestore(id);
     setCourses(prev => {
       const updated = prev.filter(c => c.id !== id);
-      localStorage.setItem('armp_courses_custom', JSON.stringify(updated.filter(c => !COURSES_DATA.some(d => d.id === c.id))));
+      scopedStorage.setItem('armp_courses_custom', JSON.stringify(updated.filter(c => !COURSES_DATA.some(d => d.id === c.id))));
       return updated;
     });
   };
@@ -1165,7 +1083,7 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <UserProfileView
+              <DeferredPanel key={currentProfile.id} label="Chargement du profil…"><UserProfileView key={currentProfile.id}
                 currentProfile={currentProfile}
                 allProfiles={profiles}
                 onSelectRole={handleRoleChange}
@@ -1177,12 +1095,11 @@ export default function App() {
                 onCallTutor={handleCallTutor}
                 onLogout={handleLogout}
                 onNavigateToCourses={() => setActiveTab('catalogue')}
-                onToggleTwoFactor={handleToggleTwoFactor}
                 onUpdateProfile={handleUpdateProfile}
                 onShowToast={showToast}
                 initialTab={profileSubTab}
                 onTabChange={(tab) => setProfileSubTab(tab)}
-              />
+              /></DeferredPanel>
             )}
           </div>
         )}
@@ -1243,7 +1160,7 @@ export default function App() {
         {/* TAB 6: ESPACE FORMATEUR & STUDIO — réservé formateur connecté uniquement (pas en déconnecté) */}
         {(activeTab === 'formateur' || activeTab === 'studio-formateur') && (
           isAuthenticated && currentProfile.role === 'formateur' ? (
-            <TrainerPortal
+            <DeferredPanel key={currentProfile.id} label="Chargement de l’espace formateur…"><TrainerPortal key={currentProfile.id}
               currentProfile={currentProfile}
               allProfiles={profiles}
               courses={courses}
@@ -1252,7 +1169,7 @@ export default function App() {
               onOpenCoursePlayer={handleOpenCourse}
               onSwitchToTrainerRole={() => handleRoleChange('formateur')}
               isDarkMode={isDarkMode}
-            />
+            /></DeferredPanel>
           ) : (
             <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
               <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center mx-auto">
@@ -1277,7 +1194,7 @@ export default function App() {
         {activeTab === 'admin' && (
           isAuthenticated && (currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') ? (
             <div className="px-4 sm:px-6 lg:px-8 py-8">
-              <React.Suspense fallback={<SkeletonLoader label="Chargement de l’espace administrateur…" />}><AdminSpace
+              <DeferredPanel key={currentProfile.id} label="Chargement de l’espace administrateur…"><AdminSpace
                 currentProfile={currentProfile}
                 courses={courses}
                 requests={requests}
@@ -1286,7 +1203,7 @@ export default function App() {
                 onShowToast={showToast}
                 onAddCourse={handleAddCustomCourse}
                 onDeleteCourse={handleDeleteCustomCourse}
-              /></React.Suspense>
+              /></DeferredPanel>
             </div>
           ) : (
             <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
@@ -1397,7 +1314,7 @@ export default function App() {
         onUpdateCgpmpAccountRequests={(list) => setCgpmpAccountRequests(list)}
       />
 
-      <AITutorModal
+      <AITutorModal key={isAuthenticated ? currentProfile.id : 'guest'}
         isOpen={isAuthenticated && isTutorOpen}
         onClose={() => setIsTutorOpen(false)}
         currentProfile={currentProfile}
@@ -1472,7 +1389,7 @@ export default function App() {
       />
 
       {isAuthenticated && selectedCourseForPlayer && (
-        <CourseWindow
+        <CourseWindow key={currentProfile.id}
           course={selectedCourseForPlayer}
           onClose={() => {
             setSelectedCourseForPlayer(null);
