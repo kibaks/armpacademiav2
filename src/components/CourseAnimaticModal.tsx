@@ -1,3 +1,4 @@
+import { scopedStorage } from '../lib/scopedStorage';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
@@ -39,7 +40,7 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
   const [validatedIndexes, setValidatedIndexes] = useState<Set<number>>(() => {
     if (!course) return new Set();
     try {
-      const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+      const saved = scopedStorage.getItem(`armp_validated_lessons_${course.id}`);
       return saved ? new Set<number>(JSON.parse(saved)) : new Set<number>();
     } catch {
       return new Set();
@@ -49,7 +50,7 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
   useEffect(() => {
     if (course?.id) {
       try {
-        const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+        const saved = scopedStorage.getItem(`armp_validated_lessons_${course.id}`);
         setValidatedIndexes(saved ? new Set<number>(JSON.parse(saved)) : new Set<number>());
       } catch {}
     }
@@ -271,7 +272,7 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
             const next = new Set(prev);
             next.add(idx);
             try {
-              localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+              scopedStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
             } catch {}
             return next;
           });
@@ -281,7 +282,7 @@ export const CourseAnimaticModal: React.FC<CourseAnimaticModalProps> = ({
             const next = new Set(prev);
             next.add(idx);
             try {
-              localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+              scopedStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
             } catch {}
             return next;
           });

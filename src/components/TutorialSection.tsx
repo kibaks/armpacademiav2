@@ -30,7 +30,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
     {
       n: '04',
       title: 'Certifiez-vous & rejoignez la communauté',
-      desc: 'Examen 70% DFAT → attestation QR vérifiable, imprimable et enregistrée. Profil vérifié, forum CGPMP/ARMP, partage WhatsApp, 2 500+ apprenants actifs.',
+      desc: 'Examen 70% DFAT → attestation attestation enregistrée, imprimable et enregistrée. Profil vérifié, forum CGPMP/ARMP, partage WhatsApp, une communauté d’apprentissage.',
       icon: Award,
     },
   ];
@@ -161,7 +161,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
                     </div>
                     <div className="text-left leading-none">
                       <div className="text-[11px] sm:text-xs font-bold tracking-tight text-zinc-900 dark:text-white">Certificat inclus</div>
-                      <div className="text-[10px] sm:text-[11px] font-medium text-zinc-500 dark:text-zinc-400">QR vérifiable</div>
+                      <div className="text-[10px] sm:text-[11px] font-medium text-zinc-500 dark:text-zinc-400">attestation enregistrée</div>
                     </div>
                   </div>
                 </div>
@@ -279,7 +279,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
 
         {/* note légale discrète */}
         <p className="mt-6 text-center text-[11px] leading-[1.5] text-zinc-500 dark:text-zinc-500 max-w-3xl mx-auto">
-          Contenus contextualisés RDC — PPM, DAO types, avis de non-objection DGCMP 72h, recours CRD, audit CGPMP. Attestations DFAT avec QR vérifiable, enregistrées dans Firestore.
+          Contenus contextualisés RDC — PPM, DAO types, avis de non-objection DGCMP 72h, recours CRD, audit CGPMP. Attestations DFAT avec attestation enregistrée, enregistrées dans Firestore.
         </p>
       </section>
     </div>

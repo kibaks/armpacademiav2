@@ -1,0 +1,732 @@
+[
+  {
+    "id": "MOD-001",
+    "code": "MP-RDC-101",
+    "title": "Fondamentaux de la Loi n° 10/010 relative aux Marchés Publics",
+    "quiz": [
+      {
+        "question": "Selon la Loi n° 10/010, quelle institution assure le contrôle a priori de la procédure de passation et délivre les Avis de Non-Objection (ANO) ?",
+        "options": [
+          "L’Autorité de Régulation des Marchés Publics (ARMP)",
+          "La Direction Générale du Contrôle des Marchés Publics (DGCMP)",
+          "La Cellule de Gestion des Projets et des Marchés Publics (CGPMP)",
+          "La Cour des Comptes"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément à l’article 14 de la Loi n° 10/010, la DGCMP assure le contrôle a priori des procédures de passation et délivre les Avis de Non-Objection (ANO)."
+      },
+      {
+        "question": "Lequel de ces principes n’est PAS un principe fondamental énoncé à l’article 1er de la Loi n° 10/010 ?",
+        "options": [
+          "La liberté d’accès à la commande publique",
+          "L’égalité de traitement des candidats",
+          "La préférence discrétionnaire accordée aux anciens titulaires",
+          "La transparence des procédures"
+        ],
+        "correctIndex": 2,
+        "explanation": "L’article 1er consacre la liberté d’accès, l’égalité de traitement, la transparence et l’économie. Toute préférence discrétionnaire est illégale."
+      },
+      {
+        "question": "Comment qualifie-t-on le fait de scinder artificiellement un besoin unique en plusieurs petits contrats pour contourner le seuil d’appel d’offres ?",
+        "options": [
+          "L’allotissement technique",
+          "Le fractionnement interdit des marchés",
+          "La délégation de maîtrise d’ouvrage",
+          "L’avenant de régularisation"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 19 de la Loi n° 10/010 interdit formellement le fractionnement d’un marché dans le but de le soustraire aux règles de concurrence ou aux seuils de contrôle."
+      },
+      {
+        "question": "Quel organe est institué au sein de chaque Autorité Contractante pour préparer les dossiers et conduire les opérations de passation ?",
+        "options": [
+          "Le Comité de Règlement des Différends (CRD)",
+          "La Cellule de Gestion des Projets et des Marchés Publics (CGPMP)",
+          "L’Inspection Générale des Finances (IGF)",
+          "Le Conseil d’Administration de l’ARMP"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 13 de la Loi n° 10/010 et le Décret n° 10/27 instituent une CGPMP au sein de chaque Autorité Contractante."
+      }
+    ]
+  },
+  {
+    "id": "MOD-002",
+    "code": "MP-RDC-201",
+    "title": "Planification (PPM), Élaboration des DAO et Allotissement",
+    "quiz": [
+      {
+        "question": "Quelle est la conséquence juridique d’un marché public lancé sans être inscrit au Plan de Passation des Marchés (PPM) approuvé et publié ?",
+        "options": [
+          "Une simple recommandation verbale en fin d’exercice",
+          "La nullité de la procédure pour défaut de planification réglementaire",
+          "Une réduction automatique de 5 % du prix du contrat",
+          "Le transfert automatique du marché à un autre ministère"
+        ],
+        "correctIndex": 1,
+        "explanation": "Tout marché non inscrit dans un PPM préalablement validé par la DGCMP et publié par l’ARMP est entaché d’irrégularité grave entraînant sa nullité."
+      },
+      {
+        "question": "Comment doit-on rédiger les spécifications techniques dans un Dossier d’Appel d’Offres (DAO) ?",
+        "options": [
+          "En citant exclusivement la marque commerciale préférée du service utilisateur",
+          "De manière neutre et fonctionnelle, et si une marque est indispensable, en ajoutant « ou équivalent »",
+          "En laissant les candidats deviner les quantités lors de la visite de site",
+          "En modifiant librement le Cahier des Clauses Administratives Générales (CCAG)"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 25 impose la neutralité des spécifications techniques. Toute référence à une marque est interdite, sauf impossibilité descriptive accompagnée de la mention « ou équivalent »."
+      },
+      {
+        "question": "Quelle est la différence juridique entre l’allotissement et le fractionnement interdit ?",
+        "options": [
+          "L’allotissement est réservé aux marchés de gré à gré",
+          "Dans l’allotissement, le seuil de procédure est calculé sur la valeur cumulée de tous les lots",
+          "Le fractionnement est autorisé s’il est signé par le comptable",
+          "Il n’existe aucune différence entre les deux notions"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’allotissement est légal et encouragé car tous les lots restent soumis à la procédure correspondant à leur montant cumulé, contrairement au fractionnement qui vise à contourner les seuils."
+      }
+    ]
+  },
+  {
+    "id": "MOD-003",
+    "code": "MP-RDC-301",
+    "title": "Procédures de Passation, Ouverture des Plis, Évaluation et ANO",
+    "quiz": [
+      {
+        "question": "Que doit faire la Commission de Passation des Marchés lorsqu’un pli arrive 10 minutes après l’heure limite fixée dans le DAO ?",
+        "options": [
+          "L’accepter exceptionnellement si le candidat invoque les embouteillages",
+          "Le déclarer irrecevable hors délai et le restituer sans l’ouvrir",
+          "L’ouvrir avec une pénalité de 2 points sur la note technique",
+          "Demander un vote à main levée des autres candidats présents"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le respect de la date et de l’heure limites de dépôt des offres est une règle d’ordre public garantissant l’égalité des candidats. Tout pli arrivé hors délai est écarté sans être ouvert."
+      },
+      {
+        "question": "Pourquoi l’Autorité Contractante doit-elle obligatoirement respecter le délai de standstill après la publication de l’attribution provisoire ?",
+        "options": [
+          "Pour permettre aux candidats évincés d’exercer leur droit de recours préalable avant la signature du contrat",
+          "Pour permettre au titulaire de commencer les travaux avant la signature",
+          "Pour renégocier à la hausse le montant de l’offre",
+          "Pour modifier les critères d’évaluation du DAO"
+        ],
+        "correctIndex": 0,
+        "explanation": "L’article 45 impose ce délai d’attente (standstill) afin de garantir l’effectivité du droit au recours suspensif des soumissionnaires évincés avant que le contrat ne soit signé."
+      },
+      {
+        "question": "Dans quel cas le recours au marché de gré à gré pour « urgence impérieuse » est-il illégal ?",
+        "options": [
+          "Lorsqu’il survient après une catastrophe naturelle imprévisible",
+          "Lorsque l’urgence résulte du retard ou de la négligence de l’Autorité Contractante elle-même",
+          "Lorsqu’il a reçu l’autorisation préalable de la DGCMP",
+          "Lorsqu’il fait l’objet d’un procès-verbal de négociation des prix"
+        ],
+        "correctIndex": 1,
+        "explanation": "Aux termes de l’article 43, les circonstances justificatives de l’urgence impérieuse ne doivent en aucun cas être imputables à l’Autorité Contractante."
+      }
+    ]
+  },
+  {
+    "id": "MOD-004",
+    "code": "MP-RDC-401",
+    "title": "Gestion des Contrats, Garanties, Avenants et Réceptions",
+    "quiz": [
+      {
+        "question": "Au-delà de quel pourcentage cumulé du montant initial du marché un avenant ne peut-il plus être conclu en RDC ?",
+        "options": [
+          "5 %",
+          "15 %",
+          "30 %",
+          "50 %"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 52 de la Loi n° 10/010 plafonne le montant cumulé des avenants à 15 % de la valeur du marché initial et exige l’Avis de Non-Objection préalable de la DGCMP."
+      },
+      {
+        "question": "Quel acte marque l’extinction définitive des réserves et permet la restitution de la retenue de garantie ?",
+        "options": [
+          "L’ordre de service de démarrage",
+          "Le procès-verbal d’ouverture des plis",
+          "Le procès-verbal de réception définitive",
+          "L’avis d’appel d’offres"
+        ],
+        "correctIndex": 2,
+        "explanation": "La réception définitive, prononcée à l’issue du délai de garantie après levée de toutes les réserves, libère la retenue de garantie ou la caution qui en tient lieu."
+      },
+      {
+        "question": "À quelle condition une avance de démarrage peut-elle être versée au titulaire d’un marché public ?",
+        "options": [
+          "Sur simple lettre de demande du directeur commercial",
+          "Après constitution d’une garantie bancaire de remboursement d’avance couvrant 100 % de son montant",
+          "Avant même la signature et l’approbation du contrat",
+          "En espèces directement à la caisse du ministère"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément à l’article 48 de la Loi n° 10/010, toute avance de démarrage doit obligatoirement être couverte à 100 % par une garantie bancaire de remboursement d’avance."
+      }
+    ]
+  },
+  {
+    "id": "MOD-005",
+    "code": "MP-RDC-501",
+    "title": "Contentieux, Recours (CRD/ARMP), Audits et Régime des Sanctions",
+    "quiz": [
+      {
+        "question": "Quel est l’effet immédiat d’un recours régulièrement introduit dans les délais légaux devant l’Autorité Contractante ou le CRD ?",
+        "options": [
+          "Il permet de signer le contrat plus rapidement",
+          "Il suspend de plein droit la procédure de passation jusqu’à la décision définitive",
+          "Il annule automatiquement le budget du ministère",
+          "Il remplace la sous-commission d’évaluation par un tirage au sort"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément à l’article 75 de la Loi n° 10/010, le recours exercé dans les délais légaux a un effet suspensif automatique sur la poursuite de la procédure de passation."
+      },
+      {
+        "question": "Quelle autorité a le pouvoir de prononcer l’exclusion temporaire ou définitive (liste noire) d’une entreprise coupable de fraude ?",
+        "options": [
+          "La Fédération des Entreprises du Congo (FEC)",
+          "L’Autorité de Régulation des Marchés Publics (ARMP)",
+          "Le fournisseur concurrent classé deuxième",
+          "La banque commerciale du soumissionnaire"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 79 confère à l’ARMP le pouvoir de prononcer des sanctions d’exclusion temporaire ou définitive de toute participation aux marchés publics."
+      },
+      {
+        "question": "Que doit faire un membre de la sous-commission d’analyse s’il découvre qu’un candidat est dirigé par un proche parent ?",
+        "options": [
+          "Noter ce candidat avec bienveillance",
+          "Déclarer immédiatement le conflit d’intérêts par écrit et se récuser des travaux d’évaluation",
+          "Garder le silence jusqu’à la fin de l’audit annuel",
+          "Demander l’annulation complète du budget de l’État"
+        ],
+        "correctIndex": 1,
+        "explanation": "Tout membre en situation de conflit d’intérêts a l’obligation déontologique et légale de le déclarer immédiatement et de s’abstenir de participer à la procédure."
+      }
+    ]
+  },
+  {
+    "id": "MOD-006",
+    "code": "MP-RDC-601",
+    "title": "Dématérialisation des Marchés Publics, E-Procurement et SIGMAP",
+    "quiz": [
+      {
+        "question": "Quel est l’avantage majeur de l’horodatage cryptographique et du coffre-fort numérique dans une procédure e-Procurement ?",
+        "options": [
+          "Permettre à la CGPMP de lire les offres financières trois jours avant la date limite",
+          "Garantir l’inviolabilité des plis avant l’heure officielle d’ouverture et tracer de manière irréfutable l’heure exacte de dépôt",
+          "Supprimer l’obligation de rédiger un Dossier d’Appel d’Offres",
+          "Autoriser automatiquement les plis déposés en retard"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le chiffrement et l’horodatage cryptographique garantissent que nul ne peut prendre connaissance du contenu des offres avant la séance officielle d’ouverture et certifient le respect de l’heure limite."
+      },
+      {
+        "question": "Pourquoi l’interconnexion entre le SIGMAP et la chaîne informatisée de la dépense publique est-elle stratégique ?",
+        "options": [
+          "Elle empêche tout engagement budgétaire ou paiement pour un marché qui n’a pas respecté les étapes légales de passation et de contrôle",
+          "Elle permet de payer les fournisseurs sans facture ni réception",
+          "Elle supprime le contrôle a priori de la DGCMP",
+          "Elle remplace la signature de l’Autorité Approbatrice"
+        ],
+        "correctIndex": 0,
+        "explanation": "L’interopérabilité garantit la conformité budgétaire et procédurale en conditionnant l’engagement et le paiement des fonds publics à la régularité du marché dans SIGMAP."
+      }
+    ]
+  },
+  {
+    "id": "MOD-007",
+    "code": "MP-RDC-701",
+    "title": "Sous-Traitance, Contenu Local (Loi n° 17/001) et Accès des PME aux Marchés Publics",
+    "quiz": [
+      {
+        "question": "Selon la réglementation des marchés publics en RDC, quel est le plafond maximal d’un marché public pouvant être confié en sous-traitance ?",
+        "options": [
+          "10 % du montant du marché",
+          "40 % du montant du marché",
+          "80 % du montant du marché",
+          "100 % du montant du marché"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément à l’article 50 de la Loi n° 10/010, la sous-traitance ne peut en aucun cas dépasser 40 % de la valeur globale du marché et requiert l’agrément préalable de l’Autorité Contractante."
+      },
+      {
+        "question": "Quelle condition est indispensable pour qu’un sous-traitant PME soit juridiquement reconnu sur un chantier public ?",
+        "options": [
+          "Un simple accord verbal avec le chef de chantier",
+          "L’agrément préalable écrit de l’Autorité Contractante sur sa personne et ses conditions de paiement",
+          "Le paiement d’une commission à la sous-commission d’analyse",
+          "Une ancienneté minimale de 25 ans"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le titulaire doit obligatoirement obtenir l’agrément préalable de l’Autorité Contractante pour chaque sous-traitant et faire accepter ses conditions de paiement."
+      }
+    ]
+  },
+  {
+    "id": "MOD-008",
+    "code": "MP-RDC-801",
+    "title": "Montage d’une Offre Gagnante, Groupements PME (GME) et Garanties Bancaires",
+    "quiz": [
+      {
+        "question": "En cas de divergence entre le prix unitaire écrit en chiffres et le prix unitaire écrit en toutes lettres dans le Bordereau des Prix d’une PME, quelle mention fait foi ?",
+        "options": [
+          "Le montant le plus élevé",
+          "Le montant écrit en toutes lettres",
+          "Le montant écrit en chiffres",
+          "La moyenne arithmétique des deux montants"
+        ],
+        "correctIndex": 1,
+        "explanation": "Selon les règles constantes des Dossiers Types de l’ARMP, en cas de divergence entre le montant en chiffres et le montant en toutes lettres, le montant en lettres fait foi."
+      },
+      {
+        "question": "Quel est l’intérêt principal d’un Groupement Momentané d’Entreprises (GME) pour les PME congolaises ?",
+        "options": [
+          "Contourner l’obligation de payer les impôts à la DGI",
+          "Mutualiser et additionner leurs capacités techniques, humaines et financières pour atteindre les critères de qualification d’un marché important",
+          "Déposer cinq offres différentes pour le même lot",
+          "Supprimer la garantie de soumission"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le GME permet aux PME de cumuler leurs chiffres d’affaires, leurs équipements et leurs références techniques afin de satisfaire ensemble aux critères de qualification du DAO."
+      }
+    ]
+  },
+  {
+    "id": "MOD-009",
+    "code": "MP-RDC-901",
+    "title": "Marchés de Prestations Intellectuelles et Sélection de Consultants (TDR, DP, SBQC)",
+    "quiz": [
+      {
+        "question": "Dans une procédure de sélection de consultants (Demande de Propositions), à quel moment ouvre-t-on les propositions financières ?",
+        "options": [
+          "En même temps que les propositions techniques dès le premier jour",
+          "Uniquement après l’achèvement de l’évaluation technique et l’obtention de l’ANO sur le rapport technique, pour les seuls candidats ayant atteint le score technique minimum",
+          "Après la signature du contrat",
+          "En secret sans inviter les cabinets"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 35 impose l’évaluation en deux étapes : les propositions financières restent scellées jusqu’à la validation du rapport d’évaluation technique et ne sont ouvertes en public que pour les cabinets qualifiés."
+      }
+    ]
+  },
+  {
+    "id": "MOD-010",
+    "code": "MP-RDC-1001",
+    "title": "Maîtrise d’Œuvre, Révision des Prix, Décomptes et Audit Technique des Chantiers",
+    "quiz": [
+      {
+        "question": "Quelle pièce technique contradictoire est indispensable pour justifier le paiement d’un décompte mensuel de travaux publics ?",
+        "options": [
+          "Une simple facture proforma non signée",
+          "La feuille d’attachements contradictoires signée sur site par l’entreprise et la mission de contrôle",
+          "Le prospectus publicitaire de l’entreprise",
+          "L’avis d’appel d’offres initial"
+        ],
+        "correctIndex": 1,
+        "explanation": "Dans les marchés de travaux, tout décompte mensuel doit obligatoirement être appuyé par les attachements contradictoires constatant les quantités réellement exécutées et réceptionnées techniquement."
+      }
+    ]
+  },
+  {
+    "id": "MOD-011",
+    "code": "MP-RDC-1101",
+    "title": "Marchés sur Financements Extérieurs (Banque Mondiale, BAD, UE) et Loi n° 10/010",
+    "quiz": [
+      {
+        "question": "Selon l’article 3 de la Loi n° 10/010, quelles règles s’appliquent aux marchés financés sur ressources extérieures (bailleurs de fonds) ?",
+        "options": [
+          "Aucune règle juridique ne s’applique",
+          "Les stipulations des conventions internationales de financement prévalent en cas de divergence, et la Loi n° 10/010 s’applique de plein droit pour tout le reste",
+          "Le gré à gré est obligatoire pour tous les achats",
+          "Seules les entreprises étrangères peuvent soumissionner"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 3 de la Loi n° 10/010 consacre l’application supplétive de la loi nationale sous réserve des dispositions spécifiques prévues par les accords internationaux de financement."
+      }
+    ]
+  },
+  {
+    "id": "MOD-012",
+    "code": "MP-RDC-1201",
+    "title": "Partenariats Public-Privé (Loi n° 18/016), Délégations de Service Public et Concessions",
+    "quiz": [
+      {
+        "question": "Quel critère juridique fondamental distingue un contrat de Partenariat Public-Privé (PPP) d’un marché public classique de travaux ?",
+        "options": [
+          "L’absence totale de contrat écrit",
+          "Une mission globale de longue durée incluant le financement privé total ou partiel et un transfert substantiel des risques liés à la performance ou à la demande",
+          "La dispense de toute étude technique préalable",
+          "Le paiement intégral au comptant avant le début des travaux"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le PPP (Loi n° 18/016) se caractérise par une mission globale de longue durée, la participation du partenaire privé au financement et un partage équilibré des risques d’exploitation ou de disponibilité."
+      }
+    ]
+  },
+  {
+    "id": "MOD-013",
+    "code": "MP-RDC-1301",
+    "title": "Chiffrage Financier, BPU/DQE, Sous-Détail des Prix et Rentabilité des Offres PME",
+    "quiz": [
+      {
+        "question": "En cas de discordance entre le prix unitaire écrit en chiffres et le prix unitaire écrit en toutes lettres dans le BPU d’un soumissionnaire, quelle règle s’applique ?",
+        "options": [
+          "L’offre est immédiatement éliminée sans analyse",
+          "Le prix unitaire écrit en toutes lettres prévaut de plein droit et sert de base à la correction arithmétique du DQE",
+          "Le soumissionnaire choisit librement après l’ouverture des plis le prix qui l’arrange",
+          "La commission retient toujours le chiffre le plus élevé"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément aux Dossiers Types de l’ARMP et aux règles d’évaluation de la Loi n° 10/010, le montant exprimé en toutes lettres au BPU fait foi et permet de rectifier le sous-total correspondant."
+      }
+    ]
+  },
+  {
+    "id": "MOD-014",
+    "code": "MP-RDC-1401",
+    "title": "Conformité Fiscale, Sociale, ARSP et Dossier Administratif Zéro Rejet pour PME",
+    "quiz": [
+      {
+        "question": "Que se passe-t-il si la lettre de soumission d’une PME est signée par un directeur technique qui n’est pas le gérant statutaire et qu’aucune procuration écrite n’est jointe au pli ?",
+        "options": [
+          "L’offre est pleinement valide sans formalité",
+          "L’offre encourt le rejet pour défaut de pouvoir juridique d’engager valablement la société soumissionnaire",
+          "La DGCMP signe l’offre à la place du gérant",
+          "Le montant de l’offre est augmenté de 10%"
+        ],
+        "correctIndex": 1,
+        "explanation": "Seul le représentant légal désigné dans les statuts/RCCM ou un mandataire muni d’une procuration écrite régulière a le pouvoir d’engager juridiquement l’entreprise soumissionnaire."
+      }
+    ]
+  },
+  {
+    "id": "MOD-015",
+    "code": "MP-RDC-1501",
+    "title": "Fonctionnement Interne des CGPMP, Secrétariat Permanent et Gouvernance de la PRM",
+    "quiz": [
+      {
+        "question": "Selon le Décret n° 10/32, quel organe au sein de la CGPMP est chargé de l’évaluation technique et financière approfondie des offres après la séance publique d’ouverture ?",
+        "options": [
+          "Le service du protocole du Ministère",
+          "La Sous-Commission d’Analyse (SCA) spécialement désignée à cet effet, qui soumet son rapport motivé à la Commission de Passation des Marchés",
+          "Les soumissionnaires eux-mêmes par vote à main levée",
+          "Le guichet de la banque commerciale"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le Décret n° 10/32 confie l’évaluation technique et financière détaillée à une Sous-Commission d’Analyse (SCA) qui dépose un rapport circonstancié devant la Commission de Passation de la CGPMP."
+      }
+    ]
+  },
+  {
+    "id": "MOD-016",
+    "code": "MP-RDC-1601",
+    "title": "Rédaction des Spécifications Techniques Neutres, Allotissement Stratégique et Dossiers Types",
+    "quiz": [
+      {
+        "question": "Dans quel cas exceptionnel un Dossier d’Appel d’Offres (DAO) peut-il mentionner une référence ou une marque particulière ?",
+        "options": [
+          "Chaque fois que la CGPMP préfère un fournisseur habituel",
+          "Uniquement lorsqu’il est impossible de décrire autrement l’objet du marché de façon suffisamment précise, et à la condition impérative d’y ajouter la mention « ou équivalent »",
+          "Dans tous les marchés de travaux routiers",
+          "Lorsque le montant dépasse un milliard de francs congolais"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément au principe d’égalité de traitement de la Loi n° 10/010, les spécifications techniques doivent être neutres ; toute référence exceptionnelle doit être suivie de la mention « ou équivalent »."
+      }
+    ]
+  },
+  {
+    "id": "MOD-017",
+    "code": "MP-RDC-1701",
+    "title": "Examen de Régularité a Priori DGCMP : Revue des PPM, DAO, Rapports d’Évaluation et Contrats",
+    "quiz": [
+      {
+        "question": "Quelle doit être la décision de la DGCMP lorsqu’elle constate, à l’examen d’un rapport d’évaluation, que la CGPMP a éliminé un soumissionnaire sur la base d’un sous-critère qui ne figurait pas dans le DAO publié ?",
+        "options": [
+          "Accorder l’ANO par courtoisie administrative",
+          "Refuser l’Avis de Non-Objection (ANO) par décision motivée et demander la reprise de l’évaluation sur la base exclusive des critères annoncés dans le DAO",
+          "Attribuer le marché par tirage au sort",
+          "Annuler le budget du ministère"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le principe d’intangibilité des critères du DAO est d’ordre public : la DGCMP doit refuser l’ANO si l’évaluation s’écarte des règles publiées."
+      }
+    ]
+  },
+  {
+    "id": "MOD-018",
+    "code": "MP-RDC-1801",
+    "title": "Contrôle de l’Engagement Financier, Seuils de Passation et Encadrement du Gré à Gré",
+    "quiz": [
+      {
+        "question": "Une Autorité Contractante qui a tardé pendant huit mois à lancer son appel d’offres malgré l’adoption de son budget peut-elle invoquer « l’urgence impérieuse » (Art. 27 Loi 10/010) pour passer un marché de gré à gré en fin d’exercice ?",
+        "options": [
+          "Oui, la fin d’année budgétaire autorise automatiquement le gré à gré",
+          "Non, l’urgence impérieuse ne peut légalement être invoquée que si elle résulte de circonstances imprévisibles et extérieures non imputables à la carence de l’Autorité Contractante",
+          "Oui, si le montant est inférieur à dix milliards",
+          "Oui, sur simple décision verbale de la PRM"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 27 de la Loi n° 10/010 exige que l’urgence impérieuse soit motivée par des circonstances imprévisibles et qu’elle ne résulte pas du fait ou de la négligence de l’Autorité Contractante."
+      }
+    ]
+  },
+  {
+    "id": "MOD-019",
+    "code": "MP-RDC-1901",
+    "title": "Instruction des Recours devant le CRD de l’ARMP, Effet Suspensif et Jurisprudence",
+    "quiz": [
+      {
+        "question": "Quel est l’effet juridique immédiat d’un recours introduit régulièrement dans les délais légaux devant le Comité de Règlement des Différends (CRD) de l’ARMP avant la signature du marché ?",
+        "options": [
+          "Il n’a aucun effet sur la signature du contrat",
+          "Il entraîne la suspension automatique de plein droit de la procédure de passation jusqu’à la notification de la décision du CRD",
+          "Il annule automatiquement le registre de commerce de l’entreprise",
+          "Il transfère le dossier à une banque privée"
+        ],
+        "correctIndex": 1,
+        "explanation": "Conformément aux articles 73 à 75 de la Loi n° 10/010, le recours exercé dans les délais légaux suspend de plein droit la procédure de passation et interdit toute signature du contrat jusqu’à la décision du CRD."
+      }
+    ]
+  },
+  {
+    "id": "MOD-020",
+    "code": "MP-RDC-2001",
+    "title": "Méthodologie d’Audit Indépendant a Posteriori ARMP, Détection des Collusions et Sanctions",
+    "quiz": [
+      {
+        "question": "Quelle institution est légalement compétente en RDC pour prononcer l’exclusion temporaire ou définitive (inscription sur liste noire) d’une entreprise ayant produit une fausse garantie bancaire dans un appel d’offres ?",
+        "options": [
+          "L’entreprise concurrente arrivée deuxième",
+          "L’Autorité de Régulation des Marchés Publics (ARMP) à l’issue d’une procédure contradictoire conformément aux articles 77 à 80 de la Loi n° 10/010",
+          "Le fournisseur de matériel informatique",
+          "Le chef de chantier"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’ARMP détient le pouvoir de sanction administrative (exclusion temporaire ou définitive et inscription sur la liste noire nationale) à l’encontre des candidats fautifs, sans préjudice des poursuites pénales."
+      }
+    ]
+  },
+  {
+    "id": "MOD-021",
+    "code": "MP-RDC-2101",
+    "title": "Montage d’AMI, Propositions Techniques & Financières (SBQC/SCI) et Missions de Conseil",
+    "quiz": [
+      {
+        "question": "Dans une procédure de Sélection Basée sur la Qualité et le Coût (SBQC) pour des prestations intellectuelles, quand ouvre-t-on les propositions financières ?",
+        "options": [
+          "Dès le premier jour avant de lire les propositions techniques",
+          "Uniquement après l’achèvement de l’évaluation technique, la délivrance de l’ANO sur le rapport technique et uniquement pour les candidats ayant atteint le score technique minimum requis",
+          "Jamais, les prestations intellectuelles sont gratuites",
+          "Par téléphone sans procès-verbal"
+        ],
+        "correctIndex": 1,
+        "explanation": "En matière de prestations intellectuelles (Art. 33 à 35 Loi 10/010), l’évaluation s’effectue en deux étapes strictement séparées : les plis financiers ne sont ouverts publiquement que pour les candidats techniquement qualifiés."
+      }
+    ]
+  },
+  {
+    "id": "MOD-022",
+    "code": "MP-RDC-2201",
+    "title": "Audit Technique & Financier des Marchés Publics et Assistance aux Autorités Contractantes",
+    "quiz": [
+      {
+        "question": "Lors d’un audit technique et financier d’un marché de travaux, quel écart constitue une irrégularité grave engageant la responsabilité de la mission de contrôle et du titulaire ?",
+        "options": [
+          "La tenue régulière du journal de chantier",
+          "Le paiement d’un décompte provisoire à hauteur de 80% du montant du marché alors que l’avancement physique réel constaté sur le terrain n’est que de 35% (surfacturation / paiement pour travaux non faits)",
+          "La présence d’un panneau de chantier",
+          "La délivrance d’une garantie de bonne exécution valide"
+        ],
+        "correctIndex": 1,
+        "explanation": "Tout paiement d’acompte doit correspondre à des prestations effectivement réalisées et constatées par attachements contradictoires (règle du service fait)."
+      }
+    ]
+  },
+  {
+    "id": "MOD-023",
+    "code": "MP-RDC-2301",
+    "title": "Ingénierie Pédagogique DFAT-ARMP, Animation de Sessions d’Habilitation et Cas Certifiants",
+    "quiz": [
+      {
+        "question": "Quel est le principe directeur de l’Approche Par Compétences (APC) préconisée par la DFAT-ARMP dans la formation des acteurs de la commande publique ?",
+        "options": [
+          "La récitation par cœur sans aucun exercice pratique",
+          "La capacité démontrée par l’apprenant à accomplir sans erreur les actes professionnels réels de sa fonction (élaborer un PPM, rédiger un DAO, contrôler un rapport ou monter une offre PME conforme)",
+          "L’absence totale d’évaluation finale",
+          "L’utilisation de textes étrangers non applicables en RDC"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le référentiel pédagogique de la DFAT-ARMP vise la maîtrise opérationnelle des actes métiers propres à chaque acteur de la chaîne des marchés publics."
+      }
+    ]
+  },
+  {
+    "id": "MOD-024",
+    "code": "MP-RDC-2401",
+    "title": "Marchés Publics Provinciaux, Entités Territoriales Décentralisées (ETD) et Suivi Citoyen",
+    "quiz": [
+      {
+        "question": "Les marchés publics passés par les Gouvernorats de province et les Entités Territoriales Décentralisées (Villes, Communes, Secteurs, Chefferies) en RDC sont-ils soumis à la Loi n° 10/010 ?",
+        "options": [
+          "Non, la Loi n° 10/010 ne s’applique qu’à Kinshasa",
+          "Oui, l’article 2 de la Loi n° 10/010 soumet expressément l’État, les Provinces, les Entités Territoriales Décentralisées, les entreprises publiques et les établissements publics aux mêmes règles du Code des marchés publics",
+          "Non, les provinces passent tous leurs marchés sans contrat écrit",
+          "Uniquement pour les achats de véhicules"
+        ],
+        "correctIndex": 1,
+        "explanation": "L’article 2 de la Loi n° 10/010 du 27 avril 2010 inclut expressément les Provinces et les Entités Territoriales Décentralisées (ETD) dans le champ d’application obligatoire du Code des marchés publics."
+      }
+    ]
+  },
+  {
+    "id": "MOD-025",
+    "code": "AC-201",
+    "title": "Passation des marchés pour les Autorités Contractantes",
+    "quiz": [
+      {
+        "question": "Qui préside le comité de sélection des offres dans une autorité contractante ?",
+        "options": [
+          "Le fournisseur la moins chère",
+          "Le président de l’autorité contractante, qui nomme le comité par écrit",
+          "Le maire de la commune",
+          "Le comptable public"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le comité de sélection est nommé par le président de l’autorité contractante ; sa composition écrite et la séparation des fonctions garantissent l’impartialité de la procédure."
+      }
+    ]
+  },
+  {
+    "id": "MOD-026",
+    "code": "AC-202",
+    "title": "Contrôle interne et capacité juridique de l’autorité contractante",
+    "quiz": [
+      {
+        "question": "Quel est le premier réflexe de contrôle interne avant toute dépense ?",
+        "options": [
+          "Payer d’abord puis régulariser",
+          "Vérifier l’engagement de dépense et la disponibilité du crédit",
+          "Confier les trois fonctions à la même personne",
+          "Attendre le contrôle externe"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le contrôle interne exige l’engagement préalable de la dépense, la disponibilité du crédit et la séparation entre commande, réception et paiement."
+      }
+    ]
+  },
+  {
+    "id": "MOD-027",
+    "code": "GE-301",
+    "title": "Grands Entreprises : structurer une offre compétitive pour la commande publique",
+    "quiz": [
+      {
+        "question": "Une offre reçue 5 minutes après l’heure limite de dépôt doit être :",
+        "options": [
+          "Acceptée si le prix est le plus bas",
+          "Écartée comme irrégulière (offre tardive)",
+          "Reçue à la discrétion du président du comité",
+          "Transmise à l’ARMP pour arbitrage"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le dépôt après l’heure limite rend l’offre irrégulière : le principe d’égalité des soumissionnaires intertrait toute tolérance à cet égard."
+      }
+    ]
+  },
+  {
+    "id": "MOD-028",
+    "code": "GE-302",
+    "title": "Groupements d’affaires, annexes industrielles et contenu local (Loi 17/001)",
+    "quiz": [
+      {
+        "question": "Quel pourcentage minimal de capital congolais exige la Loi 17/001 pour les activités de l’annexe I ?",
+        "options": [
+          "25 %",
+          "40 %",
+          "51 %",
+          "75 %"
+        ],
+        "correctIndex": 2,
+        "explanation": "La Loi 17/001 fixe un contenu local minimal de 51 % de capital détenu par des nationaux congolais pour les activités listées à l’annexe I."
+      }
+    ]
+  },
+  {
+    "id": "MOD-029",
+    "code": "SC-401",
+    "title": "Société civile : observer, auditer et contester la commande publique",
+    "quiz": [
+      {
+        "question": "Quelle est la bonne séquence des recours contentieux des marchés ?",
+        "options": [
+          "Recours hiérarchique puis gracieux",
+          "Recours gracieux, puis recours hiérarchique, le cas échéant contentieux",
+          "Action en justice directe devant le tribunal",
+          "Manifestation publique devant l’ARMP"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le recours gracieux est introduit d’abord auprès de l’autorité contractante, suivi du recours hiérarchique ; les délais de chacune des étapes sont impératifs."
+      }
+    ]
+  },
+  {
+    "id": "MOD-030",
+    "code": "SC-402",
+    "title": "Transparence citoyenne et suivi social des ouvrages publics",
+    "quiz": [
+      {
+        "question": "Quelle pièce doit obligatoirement figurer sur un chantier public ?",
+        "options": [
+          "Une affiche commerciale du titulaire",
+          "Un panneau indiquant objet, titulaire, délai, montant et financement",
+          "Le nom du maire uniquement",
+          "Aucune pièce particulière"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le panneau réglementaire du chantier porte les mentions essentielles du marché : c’est l’outil de base du contrôle citoyen de l’exécution."
+      }
+    ]
+  },
+  {
+    "id": "MOD-031",
+    "code": "IND-501",
+    "title": "Consultants indépendants : TDR, missions d’expertise et déontologie",
+    "quiz": [
+      {
+        "question": "Un consultant qui a accompagné le soumissionnaire 6 mois avant la mission d’expertise doit :",
+        "options": [
+          "Ignorer ce fait et postuler",
+          "Déclarer le conflit d’intérêts ; la mission lui est en principe interdite",
+          "Demander une autorisation au soumissionnaire",
+          "Changer de nom sur la proposition"
+        ],
+        "correctIndex": 1,
+        "explanation": "Les incompatibilités interdisent d’exercer une mission d’expertise en présence d’un lien récent avec un soumissionnaire ; la déclaration préalable est obligatoire."
+      }
+    ]
+  },
+  {
+    "id": "MOD-032",
+    "code": "IND-502",
+    "title": "Soumissionnaire individuel : mémoire de consultation et voies de recours",
+    "quiz": [
+      {
+        "question": "Quel est l’effet d’un recours gracieux régulièrement introduit dans le délai ?",
+        "options": [
+          "Il n’a aucun effet",
+          "Il peut suspendre l’exécution de l’attribution si le sursis est demandé",
+          "Il annule automatiquement le contrat",
+          "Il oblige l’ARMP à racheter le marché"
+        ],
+        "correctIndex": 1,
+        "explanation": "Le recours exercé dans les délais, assorti d’une demande de sursis, peut suspendre l’exécution de l’attribution contestée jusqu’à décision."
+      }
+    ]
+  }
+]

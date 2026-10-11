@@ -3,6 +3,7 @@ import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import config from '../firebase-applet-config.json' with { type: 'json' };
+import crypto from 'node:crypto';
 
 export function services() {
   const app = getApps().find(a => a.name === 'academia-admin') || initializeApp({
@@ -149,7 +150,15 @@ learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) 
     if (!Array.isArray(answers) || answers.length !== test.questions.length || !answers.every(a => Number.isInteger(a) && a >= 0 && a < 4)) throw new Error('answers-invalid');
     const correct = test.questions.filter((q: any, i: number) => q.answer === answers[i]).length;
     const score = Math.round(correct / test.questions.length * 100);
-    const result = { id: attemptRef.id, testId: test.id, testTitle: test.title, level: test.level, moduleCode: test.moduleCode || '', profileId: req.identity!.uid, candidateName: req.identity!.name || req.identity!.email || 'Apprenant', score, passed: score >= test.passPct, correct, date: new Date().toISOString() };
+    const settings = (await transaction.get(db.collection('settings').doc('levels'))).data() || defaults;
+    const recordRef = db.collection('learningRecords').doc(req.identity!.uid);
+    const previous = (await transaction.get(recordRef)).data() || {};
+    const version = crypto.createHash('sha256').update(JSON.stringify(test)).digest('hex');
+    const result = { id: attemptRef.id, testId: test.id, testTitle: test.title, level: test.level, moduleCode: test.moduleCode || '', profileId: req.identity!.uid, candidateName: req.identity!.name || req.identity!.email || 'Apprenant', score, passed: score >= test.passPct, correct, version, date: new Date().toISOString() };
+    if (result.passed) {
+      const key = test.level === 'Initiation' ? 'debutant' : test.level === 'Approfondi' ? 'intermediaire' : 'avance';
+      transaction.set(recordRef, { level: settings.labels?.[key] || defaults.labels[key], niveauValidation: test.level, ...(test.moduleCode ? { niveauxModules: { ...previous.niveauxModules, [test.moduleCode]: test.level } } : {}) }, { merge: true });
+    }
     transaction.set(attemptRef, result); return result;
   });
   res.json({ ok: true, attempt });

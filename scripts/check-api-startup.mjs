@@ -7,7 +7,7 @@ const { default: handler } = await import('../api/index.js');
 const server = http.createServer(handler).listen(0, '127.0.0.1');
 await new Promise(resolve => server.once('listening', resolve));
 try {
-  for (const [path, method] of [['/api/admin/health', 'GET'], ['/api/storage/images', 'POST']]) {
+  for (const [path, method] of [['/api/admin/health', 'GET'], ['/api/storage/images', 'POST'], ['/api/ai/tts', 'POST'], ['/api/ai/transcribe', 'POST'], ['/api/ai/generate-animated-module', 'POST'], ['/api/ai/flow-video/start', 'POST'], ['/api/courses/MOD-001/attempt', 'POST']]) {
     const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, { method });
     assert.equal(response.status, 401, `${path}: compiled API must start and reject unauthenticated access`);
     assert.equal((await response.json()).error, 'Connexion Firebase requise.');

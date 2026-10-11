@@ -80,10 +80,10 @@ const SLIDES = [
     badgeIcon: Award,
     title: 'Valorisez vos',
     titleAccent: 'compétences',
-    description: 'Que vous soyez CGPMP, ARMP ou PME, obtenez l’attestation DFAT 70% avec QR vérifiable Firestore. Rejoignez 2 500+ alumni, faites reconnaître votre expertise contenu local et faites évoluer votre carrière ou votre entreprise.',
+    description: 'Que vous soyez CGPMP, ARMP ou PME, obtenez l’attestation DFAT 70% avec enregistrement dans le profil. Rejoignez la communauté Academia, faites reconnaître votre expertise contenu local et faites évoluer votre carrière ou votre entreprise.',
     ctaPrimary: 'Obtenir ma certification',
     ctaSecondary: 'Voir les attestations',
-    stat: 'QR vérifiable  •  Alumni 2 500+',
+    stat: 'attestation enregistrée  •  Communauté Academia',
   },
   {
     id: 5,
@@ -374,7 +374,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
                     </span>
                     <div className="leading-tight">
                       <div className="text-xs font-bold">Certificat inclus</div>
-                      <div className="text-[11px] font-medium text-sky-200">QR vérifiable</div>
+                      <div className="text-[11px] font-medium text-sky-200">attestation enregistrée</div>
                     </div>
                   </motion.div>
                 </div>
@@ -429,8 +429,8 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
           {[
             { k: '6 Modules', v: 'Parcours progressif', icon: BookOpen },
             { k: '45h+ de contenu', v: 'Vidéos • Cas pratiques', icon: Play },
-            { k: '2 500+ apprenants', v: 'Communauté active', icon: Sparkles },
-            { k: 'Attestation', v: 'QR vérifiable • 24/7', icon: Award },
+            { k: 'Communauté Academia', v: 'Communauté active', icon: Sparkles },
+            { k: 'Attestation', v: 'attestation enregistrée • 24/7', icon: Award },
           ].map((it, idx) => (
             <div key={it.k} className={`px-2 sm:px-4 py-1.5 ${idx % 2 === 0 ? 'border-r border-sky-100' : ''} ${idx < 2 ? 'border-b lg:border-b-0 border-sky-100 pb-3 lg:pb-1.5' : ''} lg:border-r lg:last:border-r-0`}>
               <div className="flex items-center justify-center gap-1.5 text-[#0C3B7C] text-[11px] font-black uppercase tracking-wider">

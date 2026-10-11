@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-academiaitechmar-9a72235a-e5f0-4cba-a82e-03e590faed40",
+      "rules": "firestore.rules"
+    }
+  ]
+}

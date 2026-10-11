@@ -1,3 +1,8 @@
+import { courseResultsRouter } from './backend/courseResults';
+import { activateCgpmp } from './backend/cgpmp';
+import { errorHandler, safeAsync } from './backend/http';
+import { aiGuard } from './backend/aiGuard';
+import { placementQuestions, gradePlacement } from './backend/placement';
 import { storageRouter } from './backend/storage';
 import { adminRouter, learningRouter, authenticate, requireAdmin, services } from './backend/admin';
 import express from 'express';
@@ -40,14 +45,16 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-const PORT = 3000;
+export const app = express();
+const PORT = Number(process.env.PORT || 3000);
 
-app.use(express.json({ limit: '25mb' }));
+app.use(express.json({ limit: '4mb' }));
 app.disable('x-powered-by');
 app.use('/api/storage', storageRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
+app.use('/api/courses', courseResultsRouter);
+app.use('/api/ai', authenticate, aiGuard);
 app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {
  if (req.method === 'GET') return next();
  authenticate(req, res, () => requireAdmin(req, res, next));
@@ -1602,24 +1609,15 @@ function normalizeTtsSettings(raw: any): TtsSettings {
   };
 }
 
-function loadTtsSettings(): TtsSettings {
-  try {
-    if (!fs.existsSync(TTS_SETTINGS_FILE)) {
-      return {
-        order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })),
-        neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice,
-        browserFallback: DEFAULT_TTS_SETTINGS.browserFallback,
-      };
-    }
-    return normalizeTtsSettings(JSON.parse(fs.readFileSync(TTS_SETTINGS_FILE, 'utf8')));
-  } catch {
-    return {
-      order: DEFAULT_TTS_SETTINGS.order.map((e) => ({ ...e })),
-      neuralVoice: DEFAULT_TTS_SETTINGS.neuralVoice,
-      browserFallback: DEFAULT_TTS_SETTINGS.browserFallback,
-    };
-  }
+let persistedTtsSettings: ReturnType<typeof normalizeTtsSettings> | null = null;
+function loadTtsSettings() {
+  return persistedTtsSettings || normalizeTtsSettings(DEFAULT_TTS_SETTINGS);
 }
+async function refreshTtsSettings() {
+  const snapshot = await services().db.collection('settings').doc('tts').get();
+  persistedTtsSettings = normalizeTtsSettings(snapshot.exists ? snapshot.data() : DEFAULT_TTS_SETTINGS);
+}
+app.use('/api/ai/tts', safeAsync(async (_req, _res, next) => { await refreshTtsSettings(); next(); }));
 
 function ttsAvailability() {
   return {
@@ -1629,15 +1627,16 @@ function ttsAvailability() {
   };
 }
 
-app.get('/api/tts/settings', (_req, res) => {
+app.get('/api/tts/settings', safeAsync(async (_req, res) => {
+  await refreshTtsSettings();
   res.json({
     ...loadTtsSettings(),
     availability: ttsAvailability(),
     elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
   });
-});
+}));
 
-app.post('/api/tts/settings', (req, res) => {
+app.post('/api/tts/settings', safeAsync(async (req, res) => {
   try {
     const body = req.body || {};
     const ids = Array.isArray(body.order) ? body.order.map((e: any) => e?.id) : [];
@@ -1650,13 +1649,13 @@ app.post('/api/tts/settings', (req, res) => {
       return res.status(400).json({ ok: false, error: 'order invalide: les 3 fournisseurs doivent être présents' });
     }
     const settings = normalizeTtsSettings(body);
-    fs.writeFileSync(TTS_SETTINGS_FILE, JSON.stringify(settings, null, 2));
-    console.log('[TTS Settings] sauvegardé:', JSON.stringify(settings));
+    await services().db.collection('settings').doc('tts').set(settings);
+    persistedTtsSettings = settings;
     res.json({ ok: true, ...settings, availability: ttsAvailability() });
   } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || 'erreur inconnue' });
+    res.status(503).json({ ok: false, error: 'Sauvegarde de la configuration vocale indisponible.' });
   }
-});
+}));
 
 // Unified server-side synthesis with caching & in-flight deduplication (100% Vivienne HD)
 async function getOrSynthesizeTtsPayload(
@@ -1792,7 +1791,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Sequential Pre-Warm Endpoint so Screen 1 synthesizes FIRST with zero WebSocket contention, followed by Screens 2..5
-app.post('/api/ai/tts/prewarm', async (req, res) => {
+app.post('/api/ai/tts/prewarm', safeAsync(async (req, res) => {
   try {
     const { sentences, voice } = req.body || {};
     if (!Array.isArray(sentences) || sentences.length === 0) {
@@ -1817,10 +1816,10 @@ app.post('/api/ai/tts/prewarm', async (req, res) => {
   } catch {
     return res.json({ status: 'ignored' });
   }
-});
+}));
 
 // Expressive Neural Human Voice TTS Endpoint for Aïsha (ElevenLabs v2 + Vivienne HD / Denise / Eloise / Charline + Word Boundaries)
-app.post('/api/ai/tts', async (req, res) => {
+app.post('/api/ai/tts', safeAsync(async (req, res) => {
   try {
     const { text, voice, emotion } = req.body || {};
     if (!text || typeof text !== 'string' || !text.trim()) {
@@ -1839,7 +1838,7 @@ app.post('/api/ai/tts', async (req, res) => {
   } catch {
     return res.status(204).end();
   }
-});
+}));
 
 // Helper: Transcribe base64 audio using Gemini 3.5 Transcribe / Flash
 async function transcribeAudioWithGemini(
@@ -1886,7 +1885,7 @@ async function transcribeAudioWithGemini(
 }
 
 // Audio Transcription Endpoint for Voice Notes & Live Calls
-app.post('/api/ai/transcribe', async (req, res) => {
+app.post('/api/ai/transcribe', safeAsync(async (req, res) => {
   try {
     const { audioBase64, mimeType } = req.body || {};
     if (!audioBase64 || typeof audioBase64 !== 'string') {
@@ -1900,7 +1899,7 @@ app.post('/api/ai/transcribe', async (req, res) => {
   } catch {
     return res.json({ transcript: '', status: 'fallback' });
   }
-});
+}));
 
 const TUTOR_PERSONAS_META: Record<
   string,
@@ -1929,7 +1928,7 @@ const TUTOR_PERSONAS_META: Record<
 };
 
 // AI Tutor Chatbot endpoint — RAG cours + Arena Claude label + Gemini + Voice Note Transcription
-app.post('/api/ai/tutor', async (req, res) => {
+app.post('/api/ai/tutor', safeAsync(async (req, res) => {
   let message = (req.body?.message || '').trim();
   const {
     history,
@@ -1985,16 +1984,6 @@ app.post('/api/ai/tutor', async (req, res) => {
   const ragLessons = findRelevantLessons(ragQuery, lc || learningContext || lastCourse);
   const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (À CITER OBLIGATOIREMENT) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
 
-  if (!ai) {
-    console.log(`[AI Tutor] Fallback RAG (no GEMINI_API_KEY) for: "${message.slice(0,60)}..." rag:${ragLessons.map(r=>r.course.code+':'+r.lesson.id).join(',')}`);
-    const fallback = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
-    return res.json({
-      ...fallback,
-      reply: adaptReplyToPersona(fallback.reply),
-      ...(transcription ? { transcription } : {}),
-    });
-  }
-
   // Tentative Arena d'abord (cerveaux Arena), puis Gemini
   let arenaReply: string | null = null;
   if (process.env.ARENA_API_KEY) {
@@ -2016,10 +2005,23 @@ Réponds avec beaucoup d'âme, d'humanisme et d'empathie en tant que ${activeTut
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
       return res.json({
         reply: adaptReplyToPersona(arenaReply),
+        provider: 'arena',
+        model: ARENA_MODEL,
         ...(transcription ? { transcription } : {}),
         sources: [...(ragLessons.map(r=> formatCourseCitation(r))), `${activeTutorMeta.name} • Studio Q/R`, 'Loi du 27 avril 2010', 'Manuel officiel']
       });
     }
+  }
+
+  if (!ai) {
+    console.log('[AI Tutor] Local knowledge fallback');
+    const fallback = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
+    return res.json({
+      ...fallback,
+      provider: 'local-knowledge',
+      reply: adaptReplyToPersona(fallback.reply),
+      ...(transcription ? { transcription } : {}),
+    });
   }
 
   try {
@@ -2055,6 +2057,7 @@ Message exact de l'apprenant : "${fullMessage}"
 
     return res.json({
       reply: replyText,
+      provider: 'gemini',
       ...(transcription ? { transcription } : {}),
       sources: [
         ...(ragLessons.map(r=> formatCourseCitation(r))),
@@ -2075,7 +2078,7 @@ Message exact de l'apprenant : "${fullMessage}"
       ...(transcription ? { transcription } : {}),
     });
   }
-});
+}));
 
 // AI Diagnostic Placement Quiz Generator & Evaluator
 // ============================================================================
@@ -2138,223 +2141,25 @@ function levelFromScore(score: number, s: LevelSettings = DEFAULT_LEVEL_SETTINGS
   return s.labels.debutant;
 }
 
-// ============================================================================
-// 2FA — code OTP à usage unique (authentification à double facteur)
-// - envoyé par email via RESEND_API_KEY si configuré
-// - sinon renvoyé en devCode (mode démo / sans provider mail)
-// ============================================================================
-const otpStore = new Map<string, { code: string; expires: number; attempts: number }>();
-
-app.post('/api/2fa/send', async (req, res) => {
-  try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    if (!email.includes('@')) return res.status(400).json({ ok: false, error: 'Adresse email invalide.' });
-    const code = String(crypto.randomInt(100000, 1000000));
-    otpStore.set(email, { code, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
-    let delivered = false;
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (resendApiKey) {
-      try {
-        const r = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendApiKey}` },
-          body: JSON.stringify({
-            from: 'ARMP RDC Academia <no-reply@armp-rdc.org>',
-            to: [email],
-            subject: '[ARMP RDC] Votre code de vérification (2FA)',
-            text: `Code de vérification ACADEMIA : ${code} — valable 10 minutes. Ne le partagez avec personne.`,
-          }),
-        });
-        delivered = r.ok;
-      } catch {
-        delivered = false;
-      }
-    }
-    if (!delivered && process.env.NODE_ENV === 'production') {
-      otpStore.delete(email);
-      return res.status(503).json({ ok: false, error: 'Envoi du code indisponible.' });
-    }
-    res.json({ ok: true, delivered, ...(delivered || process.env.NODE_ENV === 'production' ? {} : { devCode: code }) });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || 'send failed' });
-  }
+// The old email-OTP flow never enforced Firebase MFA; do not offer it as protection.
+app.post(['/api/2fa/send', '/api/2fa/verify'], (_req, res) => {
+  res.status(410).json({ ok: false, error: 'Ancienne double authentification désactivée. Configuration Firebase MFA requise.' });
 });
 
-app.post('/api/2fa/verify', (req, res) => {
-  const email = String(req.body?.email || '').trim().toLowerCase();
-  const code = String(req.body?.code || '').trim();
-  const entry = otpStore.get(email);
-  if (!entry) return res.status(400).json({ ok: false, error: 'Aucun code actif — demandez-en un nouveau.' });
-  if (Date.now() > entry.expires) {
-    otpStore.delete(email);
-    return res.status(400).json({ ok: false, error: 'Code expiré — demandez-en un nouveau.' });
-  }
-  if (entry.attempts >= 5) {
-    otpStore.delete(email);
-    return res.status(400).json({ ok: false, error: 'Trop de tentatives — demandez un nouveau code.' });
-  }
-  if (entry.code !== code) {
-    entry.attempts += 1;
-    return res.status(400).json({ ok: false, error: `Code incorrect (${5 - entry.attempts} tentative(s) restante(s)).` });
-  }
-  otpStore.delete(email);
-  res.json({ ok: true });
-});
-
-app.post('/api/ai/placement-quiz', async (req, res) => {
-  try {
-    const { role, institution, answers } = req.body;
-    const ai = getAIClient();
-
-    // If answers provided, evaluate placement level
-    if (answers && Array.isArray(answers)) {
-      if (!ai) {
-        // Fallback calculation — niveau piloté par les seuils paramétrables
-        const correctCount = answers.filter((a: any) => a.isCorrect).length;
-        const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const lvCfg = await loadLevelSettings();
-        const level = levelFromScore(score, lvCfg);
-        return res.json({
-          score,
-          level,
-          diagnostic: `Profil calibré pour ${role || 'Agent'}. Maîtrise constatée sur les concepts de base. Recommandation : Renforcement sur le contrôle a priori DGCMP et l'instruction des recours ARMP.`,
-          recommendedModuleIds: score >= lvCfg.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
-        });
-      }
-
-      const lvNow = await loadLevelSettings();
-      const levelEnum = [lvNow.labels.debutant, lvNow.labels.intermediaire, lvNow.labels.avance, lvNow.labels.expert]
-        .map((v) => JSON.stringify(v))
-        .join(' | ');
-      const evalPrompt = `
-Tu es l'évaluateur pédagogique en chef pour les marchés publics en RDC (ARMP, DGCMP, CGPMP).
-Évalue ces résultats au test de positionnement :
-Rôle: ${role}, Institution: ${institution}
-Réponses : ${JSON.stringify(answers)}
-
-Retourne UNIQUEMENT un objet JSON valide avec cette structure :
-{
-  "score": 75,
-  "level": ${levelEnum},
-  "diagnostic": "Analyse personnalisée des forces et des lacunes observées par rapport à la Loi 10/010 et au Manuel des procédures...",
-  "strengths": ["Force 1", "Force 2"],
-  "weaknesses": ["Lacune 1", "Lacune 2"],
-  "recommendedModuleIds": ["MOD-001", "MOD-002", "MOD-003"]
-}
-`;
-
-      try {
-        const evalResponse = await generateWithResilience(ai, {
-          contents: evalPrompt,
-          primaryModel: 'gemini-3.8-flash',
-          fallbackModel: 'gemini-3.1-flash-lite',
-          config: { responseMimeType: 'application/json' }
-        });
-
-        const parsed = JSON.parse(evalResponse.text || '{}');
-        // Le niveau rendu est toujours recalculé sur les seuils/libellés paramétrables
-        const lvAi = await loadLevelSettings();
-        if (Number.isFinite(+parsed.score)) {
-          parsed.level = levelFromScore(+parsed.score, lvAi);
-        } else {
-          const canon = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
-          const ci = canon.indexOf(String(parsed.level));
-          if (ci >= 0) {
-            parsed.level = [lvAi.labels.debutant, lvAi.labels.intermediaire, lvAi.labels.avance, lvAi.labels.expert][ci];
-          }
-        }
-        return res.json(parsed);
-      } catch (err: any) {
-        console.warn('[Placement Quiz] AI evaluation fallback activated:', err?.message);
-        const correctCount = answers.filter((a: any) => a.isCorrect).length;
-        const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const lvCfg = await loadLevelSettings();
-        const level = levelFromScore(score, lvCfg);
-        return res.json({
-          score,
-          level,
-          diagnostic: `Évaluation complétée pour ${role || 'Agent'}. Connaissances vérifiées sur les principes de la commande publique RDC.`,
-          strengths: ['Principes fondamentaux de transparence', 'Attributions CGPMP'],
-          weaknesses: ['Détails de procédure contentieuse ARMP/CRD', 'Seuils d\'ANO DGCMP'],
-          recommendedModuleIds: score >= lvCfg.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
-        });
-      }
-    }
-
-    // Otherwise generate tailored placement questions
-    return res.json({
-      status: 'ready',
-      questions: [
-        {
-          id: 1,
-          question: "Selon la Loi n° 10/010 du 27 avril 2010, quel organe est compétent pour le règlement non juridictionnel des litiges en matière de marchés publics en RDC ?",
-          options: [
-            "La Direction Générale du Contrôle des Marchés Publics (DGCMP)",
-            "Le Comité de Règlement des Différends de l'ARMP (CRD)",
-            "La Cellule de Gestion des Projets et des Marchés Publics (CGPMP)",
-            "L'Inspection Générale des Finances (IGF)"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 78 & Décret n° 10/21"
-        },
-        {
-          id: 2,
-          question: "Quelle est l'obligation préalable imposée à toute autorité contractante avant de lancer un appel d'offres ?",
-          options: [
-            "Demander un prêt bancaire certifié",
-            "Élaborer et faire approuver son Plan de Passation des Marchés (PPM)",
-            "Publier les comptes de l'exercice précédent",
-            "Nommer un médiateur international"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 14"
-        },
-        {
-          id: 3,
-          question: "Quel est le rôle principal de la DGCMP dans la commande publique congolaise ?",
-          options: [
-            "Réguler la formation des auditeurs privés",
-            "Assurer le contrôle a priori des opérations de passation et autoriser les dérogations",
-            "Attribuer directement les marchés aux soumissionnaires",
-            "Rendre des jugements pénaux"
-          ],
-          correctIndex: 1,
-          legalRef: "Décret n° 10/23, Art. 3"
-        },
-        {
-          id: 4,
-          question: "En cas de contestation des résultats de l'évaluation d'un appel d'offres, quel recours préalable le soumissionnaire doit-il exercer ?",
-          options: [
-            "Saisir immédiatement la Cour Constitutionnelle",
-            "Exercer un recours gracieux devant la personne responsable des marchés de l'autorité contractante",
-            "Publier un communiqué de presse d'annulation",
-            "Saisir directement le Tribunal de Commerce"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 77"
-        },
-        {
-          id: 5,
-          question: "Quel principe fondamental garantit que tous les candidats qualifiés reçoivent les mêmes informations et opportunités ?",
-          options: [
-            "Le principe de confidentialité restreinte",
-            "Le principe d'égalité de traitement des candidats",
-            "Le principe de préférence géographique absolue",
-            "Le principe d'arbitrage tacite"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 5"
-        }
-      ]
-    });
-  } catch (error: any) {
-    console.error('Error in /api/ai/placement-quiz:', error);
-    return res.status(500).json({ error: error.message });
-  }
-});
+app.post('/api/ai/placement-quiz', safeAsync(async (req, res) => {
+  if (req.body?.answers === undefined) return res.json({ status: 'ready', questions: placementQuestions.map(({ correctIndex, ...q }) => q) });
+  const { score, correct } = gradePlacement(req.body.answers);
+  const settings = await loadLevelSettings();
+  const level = levelFromScore(score, settings);
+  const uid = (req as any).identity.uid;
+  const attempt = { profileId: uid, score, correct, level, date: new Date().toISOString(), kind: 'placement', version: 1 };
+  await services().db.collection('placementAttempts').add(attempt);
+  await services().db.collection('learningRecords').doc(uid).set({ level, placementScore: score }, { merge: true });
+  return res.json({ score, level, diagnostic: `${correct}/${placementQuestions.length} réponses correctes. Positionnement indicatif ; les certifications nécessitent un test de validation.`, recommendedModuleIds: score >= settings.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004'] });
+}));
 
 // AI Adaptive Recommendations Endpoint
-app.post('/api/ai/recommendations', async (req, res) => {
+app.post('/api/ai/recommendations', safeAsync(async (req, res) => {
   try {
     const { role, recentScores, lacunes, institution } = req.body;
     const ai = getAIClient();
@@ -2449,10 +2254,10 @@ Génère 3 recommandations de perfectionnement en JSON :
       ]
     });
   }
-});
+}));
 
 // AI Performance Report Generator (PDF / Executive summary)
-app.post('/api/ai/generate-report', async (req, res) => {
+app.post('/api/ai/generate-report', safeAsync(async (req, res) => {
   const fallbackReport = {
     reportTitle: `Rapport Analytique de Performance Pédagogique - ${req.body?.institution || 'Direction Globale'}`,
     generatedAt: new Date().toLocaleDateString('fr-FR'),
@@ -2509,7 +2314,7 @@ Retourne UNIQUEMENT un JSON structuré :
   } catch (err: any) {
     return res.json(fallbackReport);
   }
-});
+}));
 
 // ============================================================================
 // AI ANIMATED MODULE GENERATOR FROM EXISTING TRAINER CONTENT (ESPACE FORMATEUR)
@@ -2648,7 +2453,7 @@ function buildAnimatedModuleFromTrainerContentFallback(params: {
   };
 }
 
-app.post('/api/ai/generate-animated-module', async (req, res) => {
+app.post('/api/ai/generate-animated-module', safeAsync(async (req, res) => {
   const {
     sourceTitle,
     sourceText,
@@ -2797,7 +2602,7 @@ Réponds UNIQUEMENT avec un objet JSON valide respectant strictement cette struc
       engine: 'academia-smart-structurer'
     });
   }
-});
+}));
 
 // ============================================================================
 // GOOGLE FLOW (VEO 3.1) & GOOGLE VIDS VIDEO GENERATION ENGINE FOR PROF. AÏSHA
@@ -2881,7 +2686,7 @@ app.get('/api/ai/flow-video/cache-check', (_req, res) => {
 });
 
 // 1. Start Google Flow (Veo 3.1 + Vids) Video Generation using the 3 Reference Sheets
-app.post('/api/ai/flow-video/start', async (req, res) => {
+app.post('/api/ai/flow-video/start', safeAsync(async (req, res) => {
   try {
     const existingBuf = getDefaultStudioMp4Buffer();
     if (existingBuf && !req.body?.forceRegenerate) {
@@ -2994,10 +2799,10 @@ app.post('/api/ai/flow-video/start', async (req, res) => {
       message: 'Vidéo Studio Google Veo 3.1 & Vids HD active • Mouvements des mains, émotions & tête synchronisés',
     });
   }
-});
+}));
 
 // 2. Poll Google Flow (Veo) Video Status
-app.post('/api/ai/flow-video/status', async (req, res) => {
+app.post('/api/ai/flow-video/status', safeAsync(async (req, res) => {
   try {
     const operationName = req.body?.operationName || activeAishaFlowOperationName;
     if (!operationName) {
@@ -3038,10 +2843,10 @@ app.post('/api/ai/flow-video/status', async (req, res) => {
   } catch {
     return res.json({ done: true, videoUrl: '/api/ai/flow-video/stream' });
   }
-});
+}));
 
 // 3. Download / Stream Google Flow (Veo & Vids) Video
-app.post('/api/ai/flow-video/download', async (req, res) => {
+app.post('/api/ai/flow-video/download', safeAsync(async (req, res) => {
   try {
     const buf = getDefaultStudioMp4Buffer();
     if (buf) {
@@ -3052,7 +2857,7 @@ app.post('/api/ai/flow-video/download', async (req, res) => {
   } catch {
     return res.status(404).json({ message: 'Vidéo Google Flow non disponible' });
   }
-});
+}));
 
 app.get('/api/ai/flow-video/stream', (req, res) => {
   const buf = getDefaultStudioMp4Buffer();
@@ -3084,124 +2889,7 @@ app.get('/api/ai/flow-video/stream', (req, res) => {
 // ============================================================================
 // CGPMP ACCOUNT CREATION VALIDATION & CREDENTIALS EMAIL DISPATCH (ARMP ADMIN)
 // ============================================================================
-app.post('/api/cgpmp/send-credentials-email', async (req, res) => {
-  try {
-    const {
-      requestId,
-      institution,
-      creationDocument,
-      permanentSecretary,
-      members,
-      validatedBy
-    } = req.body || {};
-
-    if (!requestId || !permanentSecretary?.email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Paramètres de la demande CGPMP incomplets.'
-      });
-    }
-
-    const adminValidator = validatedBy || 'Administration Générale ARMP (Direction DFAT)';
-    const nowLabel = new Date().toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    const docRef = creationDocument?.documentRef || 'Acte portant création CGPMP';
-
-    const dispatchedEmails: any[] = [];
-
-    // 1. Credentials Email for the Secrétaire Permanent
-    const spPass =
-      permanentSecretary.tempPassword ||
-      `ARMP-SP-${Math.floor(1000 + Math.random() * 9000)}`;
-    const spMatricule =
-      permanentSecretary.matricule ||
-      `CGPMP-SP-2026-${Math.floor(100 + Math.random() * 900)}`;
-
-    dispatchedEmails.push({
-      id: `MAIL-SP-${Date.now()}`,
-      recipientName: permanentSecretary.name,
-      recipientEmail: permanentSecretary.email.trim().toLowerCase(),
-      recipientRoleInCell: 'Secrétaire Permanent de la CGPMP',
-      loginEmail: permanentSecretary.email.trim().toLowerCase(),
-      tempPassword: spPass,
-      matricule: spMatricule,
-      subject: `[ARMP RDC] Validation officielle CGPMP (${institution}) & Coordonnées d'Authentification Secrétaire Permanent`,
-      bodyPreview: `Bonjour ${permanentSecretary.name}, L'Administration de l'ARMP (${adminValidator}) a validé votre demande de création de compte CGPMP ainsi que l'acte portant création (${docRef}). Vos coordonnées d'authentification : Identifiant = ${permanentSecretary.email.trim().toLowerCase()} | Mot de passe = ${spPass} | Matricule = ${spMatricule}.`,
-      sentAt: nowLabel,
-      validatedByAdmin: adminValidator
-    });
-
-    // 2. Credentials Emails for each Member added by the Secrétaire Permanent
-    if (Array.isArray(members)) {
-      members.forEach((m: any, idx: number) => {
-        if (!m?.email) return;
-        const cleanEmail = String(m.email).trim().toLowerCase();
-        const memPass =
-          m.generatedPassword ||
-          `ARMP-MEM-${2026}-${String(idx + 1).padStart(2, '0')}${Math.floor(10 + Math.random() * 89)}`;
-        const memMatricule =
-          m.matricule ||
-          `CGPMP-MEM-2026-${String(idx + 1).padStart(3, '0')}`;
-
-        dispatchedEmails.push({
-          id: `MAIL-MEM-${Date.now()}-${idx + 1}`,
-          recipientName: m.fullName || 'Membre CGPMP',
-          recipientEmail: cleanEmail,
-          recipientRoleInCell: m.functionInCell || 'Membre de la Cellule CGPMP',
-          loginEmail: cleanEmail,
-          tempPassword: memPass,
-          matricule: memMatricule,
-          subject: `[ARMP RDC] Vos Coordonnées d'Authentification Membre CGPMP — ${institution}`,
-          bodyPreview: `Bonjour ${m.fullName}, Suite à votre inscription par le Secrétaire Permanent (${permanentSecretary.name}) et à la validation de l'acte de création (${docRef}) par l'Administration de l'ARMP, voici vos coordonnées d'authentification sur ACADEMIA ITECH : Identifiant = ${cleanEmail} | Mot de passe = ${memPass} | Matricule = ${memMatricule}.`,
-          sentAt: nowLabel,
-          validatedByAdmin: adminValidator
-        });
-      });
-    }
-
-    // Optional real email webhook / Resend API if RESEND_API_KEY is present in environment
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (resendApiKey) {
-      for (const mail of dispatchedEmails) {
-        try {
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${resendApiKey}`
-            },
-            body: JSON.stringify({
-              from: 'ARMP RDC Academia <no-reply@armp-rdc.org>',
-              to: [mail.recipientEmail],
-              subject: mail.subject,
-              text: mail.bodyPreview
-            })
-          });
-        } catch {
-          // Continue cleanly if external mail relay is unreachable
-        }
-      }
-    }
-
-    return res.json({
-      success: true,
-      requestId,
-      validatedAt: nowLabel,
-      dispatchedCount: dispatchedEmails.length,
-      dispatchedEmails
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      message: err?.message || 'Erreur lors de l’envoi des coordonnées par mail.'
-    });
-  }
-});
+app.post('/api/cgpmp/send-credentials-email', safeAsync(activateCgpmp));
 
 // Vite Middleware or Production Static Handler
 async function startServer() {
@@ -3215,14 +2903,14 @@ async function startServer() {
       return vite;
     });
 
-    app.use(async (req, res, next) => {
+    app.use(safeAsync(async (req, res, next) => {
       if (!viteMiddleware) {
         await viteReady;
       }
       return viteMiddleware(req, res, next);
-    });
+    }));
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), 'dist/client');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -3234,4 +2922,9 @@ async function startServer() {
   });
 }
 
-startServer();
+app.use('/api', (_req, res) => { res.status(404).json({ error: 'Route API inconnue.' }); });
+app.use(errorHandler);
+export default app;
+if (!process.env.VERCEL && process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  startServer().catch(error => { console.error('[Startup]', error.name); process.exitCode = 1; });
+}

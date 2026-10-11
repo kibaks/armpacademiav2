@@ -37,6 +37,7 @@ import { PME_DEMO_ACCOUNTS, DEMO_PROFILES } from '../data/initialData';
 import {
   auth,
   firebaseLoginUser,
+  firebaseRegisterUser,
   firebaseGoogleAuthenticate,
   saveGoogleRegisteredProfile,
   checkExistingRegisteredUser,
@@ -787,23 +788,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     `${getDefaultMatriculePrefixByRole(initialRole)}0412`
   );
   const [secondaryIdInput, setSecondaryIdInput] = useState(initialConfig.defaultSecondaryId);
-  const [enable2FAOnRegister, setEnable2FAOnRegister] = useState(true);
 
   // ---------- 2FA : étape OTP après validation du mot de passe ----------
-  const [twoFAProfile, setTwoFAProfile] = useState<UserProfile | null>(null);
-  const [otp2FA, setOtp2FA] = useState('');
-  const [otp2FAHint, setOtp2FAHint] = useState<string | null>(null);
-  const [otp2FAError, setOtp2FAError] = useState<string | null>(null);
-  const [isSending2FA, setIsSending2FA] = useState(false);
-  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
 
   // Réinitialisation de l'étape OTP à la fermeture du modal
   useEffect(() => {
     if (!isOpen) {
-      setTwoFAProfile(null);
-      setOtp2FA('');
-      setOtp2FAHint(null);
-      setOtp2FAError(null);
     }
   }, [isOpen]);
   const [acceptEthicsCharter, setAcceptEthicsCharter] = useState(true);
@@ -1170,7 +1160,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           );
           return;
         }
-        if (!creationDocFileName) {
+        if (!creationDocFileName || !creationDocDataUrl) {
           setStepError(
             'Condition CGPMP obligatoire : Vous devez joindre le document portant création de la cellule CGPMP (ou cliquer sur « Charger un spécimen d’Arrêté CGPMP ») pour passer à la liste des membres.'
           );
@@ -1199,63 +1189,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Final Submit Handler
   // ---------- 2FA : envoi / vérification du code ----------
-  const beginTwoFA = async (profile: UserProfile) => {
-    setTwoFAProfile(profile);
-    setOtp2FA('');
-    setOtp2FAError(null);
-    setIsSending2FA(true);
-    try {
-      const res = await fetch('/api/2fa/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: profile.email }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setOtp2FAError(data.error || "Envoi du code impossible.");
-        return;
-      }
-      setOtp2FAHint(
-        data.devCode
-          ? `Mode sans provider mail — code de test : ${data.devCode}`
-          : `Code envoyé à ${profile.email} (valable 10 minutes).`
-      );
-      onShowToast?.('🔐 Code de vérification 2FA envoyé.');
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
-    } finally {
-      setIsSending2FA(false);
-    }
-  };
-
-  const confirmTwoFA = async () => {
-    if (!twoFAProfile) return;
-    setIsVerifying2FA(true);
-    setOtp2FAError(null);
-    try {
-      const res = await fetch('/api/2fa/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: twoFAProfile.email, code: otp2FA }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setOtp2FAError(data.error || 'Code incorrect.');
-        return;
-      }
-      onShowToast?.(`Double authentification validée — Bienvenue ${twoFAProfile.name}.`);
-      const prof = twoFAProfile;
-      setTwoFAProfile(null);
-      setOtp2FA('');
-      onLoginSuccess?.(prof);
-      onClose();
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
-    } finally {
-      setIsVerifying2FA(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStepError(null);
@@ -1301,10 +1234,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       const finalComposedName = composeOfficialFullName();
+      if (!auth.currentUser && passwordInput.length < 12) {
+        setStepError('Choisissez un mot de passe d’au moins 12 caractères.');
+        return;
+      }
+      if (auth.currentUser && auth.currentUser.email?.toLowerCase() !== emailInput.trim().toLowerCase()) {
+        setStepError('L’adresse doit correspondre au compte connecté.');
+        return;
+      }
 
       // SPECIAL CGPMP WORKFLOW: Submit Request for ARMP Administration Validation!
       if (isCgpmp) {
-        if (!creationDocFileName) {
+        if (!creationDocFileName || !creationDocDataUrl) {
           setStepError('Le document portant création de la cellule CGPMP est obligatoire.');
           return;
         }
@@ -1315,8 +1256,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         setIsSubmitting(true);
         try {
+          if (!auth.currentUser) await firebaseRegisterUser(emailInput.trim(), passwordInput, finalComposedName || nameInput.trim(), 'cgpmp_member');
+          const documentHash = await crypto.subtle.digest('SHA-256', Uint8Array.from(atob((creationDocDataUrl || '').split(',')[1] || ''), char => char.charCodeAt(0)));
           const newCgpmpReq: CgpmpAccountCreationRequest = {
-            id: `CGPMP-ACC-2026-${Math.floor(110 + Math.random() * 880)}`,
+            id: `CGPMP-${crypto.randomUUID()}`,
             institution: institutionInput.trim(),
             subCategory: subCategoryInput || activeRoleConfig.subCategoryOptions[0],
             province: provinceInput,
@@ -1343,7 +1286,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               fileSizeLabel: creationDocFileSize || '1.20 Mo',
               fileMimeType: creationDocMimeType,
               uploadedAt: new Date().toLocaleDateString('fr-FR'),
-              verificationHash: `SHA256-ARMP-${Date.now().toString(16).toUpperCase()}`,
+              verificationHash: Array.from(new Uint8Array(documentHash), byte => byte.toString(16).padStart(2, '0')).join(''),
               fileDataUrl: creationDocDataUrl
             },
             members: cgpmpMembers,
@@ -1407,23 +1350,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           localContentShare: selectedRole === 'pme' ? '≥ 51% Capital Congolais (Loi 17/001)' : undefined,
           location: `${provinceInput}, RDC`,
           province: provinceInput,
-          twoFactorEnabled: enable2FAOnRegister,
+          twoFactorEnabled: false,
           bio: `${defaultRoleTitle} • ${defaultInstitution} (${provinceInput}). Identifiant : ${cleanMatricule}.`
         };
 
-        const uidToUse =
-          googleAuthUid && !googleAuthUid.startsWith('GOOGLE-USR-')
-            ? googleAuthUid
-            : `USR-GOOGLE-${Date.now()}`;
-
-        const userProfile = await saveGoogleRegisteredProfile({
-          uid: uidToUse,
-          email: emailInput.trim(),
-          name: finalComposedName || nameInput.trim(),
-          role: selectedRole,
-          photoURL: googlePhotoUrl,
-          extraDetails
-        });
+        const userProfile = auth.currentUser
+          ? await saveGoogleRegisteredProfile({ uid: auth.currentUser.uid, email: auth.currentUser.email!, name: finalComposedName || nameInput.trim(), role: selectedRole, photoURL: googlePhotoUrl, extraDetails })
+          : await firebaseRegisterUser(emailInput.trim(), passwordInput, finalComposedName || nameInput.trim(), selectedRole, extraDetails);
 
         onShowToast?.(`Inscription complétée avec succès ! Bienvenue ${userProfile.name}.`);
         onLoginSuccess?.(userProfile);
@@ -1450,12 +1383,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setIsSubmitting(true);
       try {
         const userProfile = await firebaseLoginUser(cleanMail, passwordInput);
-        // Authentification à double facteur : code OTP exigé si activé sur le compte
-        if (userProfile.twoFactorEnabled) {
-          setIsSubmitting(false);
-          await beginTwoFA(userProfile);
-          return;
-        }
         onShowToast?.(`Connexion réussie : Bienvenue ${userProfile.name} (${userProfile.roleTitle}).`);
         onLoginSuccess?.(userProfile);
         onClose();
@@ -1731,7 +1658,129 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 value={emailInput}
                                 onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
                                 placeholder="ex: f.kabasele@budget.gouv.cd"
-                                className="w-full pl-9 pr-3 py-3 rounded-xl border border-s…3026 tokens truncated…=> setShowPassword(!showPassword)}
+                                className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setMode('login')}
+                              className="text-xs font-bold text-slate-500 hover:underline flex items-center gap-1"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                              <span>Retour à la connexion</span>
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isSubmitting}
+                              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
+                            >
+                              Envoyer le lien
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ======================================================== */}
+                  {/* MODE 2: LOGIN (RIGHT COLUMN OF 2-COLUMN FULL PAGE) */}
+                  {/* ======================================================== */}
+                  {/* Étape 2FA : vérification du code OTP après mot de passe */}
+                  {mode === 'login' && (
+                    <div className="space-y-4">
+                      {/* Entête du formulaire de connexion */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                            <Shield className="w-5 h-5 text-[#0C3B7C] dark:text-blue-400" />
+                            <span>Connexion à votre espace</span>
+                          </h3>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                            Portail Officiel RDC
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Connectez-vous à l'aide de vos identifiants pour accéder aux marchés publics et formations.
+                        </p>
+                      </div>
+
+                      {/* 1. GOOGLE SIGN IN */}
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={isSubmitting}
+                        className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-800 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2.5 shadow-xs cursor-pointer"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                        </svg>
+                        <span>Continuer avec Google</span>
+                      </button>
+
+                      <div className="relative my-1">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-slate-200 dark:border-slate-800" />
+                        </div>
+                        <div className="relative flex justify-center text-[11px]">
+                          <span className="bg-white dark:bg-slate-950 px-3 text-slate-500 font-bold">
+                            ou avec vos identifiants officiels
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 2. FORMULAIRE EMAIL & MOT DE PASSE */}
+                      <div className="space-y-3.5">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                            Adresse Email officielle ou personnelle *
+                          </label>
+                          <div className="relative">
+                            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                            <input
+                              type="email"
+                              required
+                              value={emailInput}
+                              onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
+                              placeholder="ex: s.mwanza@budget.gouv.cd"
+                              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Mot de passe *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMode('forgot_password');
+                                setStepError(null);
+                              }}
+                              className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                            >
+                              Mot de passe oublié ?
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              required
+                              value={passwordInput}
+                              onChange={(e) => setPasswordInput(e.target.value)}
+                              placeholder="Votre mot de passe"
+                              className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
                               className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                               aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                             >
@@ -2705,6 +2754,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {/* FINAL STEP (STEP 5 FOR CGPMP, STEP 4 FOR OTHERS): DRC PHONE MASK, MATRICULE & SUBMIT */}
                       {((registerStep === 5 && isCgpmp) || (registerStep === 4 && !isCgpmp)) && (
                         <div className="space-y-4">
+                        {!auth.currentUser && <label className="block text-sm font-semibold mb-4">Mot de passe de connexion (12 caractères minimum)
+                          <input type="password" autoComplete="new-password" minLength={12} value={passwordInput} onChange={event => setPasswordInput(event.target.value)} className="block w-full mt-2 p-3 rounded-xl border border-slate-300 dark:bg-slate-800" required />
+                        </label>}
+
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -2834,18 +2887,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           )}
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <label className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2.5 text-xs cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={enable2FAOnRegister}
-                                onChange={(e) => setEnable2FAOnRegister(e.target.checked)}
-                                className="rounded text-blue-600 w-4 h-4"
-                              />
-                              <span className="font-bold flex items-center gap-1.5">
-                                <Shield className="w-3.5 h-3.5 text-blue-600" />
-                                <span>Activer la Double Protection (2FA)</span>
-                              </span>
-                            </label>
+                            <p className="p-3 text-xs text-slate-600 dark:text-slate-300">L’inscription ne configure pas encore de second facteur Firebase.</p>
 
                             <label className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2.5 text-xs cursor-pointer">
                               <input

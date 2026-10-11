@@ -12,7 +12,6 @@ import {
   Scale
 } from 'lucide-react';
 import { UserProfile, DiagnosticResult, NiveauValidation } from '../types';
-import { randomizeQuestions } from '../utils/shuffleQuestions';
 import { peekLevelSettings, levelLabels } from '../utils/levelSettings';
 
 interface PlacementQuizModalProps {
@@ -76,6 +75,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       try {
         const res = await authenticatedFetch('/api/level-tests');
         const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Évaluation indisponible.');
         const actives: AdminLevelTest[] = (data.tests || []).filter(
           (t: AdminLevelTest) => t && t.active && Array.isArray(t.questions) && t.questions.length > 0
         );
@@ -106,7 +106,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
   const fetchQuestions = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/ai/placement-quiz', {
+      const res = await authenticatedFetch('/api/ai/placement-quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,12 +115,13 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
         })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Évaluation indisponible.');
       if (data.questions) {
         // Questions générées : ordre et options aléatoires à chaque passage
-        setQuestions(randomizeQuestions(data.questions));
+        setQuestions(data.questions);
       }
     } catch (err) {
-      console.error(err);
+      window.alert(err instanceof Error ? err.message : 'Questions indisponibles.');
     } finally {
       setIsLoading(false);
     }
@@ -175,13 +176,11 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
         const picked = selectedAnswers[q.id];
         return {
           questionId: q.id,
-          question: q.question,
-          pickedIndex: picked,
-          isCorrect: picked === q.correctIndex
+          pickedIndex: picked
         };
       });
 
-      const res = await fetch('/api/ai/placement-quiz', {
+      const res = await authenticatedFetch('/api/ai/placement-quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,6 +191,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Évaluation indisponible.');
       setResult(data);
       onUpdateProfileLevel(data.level as any, data.score);
     } catch (err) {
@@ -226,7 +226,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base sm:text-lg">
-                {activeTest || mode === 'select' ? 'Test de Validation de Niveau' : 'Test de Positionnement Automatisé par IA'}
+                {activeTest || mode === 'select' ? 'Test de Validation de Niveau' : 'Test de positionnement'}
               </h3>
               <p className="text-xs text-amber-100">
                 {activeTest

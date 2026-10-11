@@ -1,3 +1,4 @@
+import { scopedStorage } from '../lib/scopedStorage';
 import React, { useState, useRef } from 'react';
 import { 
   User, 
@@ -213,11 +214,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   // 2FA Security Modal
-  const [show2FASetupModal, setShow2FASetupModal] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
-  const [otp2FAHint, setOtp2FAHint] = useState<string | null>(null);
-  const [otp2FAError, setOtp2FAError] = useState<string | null>(null);
 
   // Password reset state
   const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
@@ -311,7 +307,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
   const [posts, setPosts] = useState<PostItem[]>(() => {
     try {
-      const saved = localStorage.getItem('armp_social_posts');
+      const saved = scopedStorage.getItem('armp_social_posts');
       if (saved) return JSON.parse(saved);
     } catch {}
     return defaultPosts;
@@ -327,7 +323,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           [...remote, ...prev].forEach(p => map.set(p.id, p as PostItem));
           const merged = Array.from(map.values());
           try {
-            localStorage.setItem('armp_social_posts', JSON.stringify(merged));
+            scopedStorage.setItem('armp_social_posts', JSON.stringify(merged));
           } catch {}
           return merged;
         });
@@ -676,64 +672,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const is2FAActive = !!currentProfile.twoFactorEnabled;
 
   const handleOpen2FASetup = async () => {
-    setOtpInput('');
-    setOtp2FAError(null);
-    setOtp2FAHint(null);
-    setShow2FASetupModal(true);
-    // Envoi réel du code OTP
-    try {
-      const res = await fetch('/api/2fa/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentProfile.email }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setOtp2FAHint(
-          data.devCode
-            ? `Mode sans provider mail — code de test : ${data.devCode}`
-            : `Code envoyé à ${currentProfile.email} (valable 10 minutes).`
-        );
-      } else {
-        setOtp2FAError(data.error || 'Envoi du code impossible.');
-      }
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
-    }
-  };
-
-  const handleConfirm2FAActivation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsVerifying2FA(true);
-    setOtp2FAError(null);
-    try {
-      const res = await fetch('/api/2fa/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentProfile.email, code: otpInput }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setOtp2FAError(data.error || 'Code incorrect.');
-        return;
-      }
-      setShow2FASetupModal(false);
-      if (onToggleTwoFactor) {
-        onToggleTwoFactor(true);
-      }
-      onShowToast?.('Authentification à double facteur (2FA) activée.');
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
-    } finally {
-      setIsVerifying2FA(false);
-    }
+    onShowToast?.('La configuration de la double authentification est temporairement indisponible.');
   };
 
   const handleDirectDisable2FA = () => {
-    if (onToggleTwoFactor) {
-      onToggleTwoFactor(false);
-    }
-    onShowToast?.('Authentification à double facteur (2FA) désactivée.');
+    onShowToast?.('La modification du second facteur est temporairement indisponible.');
   };
 
   // Media Upload & Selection Handlers — Academia Storage (137.184.59.184)
@@ -1022,7 +965,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     const nextPosts = [newPost as PostItem, ...posts];
     setPosts(nextPosts);
     try {
-      localStorage.setItem('armp_social_posts', JSON.stringify(nextPosts));
+      scopedStorage.setItem('armp_social_posts', JSON.stringify(nextPosts));
     } catch {}
     savePostToFirestore(newPost).catch(() => {});
 
@@ -1056,7 +999,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         return p;
       });
       try {
-        localStorage.setItem('armp_social_posts', JSON.stringify(next));
+        scopedStorage.setItem('armp_social_posts', JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -1086,7 +1029,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         return p;
       });
       try {
-        localStorage.setItem('armp_social_posts', JSON.stringify(next));
+        scopedStorage.setItem('armp_social_posts', JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -3685,7 +3628,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
               {/* Upload perso vers Academia */}
               <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
-                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser votre propre couverture (Academia 137.184.59.184 — covers / public, 100 Mo)</p>
+                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser votre propre couverture (Academia 137.184.59.184 — covers / public, 3 Mo)</p>
                 <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isCoverUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
                   <Upload className="w-4 h-4" />
                   <span>{isCoverUploading ? 'Envoi vers Academia…' : coverDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
@@ -3758,7 +3701,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               </div>
 
               <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
-                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser une nouvelle photo (Academia 137.184.59.184 — avatars / public, 100 Mo)</p>
+                <p className="text-[11px] font-bold text-blue-800 dark:text-blue-300">Téléverser une nouvelle photo (Academia 137.184.59.184 — avatars / public, 3 Mo)</p>
                 <label className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition ${isAvatarUploading ? 'bg-slate-300 text-slate-600 pointer-events-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow'}`}>
                   <Upload className="w-4 h-4" />
                   <span>{isAvatarUploading ? 'Envoi vers Academia…' : avatarDraftUrl ? 'Choisir une autre image' : 'Choisir une image (JPG/PNG/WebP)'}</span>
@@ -3854,65 +3797,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       )}
 
       {/* 2FA Setup Modal */}
-      {show2FASetupModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-blue-600" />
-                <span>Configuration de la 2FA</span>
-              </h3>
-              <button onClick={() => setShow2FASetupModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="text-center space-y-3 text-xs">
-              <div className="w-32 h-32 mx-auto rounded-2xl bg-white p-2 border-2 border-slate-300 flex items-center justify-center shadow-inner">
-                <QrCode className="w-24 h-24 text-slate-900" />
-              </div>
-              <p className="text-slate-600 dark:text-slate-300">
-                Scannez ce QR Code avec Google Authenticator ou saisissez le code de vérification à 6 chiffres envoyé à votre adresse email.
-              </p>
-            </div>
-
-            {otp2FAHint && (
-              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-800 dark:text-blue-200 text-center">
-                {otp2FAHint}
-              </div>
-            )}
-            {otp2FAError && (
-              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-bold text-red-700 dark:text-red-300 text-center">
-                {otp2FAError}
-              </div>
-            )}
-
-            <form onSubmit={handleConfirm2FAActivation} className="space-y-3 pt-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otpInput}
-                onChange={(e) => setOtpInput(filterOtpMask(e.target.value))}
-                placeholder="Entrez le code à 6 chiffres (ex: 123456)"
-                className="w-full text-center tracking-widest text-lg font-mono px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
-                required
-              />
-
-              <button
-                type="submit"
-                disabled={isVerifying2FA || otpInput.length < 6}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-2"
-              >
-                {isVerifying2FA ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                <span>Confirmer et Activer la 2FA</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Media Picker Modal (Upload local file OR select from ARMP archives) */}
       {mediaPickerModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95 duration-150">

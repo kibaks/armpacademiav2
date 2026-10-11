@@ -107,9 +107,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().email == request.auth.token.email && isPublicRole(incoming().role);
-      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled']);
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().email == request.auth.token.email && isPublicRole(incoming().role) && incoming().level == 'Non évalué' && incoming().completedModulesCount == 0 && incoming().certificationsCount == 0 && incoming().certificates.size() == 0 && incoming().completedCourseIds.size() == 0 && incoming().quizScoresByCourse.size() == 0 && !incoming().keys().hasAny(['levelKey', 'placementScore', 'niveauValidation', 'niveauxModules']);
+      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled', 'level', 'levelKey', 'placementScore', 'certificates', 'completedCourseIds', 'quizScoresByCourse', 'completedModulesCount', 'certificationsCount', 'niveauValidation', 'niveauxModules']);
       allow delete: if false;
+    }
+    match /learningRecords/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow write: if false;
     }
     match /trainingRequests/{requestId} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.applicantEmail == request.auth.token.email || isAdmin());
@@ -140,15 +145,16 @@ service cloud.firestore {
     match /courseQA/{qaId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && incoming().authorId == request.auth.uid && isValidId(qaId) && isValidCourseQA(incoming());
-      allow update: if (isAdmin() || isTrainer()) && isValidCourseQA(incoming()) && incoming().authorId == resource.data.authorId;
+      allow update: if (isAdmin() || (isTrainer() && get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.authorId == request.auth.uid)) && isValidCourseQA(incoming()) && incoming().authorId == resource.data.authorId && incoming().courseId == resource.data.courseId;
       allow delete: if isAdmin();
     }
 
     // Studio Videos collection
     match /studioVideos/{videoId} {
       allow read: if isSignedIn();
-      allow create, update: if (isAdmin() || isTrainer()) && isValidId(videoId) && isValidStudioVideo(incoming());
-      allow delete: if isAdmin() || isTrainer();
+      allow create: if (isAdmin() || (isTrainer() && incoming().authorId == request.auth.uid)) && isValidId(videoId) && isValidStudioVideo(incoming());
+      allow update: if (isAdmin() || (isTrainer() && resource.data.authorId == request.auth.uid && incoming().authorId == request.auth.uid)) && isValidStudioVideo(incoming());
+      allow delete: if isAdmin() || (isTrainer() && resource.data.authorId == request.auth.uid);
     }
 
     // National Quiz Bank collection

@@ -1,3 +1,4 @@
+import { scopedStorage } from '../lib/scopedStorage';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
@@ -499,7 +500,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   const [messages, setMessages] = useState<EnhancedMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(storageKey);
+      const saved = scopedStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -574,7 +575,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   useEffect(() => {
     let mounted = true;
     try {
-      const saved = localStorage.getItem(storageKey);
+      const saved = scopedStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0 && mounted) {
@@ -591,7 +592,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           if (mounted && Array.isArray(remoteMsgs) && remoteMsgs.length > 0) {
             setMessages(remoteMsgs);
             try {
-              localStorage.setItem(storageKey, JSON.stringify(remoteMsgs));
+              scopedStorage.setItem(storageKey, JSON.stringify(remoteMsgs));
             } catch {}
           }
         })
@@ -604,7 +605,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   const persistMessages = (nextMsgs: EnhancedMessage[]) => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(nextMsgs.slice(-40)));
+      scopedStorage.setItem(storageKey, JSON.stringify(nextMsgs.slice(-40)));
     } catch {}
     if (currentProfile.id) {
       saveTutorHistoryToFirestore(currentProfile.id, nextMsgs.slice(-40)).catch(() => {});
@@ -1251,7 +1252,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         audioBase64: mediaToSend?.type === 'audio' ? mediaToSend.audioBase64 : undefined,
         audioMimeType: mediaToSend?.type === 'audio' ? mediaToSend.mimeType : undefined
       };
-      const response = await fetch('/api/ai/tutor', {
+      const response = await authenticatedFetch('/api/ai/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
