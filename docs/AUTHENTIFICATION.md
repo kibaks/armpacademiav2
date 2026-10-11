@@ -21,3 +21,11 @@ Les JWT ID Firebase expirent normalement après une heure. Le SDK Firebase renou
 Activer les fournisseurs **Email/Password** et **Google** dans Firebase Authentication, ajouter les domaines de l’application aux domaines autorisés, configurer l’identité Firebase Admin côté serveur et déployer les règles sur la base nommée. L’activation TOTP, le bucket privé et leurs essais réels restent décrits dans `CORRECTIONS_2026-10-11.md`.
 
 Tests locaux du lot JWT : en-tête Firebase imposé, absence de fuite vers une origine externe, annulation pendant un changement de compte, rejet des anciennes synchronisations et refus d’un JWT non signé avec rôle administrateur par le véritable vérificateur Firebase Admin. Ces tests ne remplacent pas une connexion avec des comptes du projet cloud.
+
+## Erreurs de connexion
+
+Les écrans email/mot de passe, Google et MFA utilisent une traduction commune des erreurs Firebase : code structuré en priorité, extraction du code dans les anciens messages en secours. Les erreurs inconnues affichent un message neutre, sans contenu technique brut. Les identifiants incorrects ne révèlent pas si l’adresse possède un compte. Les erreurs de domaine ou de fenêtre Google ne proposent plus une prétendue vérification email de remplacement.
+
+`auth/operation-not-allowed` signifie que Firebase refuse la méthode demandée. Pour email/mot de passe : ouvrir le projet Firebase utilisé par le site → Authentication → Sign-in method → Email/Password, activer **Email/Password**, puis enregistrer. Le fournisseur « Email link » seul ne permet pas la connexion par mot de passe. Pour Google, activer le fournisseur Google et renseigner son adresse de support. Vérifier également les domaines autorisés pour Google. Pour TOTP, vérifier Identity Platform et l’activation du second facteur natif.
+
+Ces réglages appartiennent au projet Firebase réellement configuré dans le site déployé. Un message plus clair ne peut pas activer le fournisseur. Cette session ne dispose pas des credentials administrateur Firebase nécessaires pour vérifier ou modifier cette configuration cloud. Après activation, publier la branche corrigée, recharger l’application et vérifier une connexion réelle avec chaque méthode. Le texte « Information d’authentification : Firebase: Error… » n’est plus utilisé par le code corrigé.

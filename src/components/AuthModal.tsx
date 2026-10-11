@@ -1,3 +1,4 @@
+import { friendlyAuthError } from '../../shared/authErrors';
 import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
@@ -948,33 +949,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const getFriendlyAuthError = (err: unknown): string => {
-    const raw = err instanceof Error ? err.message : String(err);
-    if (raw.startsWith('CGPMP_PENDING_ARMP:')) {
-      return raw.replace('CGPMP_PENDING_ARMP:', '');
-    }
-    if (raw.startsWith('CGPMP_REJECTED_ARMP:')) {
-      return raw.replace('CGPMP_REJECTED_ARMP:', '');
-    }
-    const message = raw.toLowerCase();
-    if (message.includes('auth/operation-not-allowed')) {
-      return 'Ce moyen de connexion n’est pas activé pour cette application. Contactez l’administrateur pour activer le fournisseur correspondant dans Firebase Authentication.';
-    }
-    if (message.includes('auth/unauthorized-domain') || message.includes('is not authorized')) {
-      return 'Domaine non encore autorisé côté Firebase Console. Poursuivez avec la vérification Google ci-dessous.';
-    }
-    if (message.includes('auth/popup-blocked') || message.includes('popup-closed-by-user')) {
-      return 'Popup Google fermée ou bloquée. Utilisez la vérification directe par adresse email ci-dessous.';
-    }
-    if (message.includes('auth/invalid-credential') || message.includes('auth/wrong-password')) {
-      return 'Identifiants ou mot de passe invalides. Si vous êtes membre CGPMP, utilisez le mot de passe reçu par mail après validation ARMP.';
-    }
-    if (message.includes('auth/user-not-found')) {
-      return 'Aucun compte actif trouvé pour cet email.';
-    }
-    return `Information d'authentification : ${raw.slice(0, 240)}`;
-  };
-
   // File upload handler for CGPMP Creation Document
   const handleCreationDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1064,7 +1038,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setRegisterStep(2);
       onShowToast?.(`Identité Google pré-remplie (${googleRes.email}). Complétez vos informations civiles à l'Étape 2.`);
     } catch (err) {
-      setStepError(getFriendlyAuthError(err));
+      setStepError(friendlyAuthError(err, 'google'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1205,7 +1179,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setResetSuccessMessage(`Un lien de réinitialisation a été envoyé à ${cleanMail}.`);
         onShowToast?.('Email de réinitialisation envoyé.');
       } catch (err) {
-        setStepError(getFriendlyAuthError(err));
+        setStepError(friendlyAuthError(err, 'reset'));
       } finally {
         setIsSubmitting(false);
       }
@@ -1305,7 +1279,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             `Demande de compte CGPMP (${newCgpmpReq.id}) soumise à l'Administration ARMP ! Les coordonnées seront envoyées par mail aux ${cgpmpMembers.length + 1} membres dès validation ARMP.`
           );
         } catch (err) {
-          setStepError(getFriendlyAuthError(err));
+          setStepError(friendlyAuthError(err));
         } finally {
           setIsSubmitting(false);
         }
@@ -1362,7 +1336,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onLoginSuccess?.(userProfile);
         onClose();
       } catch (err) {
-        setStepError(getFriendlyAuthError(err));
+        setStepError(friendlyAuthError(err));
       } finally {
         setIsSubmitting(false);
       }
@@ -1387,7 +1361,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onLoginSuccess?.(userProfile);
         onClose();
       } catch (err) {
-        setStepError(getFriendlyAuthError(err));
+        setStepError(friendlyAuthError(err));
       } finally {
         setIsSubmitting(false);
       }
@@ -1416,7 +1390,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess?.(googleRes.existingProfile);
       onClose();
     } catch (err) {
-      setStepError(getFriendlyAuthError(err));
+      setStepError(friendlyAuthError(err, 'google'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1575,7 +1549,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {stepError && (
-            <div className="p-4 rounded-2xl border bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-start justify-between gap-3">
+            <div role="alert" className="p-4 rounded-2xl border bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-start justify-between gap-3">
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="font-semibold leading-relaxed">{stepError}</span>

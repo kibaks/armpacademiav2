@@ -103,3 +103,12 @@ Choix retenu : le JWT ID Firebase pour Google et email/mot de passe, avec vérif
 - 50 tests applicatifs passent, dont contrôle de 501 comptes, refus d’une révision ancienne après changement de la bonne réponse et migration d’une banque historique. Les règles restent celles vérifiées par les cinq tests émulateurs du deuxième lot. Compilation, démarrage API et chargement navigateur des modules différés vérifiés localement.
 
 Les prérequis Firebase/Vercel, les anciens fichiers privés, la révocation de clé et les autres lignes ouvertes du tableau ne sont pas clôturés par ce lot.
+
+
+## Messages d’erreur d’authentification
+
+Traduction commune des erreurs structurées Firebase et des anciens messages contenant un code `auth/*`. Email/mot de passe, Google et MFA affichent des consignes adaptées ; les erreurs inconnues ne dévoilent plus le message brut du SDK. Suppression des indications trompeuses de remplacement Google par email et de mot de passe envoyé par mail. Le message de connexion est annoncé via `role="alert"`. Les messages métier connus de MFA/CGPMP restent disponibles.
+
+`auth/operation-not-allowed` nécessite toujours l’activation du fournisseur dans le projet Firebase du site, indépendamment du correctif de texte. Procédure dans `AUTHENTIFICATION.md` ; aucun accès administrateur cloud disponible pour appliquer ou confirmer le réglage.
+
+Validation : 53 tests applicatifs, TypeScript et compilation. Vérification Chromium avec réponse Firebase simulée `OPERATION_NOT_ALLOWED` : le SDK réel affiche la consigne française pour email/mot de passe, sans message technique brut ni erreur JavaScript. Cette simulation ne valide pas la configuration du projet cloud.

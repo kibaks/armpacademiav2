@@ -1,3 +1,4 @@
+import { friendlyAuthError } from '../../shared/authErrors';
 import { useState } from 'react';
 import { EmailAuthProvider, GoogleAuthProvider, multiFactor, reauthenticateWithCredential, reauthenticateWithPopup, sendEmailVerification, TotpMultiFactorGenerator, type TotpSecret } from 'firebase/auth';
 import { auth, firebaseLogout } from '../firebase';
@@ -16,7 +17,7 @@ export function NativeMfaSetup({ onClose }: { onClose: () => void }) {
     setBusy(true); setMessage('');
     try { await operation(); }
     catch (error: any) {
-      setMessage(error?.code === 'auth/operation-not-allowed' ? 'La double authentification TOTP doit être activée dans Firebase Authentication par l’administrateur.' : error?.code === 'auth/invalid-verification-code' ? 'Code incorrect. Réessayez avec le code actuel.' : error?.code ? `Firebase a refusé l’opération (${error.code}).` : error.message || 'Opération refusée.');
+      setMessage(friendlyAuthError(error, 'mfa'));
     } finally { setBusy(false); }
   };
   const reauthenticate = async () => {

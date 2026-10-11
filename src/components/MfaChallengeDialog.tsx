@@ -1,3 +1,4 @@
+import { friendlyAuthError } from '../../shared/authErrors';
 import { useEffect, useState } from 'react';
 import { registerMfaPresenter, type MfaPrompt } from '../lib/nativeMfa';
 
@@ -13,7 +14,7 @@ export function MfaChallengeDialog() {
     <form className="bg-white dark:bg-slate-900 rounded-2xl p-6 space-y-4 max-w-md w-full" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setError('');
       try { await prompt.submit(factor, code); }
-      catch { setError('Code refusé ou session expirée. Vérifiez le code et réessayez.'); }
+      catch (error) { setError(friendlyAuthError(error, 'mfa')); }
       finally { setBusy(false); }
     }}>
       <h2 id="mfa-title" className="text-xl font-bold">Vérification en deux étapes</h2>
