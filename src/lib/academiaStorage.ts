@@ -1,4 +1,5 @@
 import { auth } from '../firebase';
+import { currentSessionToken } from '../../shared/authenticatedRequest';
 import { MAX_IMAGE_BYTES, imageMime, IMAGE_EXTENSIONS } from '../../shared/imageUpload';
 /**
  * Academia Storage API — Service centralisé pour images | vidéos | audios
@@ -95,8 +96,8 @@ export function isExtensionAllowed(fileName: string): boolean {
 }
 
 async function headers(): Promise<Record<string, string>> {
-  if (!auth.currentUser) throw new Error('Connexion requise.');
-  return { Authorization: 'Bearer ' + await auth.currentUser.getIdToken() };
+  const { token } = await currentSessionToken(() => auth.currentUser);
+  return { Authorization: 'Bearer ' + token };
 }
 
 // =============================================================================
@@ -108,8 +109,12 @@ async function uploadThroughApp(file: File, opts: UploadOptions): Promise<Academ
   if (file.size > MAX_SIZE_BYTES) throw new Error('Fichier trop volumineux : maximum 3 Mo. Réduisez sa taille.');
   if (!file.size) throw new Error('Le fichier image est vide.');
   if (!auth.currentUser) throw new Error('Connectez-vous pour importer une image.');
-  const token = await auth.currentUser.getIdToken();
+  const { token, user } = await currentSessionToken(() => auth.currentUser);
   const session = await fetch(`${API}/session`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+  if (auth.currentUser !== user) {
+    await fetch(`${API}/session`, { method: 'DELETE' });
+    throw new Error('La session a changé. Réessayez avec le compte connecté.');
+  }
   if (!session.ok) throw new Error('Le stockage sécurisé est indisponible. Réessayez après reconnexion.');
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();

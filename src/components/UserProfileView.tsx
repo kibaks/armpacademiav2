@@ -106,7 +106,6 @@ interface UserProfileViewProps {
   onOpenTuteur?: () => void;
   onCallTutor?: (action: 'chat' | 'call' | 'video' | 'voice', tutorId?: any) => void;
   onOpenCgpmpRequests?: () => void;
-  onToggleTwoFactor?: (enabled: boolean) => void;
   onUpdateProfile?: (profile: UserProfile) => Promise<void> | void;
   onShowToast?: (msg: string) => void;
   activeTab?: ProfileTab;
@@ -189,7 +188,6 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   onOpenTuteur,
   onCallTutor,
   onOpenCgpmpRequests,
-  onToggleTwoFactor,
   onUpdateProfile,
   onShowToast,
   activeTab,

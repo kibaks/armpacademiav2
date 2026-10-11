@@ -25,7 +25,7 @@ Ce lot corrige du code, contrairement au précédent commit qui ajoutait uniquem
 ## Vérifications
 
 - Node **22**, TypeScript : `npm run lint`.
-- **42 tests applicatifs** : `npm test` (Firebase et relais email simulés pour les tests HTTP ; aucun email réel envoyé).
+- **47 tests applicatifs** : `npm test` (Firebase et relais email simulés pour les tests HTTP ; aucun email réel envoyé).
 - **5 tests de règles** avec les véritables émulateurs Firestore et Storage et Java 21 : `npm run test:rules`. Vérification des résultats non falsifiables, des permissions de formateur, des anciens jetons sans MFA et du refus des accès directs au bucket.
 - `npm run build`, génération de la banque canonique depuis le catalogue et `npm run check:api` : démarrage du bundle ESM et accès non authentifiés refusés.
 - Chromium : ouverture de la page publique et contrôle des erreurs JavaScript. Ce contrôle ne remplace pas les parcours authentifiés avec les services réels.
@@ -84,3 +84,10 @@ Aucun déploiement de production ni fusion dans `main` n’est effectué par ce 
 4. Tester un enrôlement réel, une connexion TOTP email/Google, un mauvais code, une désactivation, un ancien jeton et deux comptes distincts sur une pièce privée. Les tests HTTP de ce lot simulent Firebase Admin/bucket ; ils ne prouvent pas la configuration du projet cloud.
 5. Exporter/migrer les anciens fichiers privés du service Academia et révoquer sa clé exposée chez le fournisseur. Les anciennes URL ne sont pas transformées ni sécurisées automatiquement. Les pièces CGPMP existantes restent dans Firestore avec leur limite actuelle.
 6. Accès au projet Vercel refusé pour l’équipe `doc-check-dev` (**403**). Aucun jeton Vercel local disponible. GitHub Actions était bloqué par la facturation du compte au premier lot. La compilation et les vérifications locales sont exécutées ; aucune validation authentifiée de production ni déploiement de production n’est revendiquée.
+
+
+## Troisième lot : JWT et synchronisation Firebase
+
+Choix retenu : le JWT ID Firebase pour Google et email/mot de passe, avec vérification Firebase Admin côté serveur. Aucun second émetteur JWT ni compte parallèle. Le profil/rôle suit maintenant le renouvellement du jeton ; les réponses d’anciennes sessions sont ignorées. Les requêtes authentifiées restent sur l’origine de l’application et sont annulées si le compte change pendant le renouvellement. L’ancien callback simulant l’activation MFA par un booléen a été retiré. Voir `AUTHENTIFICATION.md`.
+
+47 tests applicatifs passent, dont 5 nouveaux tests sur le transport JWT, les changements de compte et le rejet réel d’un JWT non signé par Firebase Admin. Les 5 tests de règles du lot précédent restent inchangés.

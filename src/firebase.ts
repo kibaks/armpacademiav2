@@ -12,7 +12,6 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   updateProfile as updateAuthProfile,
-  onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -364,7 +363,7 @@ export async function getOrInitUserProfile(user: FirebaseUser, fallbackRole: Use
 
     if (snap.exists()) {
       const profile = snap.data() as UserProfile;
-      const token = await user.getIdTokenResult(true);
+      const token = await user.getIdTokenResult();
       const privileged = ['super_admin', 'dfat_admin', 'formateur', 'armp_agent', 'dgcmp_agent'];
       const record = await getDoc(doc(db, 'learningRecords', user.uid));
       return { ...(omitResults(profile) as unknown as UserProfile), ...emptyResults(), ...(record.exists() ? record.data() : {}), twoFactorEnabled: multiFactor(user).enrolledFactors.length > 0, id: user.uid, role: token.claims.role as UserRole || (privileged.includes(profile.role) ? 'particulier' : profile.role) };

@@ -83,7 +83,8 @@ import {
   testFirestoreConnection,
   firebaseLogout 
 } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onIdTokenChanged } from 'firebase/auth';
+import { createSessionRevision } from '../shared/sessionRevision';
 
 import { 
   Bot, 
@@ -249,17 +250,26 @@ export default function App() {
 
     const preloadingTimeout = window.setTimeout(() => setIsAppLoading(false), 12000);
 
-    // Subscribe to Firebase Auth state
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsAuthenticated(false);
-      setRequests([]);
-      setCgpmpAccountRequests([]);
-      setFirestoreProfiles([]);
-      setIsTutorOpen(false);
+    // Refresh profile/claims when Firebase renews its JWT, not only on login.
+    const session = createSessionRevision(() => auth.currentUser?.uid || null);
+    let previousUid: string | null | undefined;
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
+      const uid = firebaseUser?.uid || null;
+      const isCurrent = session.begin(uid);
+      if (uid !== previousUid) {
+        previousUid = uid;
+        setIsAuthenticated(false);
+        setProfiles(DEMO_PROFILES);
+        setRequests([]);
+        setCgpmpAccountRequests([]);
+        setFirestoreProfiles([]);
+        setIsTutorOpen(false);
+      }
       if (firebaseUser) {
         setPreloaderStatus(`Chargement du profil sécurisé (${firebaseUser.email || 'Agent'})...`);
         try {
-          const userProfile = await getOrInitUserProfile(firebaseUser, currentRole);
+          const userProfile = await getOrInitUserProfile(firebaseUser);
+          if (!isCurrent()) return;
           setCurrentRole(userProfile.role);
           setProfiles(prev => ({
             ...prev,
@@ -268,7 +278,11 @@ export default function App() {
           setIsAuthenticated(true);
           scopedStorage.setItem('armp_session_profile', JSON.stringify(userProfile));
         } catch (err) {
+          if (!isCurrent()) return;
           console.error("Erreur de synchronisation Firestore profil:", err);
+          setIsAuthenticated(false);
+          setIsAppLoading(false);
+          return;
         }
 
         // Fetch persistent training requests, custom courses & all user profiles from Firestore when authenticated
@@ -280,6 +294,7 @@ export default function App() {
             fetchAllUserProfilesFromFirestore().catch(() => []),
             fetchCgpmpAccountRequestsFromFirestore().catch(() => [])
           ]);
+          if (!isCurrent()) return;
           if (remoteCgpmpAccounts && remoteCgpmpAccounts.length > 0) {
             setCgpmpAccountRequests(remoteCgpmpAccounts);
           }
@@ -313,15 +328,16 @@ export default function App() {
 
       // Verify connection to Firestore
       await testFirestoreConnection();
+      if (!isCurrent()) return;
 
       // Finish Preloading
       setPreloaderStatus("Système ACADEMIA ITECH opérationnel.");
       setTimeout(() => {
-        setIsAppLoading(false);
+        if (isCurrent()) setIsAppLoading(false);
       }, 400);
     });
 
-    return () => { window.clearTimeout(preloadingTimeout); unsubscribe(); };
+    return () => { session.invalidate(); window.clearTimeout(preloadingTimeout); unsubscribe(); };
   }, []);
 
   const currentProfile = profiles[currentRole] || profiles['cgpmp_member'];
@@ -389,6 +405,7 @@ export default function App() {
     }
     try { profile = await getOrInitUserProfile(auth.currentUser); }
     catch { showToast('Profil Firebase indisponible.'); return; }
+    if (auth.currentUser?.uid !== profile.id) return;
     setCurrentRole(profile.role);
     setProfiles(prev => ({
       ...prev,
@@ -400,6 +417,7 @@ export default function App() {
 
     // Also fetch training requests now that user is logged in
     fetchTrainingRequestsFromFirestore().then(firestoreReqs => {
+      if (auth.currentUser?.uid !== profile.id) return;
       if (firestoreReqs && firestoreReqs.length > 0) {
         setRequests(prev => {
           const map = new Map<string, TrainingRequest>();
@@ -465,28 +483,6 @@ export default function App() {
     scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
   };
 
-  // Two-Factor Authentication (2FA) Toggle in Profile
-  const handleToggleTwoFactor = async (enabled: boolean) => {
-    const updated: UserProfile = {
-      ...currentProfile,
-      twoFactorEnabled: enabled
-    };
-    setProfiles(prev => ({
-      ...prev,
-      [currentRole]: updated
-    }));
-    scopedStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    showToast(
-      enabled
-        ? "Sécurité renforcée : Authentification à double facteur (2FA) activée."
-        : "Authentification à double facteur (2FA) désactivée."
-    );
-    try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Failed to sync 2FA to Firestore", e);
-    }
-  };
 
   const handleLogout = async () => {
     if (auth.currentUser) scopedStorage.clearAccount(auth.currentUser.uid);
@@ -1102,7 +1098,6 @@ export default function App() {
                 onCallTutor={handleCallTutor}
                 onLogout={handleLogout}
                 onNavigateToCourses={() => setActiveTab('catalogue')}
-                onToggleTwoFactor={handleToggleTwoFactor}
                 onUpdateProfile={handleUpdateProfile}
                 onShowToast={showToast}
                 initialTab={profileSubTab}
