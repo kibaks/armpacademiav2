@@ -1,0 +1,129 @@
+{
+  "executedAt": "2026-10-10T21:35:17.299Z",
+  "runtime": "v24.19.0",
+  "scope": "Vérifications statiques et expériences locales sans API externe, sans dépendances installées.",
+  "checks": [
+    {
+      "name": "Intégrité de la copie",
+      "evidence": {
+        "commit": "eea6a541617ef3411790232da8565b522852e799",
+        "verifiedGitBlobs": 100
+      }
+    },
+    {
+      "name": "Écarts entre les deux serveurs (routers communs exclus)",
+      "evidence": {
+        "localRoutes": [
+          "GET /api/tts/settings",
+          "POST /api/tts/settings",
+          "GET /api/health",
+          "POST /api/ai/tts/prewarm",
+          "POST /api/ai/tts",
+          "POST /api/ai/transcribe",
+          "POST /api/ai/tutor",
+          "POST /api/2fa/send",
+          "POST /api/2fa/verify",
+          "POST /api/ai/placement-quiz",
+          "POST /api/ai/recommendations",
+          "POST /api/ai/generate-report",
+          "POST /api/ai/generate-animated-module",
+          "GET /api/ai/flow-video/cache-check",
+          "POST /api/ai/flow-video/start",
+          "POST /api/ai/flow-video/status",
+          "POST /api/ai/flow-video/download",
+          "GET /api/ai/flow-video/stream",
+          "POST /api/cgpmp/send-credentials-email",
+          "GET *"
+        ],
+        "deployedRoutes": [
+          "GET /api/health",
+          "POST /api/ai/tutor",
+          "POST /api/ai/placement-quiz",
+          "POST /api/ai/recommendations",
+          "POST /api/ai/generate-report",
+          "GET /api/ai/flow-video/cache-check",
+          "POST /api/ai/flow-video/start",
+          "POST /api/ai/flow-video/status",
+          "GET /api/tts/settings",
+          "POST /api/tts/settings",
+          "POST /api/ai/tts",
+          "POST /api/ai/tts/prewarm"
+        ],
+        "missingOnVercel": [
+          "POST /api/ai/transcribe",
+          "POST /api/2fa/send",
+          "POST /api/2fa/verify",
+          "POST /api/ai/generate-animated-module",
+          "POST /api/ai/flow-video/download",
+          "GET /api/ai/flow-video/stream",
+          "POST /api/cgpmp/send-credentials-email",
+          "GET *"
+        ]
+      }
+    },
+    {
+      "name": "Score de positionnement : 0/5 et liste vide deviennent 75%",
+      "evidence": [
+        {
+          "correct": 0,
+          "count": 5,
+          "returnedScore": 75
+        },
+        {
+          "correct": 0,
+          "count": 0,
+          "returnedScore": 75
+        },
+        {
+          "correct": 5,
+          "count": 5,
+          "returnedScore": 100
+        }
+      ]
+    },
+    {
+      "name": "Champs pédagogiques et second facteur absents des champs protégés",
+      "evidence": {
+        "rule": "allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled']);"
+      }
+    },
+    {
+      "name": "Expression du tuteur : message objet déclenche TypeError avant le try du fournisseur",
+      "evidence": {
+        "error": "TypeError",
+        "note": "Expression isolée, pas test HTTP ni constat de crash en production."
+      }
+    },
+    {
+      "name": "Export CSV : validations du test existant exécutées sur la vraie fonction",
+      "evidence": {
+        "assertions": 6,
+        "passed": true
+      }
+    },
+    {
+      "name": "Identifiants CGPMP : probabilité de collision sur 880 valeurs",
+      "evidence": [
+        {
+          "requests": 20,
+          "probability": 0.19548990937628508
+        },
+        {
+          "requests": 50,
+          "probability": 0.7580214167140396
+        },
+        {
+          "requests": 100,
+          "probability": 0.9971197197243103
+        }
+      ]
+    },
+    {
+      "name": "ws est importé mais fourni seulement transitivement",
+      "evidence": {
+        "presentInLock": true,
+        "declaredDirectly": false
+      }
+    }
+  ]
+}
