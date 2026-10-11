@@ -2,7 +2,7 @@
 
 Base : `39165d26c404f2a1b916b4f5f8c303585efdf575`. Branche : `fix/security-and-workflows`.
 
-Ce lot corrige du code, contrairement au précédent commit qui ajoutait uniquement l’audit. Il ne clôture pas tout l’audit et ne constitue pas une validation de la sécurité en production. La MFA native et la sécurité du stockage privé restent des priorités ouvertes.
+Ce lot corrige du code, contrairement au précédent commit qui ajoutait uniquement l’audit. Il ne clôture pas tout l’audit et ne constitue pas une validation de la sécurité en production. La MFA native et le nouveau stockage privé sont désormais implémentés dans le code ; leur configuration cloud, leur mise en service et la migration des anciens fichiers restent à vérifier.
 
 ## Changements
 
@@ -25,8 +25,8 @@ Ce lot corrige du code, contrairement au précédent commit qui ajoutait uniquem
 ## Vérifications
 
 - Node **22**, TypeScript : `npm run lint`.
-- **30 tests applicatifs** : `npm test` (Firebase et relais email simulés pour les tests HTTP ; aucun email réel envoyé).
-- **3 tests de règles** avec le véritable émulateur Firestore et Java 21 : `npm run test:rules`. Vérification des résultats non falsifiables et des permissions de formateur.
+- **42 tests applicatifs** : `npm test` (Firebase et relais email simulés pour les tests HTTP ; aucun email réel envoyé).
+- **5 tests de règles** avec les véritables émulateurs Firestore et Storage et Java 21 : `npm run test:rules`. Vérification des résultats non falsifiables, des permissions de formateur, des anciens jetons sans MFA et du refus des accès directs au bucket.
 - `npm run build`, génération de la banque canonique depuis le catalogue et `npm run check:api` : démarrage du bundle ESM et accès non authentifiés refusés.
 - Chromium : ouverture de la page publique et contrôle des erreurs JavaScript. Ce contrôle ne remplace pas les parcours authentifiés avec les services réels.
 
@@ -36,11 +36,11 @@ Le bundle principal reste volumineux (environ 2,35 Mo non compressés). L’aver
 
 | Audit | État et suite nécessaire |
 |---|---|
-| F01 | Ancien OTP et faux QR supprimés/désactivés. **MFA Firebase native non implémentée** : prévoir l’enrôlement, la résolution du challenge avant connexion et une politique côté serveur/règles. Aucun indicateur de profil n’est présenté comme preuve d’enrôlement. |
+| F01 | **MFA TOTP Firebase implémentée** : enrôlement après réauthentification et email vérifié, résolution du défi avant connexion email/Google, désactivation après preuve du second facteur, politique serveur/Firestore et révocation des sessions lors de la finalisation. Activation Identity Platform/TOTP et essai avec de vrais comptes encore nécessaires. Les facteurs SMS existants ne sont pas pris en charge par le nouveau dialogue TOTP. |
 | F02 | Résultats persistés protégés et correction serveur. Les questions publiées sont des supports pédagogiques ; un examen à enjeu nécessite une banque privée, un contrôle des prérequis et une politique de tentatives. La validation de leçons reste à déplacer côté serveur. |
 | F03–F04 | Accès, quotas et contrôle d’entrée ajoutés ; budgets fournisseurs et protection contre la création massive de comptes restent à paramétrer. |
 | F05 | **Révocation de la clé historique non vérifiée**. Action nécessaire chez le fournisseur ; suppression dans Git seule insuffisante. |
-| F06 | **Relais sécurisé générique, propriété des fichiers et accès privé audio/vidéo non résolus**. Le client utilise encore le service externe pour ces opérations. Ne pas considérer les fichiers privés comme sécurisés sur la seule base du libellé `private`. |
+| F06 | **Nouveaux fichiers privés via Firebase Storage et API propriétaire** : aucun jeton public de téléchargement, registre serveur, cookie HttpOnly révocable pour les lecteurs, refus des anciens jetons sans MFA, suppression propriétaire et pagination. Documents toujours privés ; médias publiés explicitement publics. Relais limité à 3 Mo. Bucket/IAM/règles réels, migration des anciens fichiers externes et upload de grands médias restent ouverts. |
 | F07–F09 | Parcours CGPMP corrigé et testé avec services simulés. Taille des pièces limitée à la capacité Firestore ; grand fichier privé à traiter avec F06. Anciens dossiers dont la pièce a disparu : nouvelle soumission nécessaire. |
 | F10–F13 | Application serveur commune, paramètres TTS persistants, inscription réelle et positionnement serveur. Vérification Firebase, email et IA de production encore nécessaire. |
 | F14 | Caches et vues privées isolés ; pas de migration des anciens résultats/cache comme données fiables. |
@@ -59,6 +59,28 @@ Le bundle principal reste volumineux (environ 2,35 Mo non compressés). L’aver
 2. Configurer `RESEND_API_KEY` et un expéditeur/domaine vérifié (`RESEND_FROM`). Les demandes CGPMP ne sont pas déclarées validées si le service refuse l’envoi. Une reprise peut trouver des comptes déjà créés : elle les réutilise.
 3. Publier les règles du fichier `firebase.json` sur cette base nommée, puis le nouveau code lors d’une mise à jour coordonnée. L’ancien client ne peut plus écrire ses résultats après durcissement des règles : rechargement nécessaire. Ne pas réimporter ses attestations comme résultats vérifiés.
 4. Tester deux comptes distincts, une inscription email et Google, des quiz à 0 et 100, une demande CGPMP avec pièce, une panne puis une reprise du relais, et les droits d’un formateur. Vérifier aussi les erreurs de configuration et les limites de fichier.
-5. Traiter F01, F05 et F06 avant de déclarer l’application sécurisée. Les services externes n’étaient pas configurés dans cet environnement ; leur disponibilité, leurs permissions et le déploiement des règles n’ont pas été confirmés.
+5. Finaliser la configuration et la validation cloud de F01/F06, migrer les anciens fichiers privés et révoquer la clé historique F05 avant de déclarer l’application sécurisée. Les services externes n’étaient pas configurés dans cet environnement ; leur disponibilité, leurs permissions et le déploiement des règles n’ont pas été confirmés.
 
 Aucun déploiement de production ni fusion dans `main` n’est effectué par ce lot.
+
+
+## Deuxième lot : MFA et stockage privé
+
+- Dialogue TOTP réel partagé par connexion email, Google et réauthentification. La clé d’enrôlement est affichée uniquement à l’utilisateur et n’est enregistrée ni dans les caches ni dans le profil.
+- Le serveur vérifie les facteurs inscrits dans Firebase Auth et sa politique `accountSecurity`, pas le booléen fourni par le navigateur. La politique reste protégée par les règles. Un compte protégé ne peut pas effacer cette politique avec un ancien jeton de connexion simple.
+- La finalisation de l’enrôlement ferme les sessions et impose une nouvelle connexion. La désactivation est effectuée côté serveur après réauthentification avec le second facteur. Une erreur de finalisation reste visible ; elle ne devient pas une réussite fictive.
+- `privateFiles` contient la propriété et les noms d’objets côté serveur. Le navigateur ne peut pas écrire ce registre. Les objets sont chargés sans jeton Firebase de téléchargement, sous `academia/{uid}/{uuid}`. Les réponses ne donnent pas leur chemin de bucket.
+- Les fichiers privés sont lisibles uniquement par leur propriétaire connecté. Le cookie de lecture dure une heure, est HttpOnly et SameSite Strict, devient Secure en production, est remplacé lors des changements de session et effacé à la déconnexion. Les sessions Firebase révoquées sont refusées.
+- Les publications vidéo/audio et le studio utilisent explicitement des médias publics. Les documents ne peuvent pas être publiés par cet endpoint. Leur confidentialité n’est pas déduite d’un libellé fourni par un stockage externe.
+- Les signatures des formats sont contrôlées, les mutations coûteuses sont limitées par le quota persistant et les réponses de lecture sont sans cache, avec `nosniff`. Un échec d’enregistrement de métadonnées nettoie l’objet ; une suppression échouée conserve le registre.
+- Limite effective **3 Mo** pour le relais Vercel. Les indications de 100 Mo ont été retirées des vues concernées. Les enregistrements longs ont encore besoin d’un upload direct temporaire signé. Les statistiques exhaustives de stockage sont annoncées comme indisponibles.
+- Suppression des faux posts de certification et de la note vocale synthétique créée quand le microphone échoue. Une note vocale dont l’import échoue est téléchargée localement et reste non publiée. La publication d’un post attend Firestore et conserve le brouillon en cas d’erreur.
+
+### Configuration nécessaire et limites de vérification
+
+1. Firebase Authentication doit disposer d’Identity Platform et de TOTP. `npm run configure:mfa` vérifie la configuration sans la modifier ; `npm run configure:mfa -- --apply` active TOTP en conservant les autres fournisseurs. Ces commandes nécessitent une identité Admin autorisée. Aucun secret n’est fourni par le dépôt.
+2. Le compte serveur doit accéder au bucket `gen-lang-client-0775786837.firebasestorage.app` et à la base Firestore nommée. Vérifier que ce bucket existe et que ses objets ne sont pas rendus publics par une politique IAM. Les règles Storage ne peuvent pas supprimer une autorisation IAM publique du bucket.
+3. Vérifier les règles existantes et les éventuels autres utilisateurs de ce bucket avant de publier `storage.rules`, puis déployer les règles Firestore/Storage avec le code. Les nouvelles règles Storage refusent tous les accès clients directs ; le serveur Admin reste autorisé par IAM.
+4. Tester un enrôlement réel, une connexion TOTP email/Google, un mauvais code, une désactivation, un ancien jeton et deux comptes distincts sur une pièce privée. Les tests HTTP de ce lot simulent Firebase Admin/bucket ; ils ne prouvent pas la configuration du projet cloud.
+5. Exporter/migrer les anciens fichiers privés du service Academia et révoquer sa clé exposée chez le fournisseur. Les anciennes URL ne sont pas transformées ni sécurisées automatiquement. Les pièces CGPMP existantes restent dans Firestore avec leur limite actuelle.
+6. Accès au projet Vercel refusé pour l’équipe `doc-check-dev` (**403**). Aucun jeton Vercel local disponible. GitHub Actions était bloqué par la facturation du compte au premier lot. La compilation et les vérifications locales sont exécutées ; aucune validation authentifiée de production ni déploiement de production n’est revendiquée.

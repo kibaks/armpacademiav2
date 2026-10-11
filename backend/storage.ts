@@ -25,7 +25,7 @@ export function createStorageRouter(dependencies: { authenticate?: RequestHandle
         const category = req.get('X-Upload-Category') || 'images';
         if (!/^[a-zA-Z0-9_-]{1,60}$/.test(category)) return res.status(400).json({ message: 'Catégorie invalide.' });
         const visibility = req.get('X-Upload-Visibility') || 'public';
-        if (!['public','private'].includes(visibility)) return res.status(400).json({ message: 'Visibilité invalide.' });
+        if (visibility !== 'public') return res.status(400).json({ message: 'Les fichiers privés doivent utiliser le stockage Firebase sécurisé.' });
         const entityId = req.get('X-Upload-Entity') || req.identity.uid;
         if (entityId.length > 128) return res.status(400).json({ message: 'Identifiant invalide.' });
         const form = new FormData();

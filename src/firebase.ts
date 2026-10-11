@@ -1,3 +1,4 @@
+import { withNativeMfa } from './lib/nativeMfa';
 import { scopedStorage } from './lib/scopedStorage';
 import { emptyResults, omitResults } from '../shared/results';
 import { initializeApp, getApps } from 'firebase/app';
@@ -189,7 +190,7 @@ export async function fetchCustomCoursesFromFirestore(): Promise<CourseModule[]>
 
 // Social Feed Posts persistence
 export async function savePostToFirestore(post: SocialPost): Promise<void> {
-  if (!auth.currentUser) return;
+  if (!auth.currentUser || post.authorId !== auth.currentUser.uid) throw new Error('Connexion du propriétaire requise pour publier.');
   const path = `posts/${post.id}`;
   try {
     // Strip undefined fields for Firestore compatibility
@@ -684,12 +685,12 @@ export async function firebaseRegisterUser(
 }
 
 export async function firebaseLoginUser(email: string, pass: string): Promise<UserProfile> {
-  const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass);
+  const credential = await withNativeMfa(auth, () => signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass));
   return getOrInitUserProfile(credential.user);
 }
 
 export async function firebaseGoogleLogin(): Promise<UserProfile> {
-  const userCredential = await signInWithPopup(auth, googleProvider);
+  const userCredential = await withNativeMfa(auth, () => signInWithPopup(auth, googleProvider));
   return await getOrInitUserProfile(userCredential.user);
 }
 
@@ -704,7 +705,7 @@ export async function firebaseGoogleAuthenticate(
   isNewAccount: boolean;
   existingSource?: string | null;
 }> {
-  const userCredential = await signInWithPopup(auth, googleProvider);
+  const userCredential = await withNativeMfa(auth, () => signInWithPopup(auth, googleProvider));
   const user = userCredential.user;
   const check = await checkExistingRegisteredUser({
     uid: user.uid,
@@ -761,7 +762,8 @@ export async function firebaseResetPassword(email: string): Promise<void> {
 }
 
 export async function firebaseLogout(): Promise<void> {
-  await signOut(auth);
+  try { await fetch('/api/storage/session', { method: 'DELETE' }); }
+  finally { await signOut(auth); }
 }
 
 export async function deleteCustomCourseFromFirestore(id: string): Promise<void> {

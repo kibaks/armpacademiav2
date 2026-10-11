@@ -50,6 +50,7 @@ test('unsupported extensions, forged images and malformed filenames are rejected
   assert.equal((await request('photo.jpg', Buffer.from('<script>bad</script>'))).status, 400);
   assert.equal((await request('../photo.png')).status, 400);
   assert.equal((await request('empty.png', Buffer.alloc(0))).status, 400);
+  assert.equal((await request('photo.png', png, 'valid', { 'X-Upload-Visibility': 'private' })).status, 400);
   assert.equal(upstreamCalls, before);
 });
 test('oversized images are rejected before forwarding', async () => {

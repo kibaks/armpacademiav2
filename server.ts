@@ -4,6 +4,8 @@ import { errorHandler, safeAsync } from './backend/http';
 import { aiGuard } from './backend/aiGuard';
 import { placementQuestions, gradePlacement } from './backend/placement';
 import { storageRouter } from './backend/storage';
+import { privateStorageRouter } from './backend/privateStorage';
+import { accountSecurityRouter } from './backend/accountSecurity';
 import { adminRouter, learningRouter, authenticate, requireAdmin, services } from './backend/admin';
 import express from 'express';
 import fs from 'fs';
@@ -50,6 +52,8 @@ const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: '4mb' }));
 app.disable('x-powered-by');
+app.use('/api/account', accountSecurityRouter);
+app.use('/api/storage', privateStorageRouter);
 app.use('/api/storage', storageRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);

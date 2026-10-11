@@ -31,7 +31,7 @@ export function useAcademiaUpload() {
       setProgress(0);
       setError(null);
       try {
-        if (file.size > MAX_SIZE_BYTES) throw new Error('Fichier > 100 Mo');
+        if (file.size > MAX_SIZE_BYTES) throw new Error('Fichier trop volumineux : maximum 3 Mo.');
         const res = await uploadFile(file, {
           ...opts,
           onProgress: (p) => {

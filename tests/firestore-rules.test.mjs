@@ -34,3 +34,16 @@ test('trainers cannot edit another trainer’s studio videos or answer unrelated
   await assertFails(updateDoc(doc(trainer, 'studioVideos/other'), { title: 'Modifié' }));
   await assertFails(deleteDoc(doc(trainer, 'studioVideos/other')));
 });
+
+test('native MFA policy blocks old tokens and cannot be altered by the account owner', async () => {
+  const passwordOnly = env.authenticatedContext('secured', { email: 'secured@example.com' }).firestore();
+  const secondFactor = env.authenticatedContext('secured', { email: 'secured@example.com', firebase: { sign_in_second_factor: 'totp' } }).firestore();
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'users/secured'), { ...initial, id: 'secured', email: 'secured@example.com' });
+    await setDoc(doc(context.firestore(), 'accountSecurity/secured'), { mfaRequired: true });
+  });
+  await assertFails(getDoc(doc(passwordOnly, 'users/secured')));
+  await assertSucceeds(getDoc(doc(secondFactor, 'users/secured')));
+  await assertFails(setDoc(doc(secondFactor, 'accountSecurity/secured'), { mfaRequired: false }));
+  await assertFails(setDoc(doc(secondFactor, 'privateFiles/forged'), { uploadedBy: 'secured', visibility: 'public' }));
+});

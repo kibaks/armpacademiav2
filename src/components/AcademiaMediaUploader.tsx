@@ -22,7 +22,7 @@ export const AcademiaMediaUploader: React.FC<Props> = ({
   visibility,
   entityId,
   accept,
-  maxSizeMo = 100,
+  maxSizeMo = 3,
   onUploaded,
   onError,
   label,
@@ -43,18 +43,22 @@ export const AcademiaMediaUploader: React.FC<Props> = ({
       ? 'video/*'
       : kind === 'audio'
       ? 'audio/*'
-      : 'image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.rar');
+      : 'image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip');
 
   const inferredLabel =
     label ||
     (kind === 'image' ? 'Importer une image' : kind === 'video' ? 'Importer une vidéo' : kind === 'audio' ? 'Importer un audio' : 'Importer un média');
 
   const inferredHint =
-    hint || (kind === 'image' ? 'JPG, JPEG, PNG, GIF ou WebP — maximum 3 Mo' : `Glisser-déposer ou cliquer — Images, vidéos, audios → Academia 137.184.59.184 (max ${maxSizeMo} Mo)`);
+    hint || (kind === 'image' ? 'JPG, JPEG, PNG, GIF ou WebP — maximum 3 Mo' : `Glisser-déposer ou cliquer — Images, vidéos et audios (max ${maxSizeMo} Mo)`);
 
   const handleFiles = async (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
+    if (file.size > Math.min(maxSizeMo, 3) * 1024 * 1024) {
+      const message = `Fichier trop volumineux : maximum ${Math.min(maxSizeMo, 3)} Mo.`;
+      setError(message); onError?.(message); return;
+    }
     setError(null);
     setUploading(true);
     setProgress(0);
@@ -137,7 +141,7 @@ export const AcademiaMediaUploader: React.FC<Props> = ({
           </div>
           <span className="text-[11px] text-slate-500 dark:text-slate-400 max-w-md leading-tight">{inferredHint}</span>
           <span className="text-[10px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded-full">
-            Academia Storage • 100 Mo • Images/Vidéos/Audios
+            Stockage • 3 Mo • Images/Vidéos/Audios
           </span>
         </div>
       )}

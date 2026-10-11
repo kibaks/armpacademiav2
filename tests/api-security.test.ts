@@ -6,12 +6,13 @@ import bank from '../backend/courseBank.json';
 
 const { auth, db } = services();
 mock.method(auth, 'verifyIdToken', async (token: string) => ({ uid: token, role: 'particulier' }));
+mock.method(auth, 'getUser', async (uid: string) => ({ uid }));
 const buckets = new Map();
 let unavailable = false;
 const attempts: any[] = [];
 const learning = new Map();
 mock.method(db, 'collection', (name: string) => ({
-  doc: (id: string) => ({ name, id, get: async () => ({ exists: false }), set: async () => {} }),
+  doc: (id: string) => ({ name, id, get: async () => ({ exists: false, data: () => undefined }), set: async () => {} }),
   add: async (value: any) => { attempts.push(value); },
 }));
 mock.method(db, 'runTransaction', async (fn: any) => {

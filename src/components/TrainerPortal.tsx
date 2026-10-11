@@ -769,7 +769,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             }
           };
           recorder.onstop = async () => {
-            const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+            const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || 'video/webm' });
+            const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
             const vidId = `VID-${crypto.randomUUID()}`;
             const newVid: RecordedVideo = {
               id: vidId,
@@ -782,10 +783,10 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             // → Upload vers Academia Storage (137.184.59.184) — vidéos
             try {
               setVideoUploading(true);
-              const fileName = `masterclass_${newCourseCode}_${Date.now()}.webm`;
+              const fileName = `masterclass_${newCourseCode}_${Date.now()}.${extension}`;
               const acad = await uploadBlob(blob, fileName, {
                 category: 'studio_videos',
-                visibility: 'private',
+                visibility: 'public',
                 entityId: newCourseCode,
                 description: `Masterclass ${newCourseCode} — ${newVid.title}`,
                 uploadedBy: currentProfile.email,
@@ -801,7 +802,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
               setUnpublishedRecording(null);
               setTrainerNotice('Vidéo téléversée et enregistrée.');
             } catch (e: any) {
-              setUnpublishedRecording({ url: URL.createObjectURL(blob), name: `prise_${vidId}.webm` });
+              setUnpublishedRecording({ url: URL.createObjectURL(blob), name: `prise_${vidId}.${extension}` });
               setTrainerNotice('La prise n’a pas été publiée. Téléchargez-la pour la conserver et réessayez.');
             } finally {
               setVideoUploading(false);
@@ -2069,7 +2070,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                         </div>
                       ))}
                     </div>
-                    {/* Upload personnalisé vers Academia 137.184.59.184 */}
+                    {/* Upload personnalisé vers stockage sécurisé */}
                     <div className="mt-3 space-y-2">
                       <AcademiaMediaUploader
                         kind="image"
@@ -2077,7 +2078,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                         visibility="public"
                         entityId={newCourseCode}
                         label="Téléverser votre propre couverture (Academia)"
-                        hint="Image stockée sur 137.184.59.184 • JPG/PNG/WebP • 100 Mo max • URL publique /storage/academia/covers/..."
+                        hint="Image publique • JPG/PNG/WebP • 3 Mo maximum"
                         onUploaded={(f) => { setNewCourseCover(f.url); setCoverFile(f); }}
                         onError={(m) => alert(m)}
                       />

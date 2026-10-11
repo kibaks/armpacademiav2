@@ -8,7 +8,10 @@ service cloud.firestore {
     }
 
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null &&
+        (!exists(/databases/$(database)/documents/accountSecurity/$(request.auth.uid)) ||
+         get(/databases/$(database)/documents/accountSecurity/$(request.auth.uid)).data.mfaRequired != true ||
+         ('firebase' in request.auth.token && 'sign_in_second_factor' in request.auth.token.firebase));
     }
 
     function isOwner(userId) {

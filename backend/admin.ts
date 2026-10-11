@@ -17,8 +17,17 @@ type AuthRequest = Request & { identity?: DecodedIdToken };
 export const authenticate: RequestHandler = async (req: AuthRequest, res, next) => {
   const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
   if (!token) { res.status(401).json({ error: 'Connexion Firebase requise.' }); return; }
-  try { req.identity = await services().auth.verifyIdToken(token, true); next(); }
-  catch { res.status(401).json({ error: 'Session expirée ou invalide.' }); }
+  try { req.identity = await services().auth.verifyIdToken(token, true); }
+  catch { res.status(401).json({ error: 'Session expirée ou invalide.' }); return; }
+  try {
+    const { auth, db } = services();
+    const account = await auth.getUser(req.identity.uid);
+    const policy = await db.collection('accountSecurity').doc(req.identity.uid).get();
+    if ((account.multiFactor?.enrolledFactors?.length || policy.data()?.mfaRequired === true) && !req.identity.firebase?.sign_in_second_factor) {
+      res.status(403).json({ error: 'Reconnectez-vous avec votre second facteur.', code: 'MFA_REQUIRED' }); return;
+    }
+    next();
+  } catch { res.status(503).json({ error: 'Vérification de la sécurité du compte indisponible.' }); }
 };
 export const requireAdmin: RequestHandler = (req: AuthRequest, res, next) => {
   if (!['super_admin', 'dfat_admin'].includes(req.identity?.role)) {
