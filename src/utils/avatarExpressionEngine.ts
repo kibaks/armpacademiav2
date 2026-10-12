@@ -13,7 +13,7 @@ import {
   clearAvatarSentencePhonemes,
 } from '../workers/avatarExpressionWorker';
 import { speechService } from './speechService';
-import { wav2lipWebGLCore, type Wav2LipViewport } from './wav2lipVideoRenderer';
+import { getTutorVideoRenderer, type Wav2LipViewport } from './wav2lipVideoRenderer';
 
 export interface AvatarSvgDomRefs {
   wav2lipCanvas?: HTMLCanvasElement | null;
@@ -155,23 +155,13 @@ class AvatarExpressionEngine {
       );
 
       const frame = this.latestFrame;
-      let warpedSurface: HTMLCanvasElement | HTMLImageElement | null = null;
-      let hasCanvasTarget = false;
-      this.mountedTargets.forEach((t) => {
-        if (t.wav2lipCanvas) hasCanvasTarget = true;
-      });
-      if (hasCanvasTarget) {
-        warpedSurface = wav2lipWebGLCore.renderWarpedFullFrame(frame);
-      }
-
+      const surfaces = new Map<ReturnType<typeof getTutorVideoRenderer>, HTMLCanvasElement | HTMLImageElement | null>();
       this.mountedTargets.forEach((target) => {
-        if (target.wav2lipCanvas && warpedSurface) {
-          wav2lipWebGLCore.renderToTargetCanvas(
-            target.wav2lipCanvas,
-            target.wav2lipViewport || { x: 245, y: 55, w: 495, h: 585 },
-            frame,
-            warpedSurface
-          );
+        if (target.wav2lipCanvas) {
+          const renderer = getTutorVideoRenderer(target.wav2lipViewport?.tutorPersona);
+          if (!surfaces.has(renderer)) surfaces.set(renderer, renderer.renderWarpedFullFrame(frame));
+          const surface = surfaces.get(renderer);
+          if (surface) renderer.renderToTargetCanvas(target.wav2lipCanvas, target.wav2lipViewport || { x: 245, y: 55, w: 495, h: 585 }, frame, surface);
         }
         this.applyFrameToTarget(frame, target);
       });

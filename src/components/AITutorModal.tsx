@@ -333,12 +333,20 @@ export interface VirtualTutorProfile {
 
 export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
   {
+    id: 'henri', name: 'Prof. Henri',
+    title: 'Expert commande publique • Passation & Contrôle',
+    specialty: 'PPM, DAO, contrôle et conformité des marchés',
+    badge: '👨‍🏫 Tuteur masculin', voiceLabel: 'Masculine • Grave & affirmée',
+    desc: 'Timbre rocailleux, posé et autoritaire', accentColor: 'from-slate-700 to-blue-800',
+    greeting: () => 'Bonjour. Je suis le professeur Henri. Nous allons examiner votre question avec méthode et précision. Exposez votre situation : je vous guiderai étape par étape.'
+  },
+  {
     id: 'vivienne',
     name: 'Prof. Aïsha',
     title: 'Directrice Pédagogique • Loi 10/010 & Passation',
     specialty: 'Procédures globales, PPM, DAO & Seuils',
     badge: '👩‍🏫 Tutrice Principale',
-    voiceLabel: 'Aïsha • Voix Éloquente & Humaine (Neural HD)',
+    voiceLabel: 'Féminine • Grave & assurée',
     desc: 'Chaleureuse & charismatique',
     accentColor: 'from-blue-600 to-indigo-700',
     greeting: (_firstName: string) =>
@@ -350,7 +358,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     title: 'Avocate Conseil • Contentieux, CRD & Recours ARMP',
     specialty: 'Recours gracieux, litiges CRD & sanctions',
     badge: '⚖️ Tutrice Contentieux',
-    voiceLabel: 'Vivienne HD • Mélodieuse & Souriante',
+    voiceLabel: 'Féminine • Ferme & posée',
     desc: 'Veloutée & posée',
     accentColor: 'from-purple-600 to-fuchsia-700',
     greeting: (_firstName: string) =>
@@ -362,7 +370,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     title: 'Experte Contrôle a priori • DGCMP, ANO & Gré à gré',
     specialty: 'Seuils DGCMP, Avis de Non-Objection & Avenants',
     badge: '🏛️ Tutrice Contrôle DGCMP',
-    voiceLabel: 'Vivienne Studio • Douce & Souriante',
+    voiceLabel: 'Féminine • Grave & institutionnelle',
     desc: 'Institutionnelle & sereine',
     accentColor: 'from-emerald-600 to-teal-700',
     greeting: (_firstName: string) =>
@@ -374,7 +382,7 @@ export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
     title: 'Inspectrice Audit • Exécution, Garanties & Contenu Local',
     specialty: 'Cautions, pénalités, réception & sous-traitance 51%',
     badge: '🔍 Tutrice Audit & Exécution',
-    voiceLabel: 'Vivienne HD • Claire & Souriante',
+    voiceLabel: 'Féminine • Claire & affirmée',
     desc: 'Claire & articulée',
     accentColor: 'from-amber-500 to-orange-600',
     greeting: (_firstName: string) =>
@@ -479,7 +487,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       sender: 'tuteur',
       text: learningContext
         ? `**Bonjour ${firstName} 🌸 Quelle joie de te retrouver dans notre Studio Questions / Réponses !**\n\nJe vois que tu avances avec cœur sur **${learningContext.lastCourseTitle}** (${learningContext.lastCourseProgress}% complété, progression globale à **${learningContext.overallProgress}%**). Ici, tu peux me poser toutes tes questions par écrit ou à voix haute.\n\nQue ce soit un doute sur ton dossier en cours, une préparation d'examen, une vérification de délai légal ou un **Quiz interactif Q/R**, je te réponds de vive voix et pas à pas.\n\n**Question :** Par quelle question ou mise en situation souhaites-tu commencer aujourd'hui, ${firstName} ?`
-        : `**Bonjour ${firstName} 🌸 Bienvenue dans ton Studio Tuteur Virtuel Questions / Réponses !**\n\nJe suis **Aïsha**, ta tutrice dédiée à la commande publique en RDC. Pose-moi librement toutes tes questions sur la Loi n° 10/010, le Plan de Passation (PPM), les Dossiers d'Appel d'Offres (DAO), l'Avis de Non-Objection (DGCMP) ou les recours devant l'ARMP.\n\nJe t'explique chaque règle de vive voix avec des exemples concrets de terrain et des quiz interactifs.\n\n**Question :** Dis-moi tout, ${firstName}, quelle question te préoccupe en ce moment ?`,
+        : `**Bonjour ${firstName} 🌸 Bienvenue dans ton Studio Tuteur Virtuel Questions / Réponses !**\n\nJe suis **${VIRTUAL_TUTORS.find(t => t.id === speechService.getVoicePersona())?.name || 'Prof. Aïsha'}**, votre guide dédié à la commande publique en RDC. Pose-moi librement toutes tes questions sur la Loi n° 10/010, le Plan de Passation (PPM), les Dossiers d'Appel d'Offres (DAO), l'Avis de Non-Objection (DGCMP) ou les recours devant l'ARMP.\n\nJe t'explique chaque règle de vive voix avec des exemples concrets de terrain et des quiz interactifs.\n\n**Question :** Dis-moi tout, ${firstName}, quelle question te préoccupe en ce moment ?`,
       timestamp: 'À l’instant',
       sources: learningContext
         ? [
@@ -635,6 +643,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   useEffect(() => {
     const unsub = speechService.subscribe((st) => {
+      if (st.error) { setToastNotice(st.error); setTimeout(() => setToastNotice(null), 6500); }
       if (st.currentId && st.currentId.startsWith('tutor-')) {
         setIsSpeaking(Boolean(st.isPlaying && !st.isLoading));
         if (st.currentSentenceText) {
@@ -1235,7 +1244,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const body: any = {
         message: effectiveMessage,
         history: nextAfterUser.slice(-8),
-        context: `Tutrice sélectionnée: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} | Dernier cours: ${
+        context: `Profil du tuteur sélectionné: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} | Dernier cours: ${
           learningContext
             ? `${learningContext.lastCourseTitle} (${learningContext.lastCourseCode}) ${learningContext.lastCourseProgress}%`
             : 'aucun'
@@ -1471,7 +1480,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   }`}
                 />
                 {isSpeaking
-                  ? `${activeTutor.name} vous répond de vive voix (synchronisation labiale 60 FPS)…`
+                  ? `${activeTutor.name} vous répond de vive voix…`
                   : isRecordingVoice
                   ? `Enregistrement de votre Voice en cours (${recordingSeconds}s)…`
                   : isListening
@@ -1480,7 +1489,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   ? `${activeTutor.name} prépare votre réponse juridique sur mesure…`
                   : learningContext
                   ? `Connectée à votre cours : ${learningContext.lastCourseCode} • ${learningContext.lastCourseTitle}`
-                  : 'Appels vocaux, Visio & Notes vocales (Voices) • 4 Tutrices Virtuelles'}
+                  : 'Appels vocaux, Visio & Notes vocales (Voices) • Tuteurs & tutrices virtuels'}
               </p>
             </div>
           </div>
@@ -1813,14 +1822,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   <p className="text-[11px] sm:text-xs text-slate-200 line-clamp-2 lg:line-clamp-3 leading-relaxed italic">
                     {isSpeaking && spokenSubtitle
                       ? `« ${spokenSubtitle} »`
-                      : 'Cliquez sur une question ou posez la vôtre au micro : Aïsha vous répond de vive voix.'}
+                      : 'Cliquez sur une question ou posez la vôtre au micro : Votre tuteur vous répond de vive voix.'}
                   </p>
                 </div>
 
-                {/* Sélecteur des 4 Tutrices Virtuelles & Appel Direct (Desktop) */}
+                {/* Sélecteur des Tuteurs & tutrices virtuels & Appel Direct (Desktop) */}
                 <div className="hidden lg:block space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">
-                    <span>Nos 4 Tutrices Virtuelles</span>
+                    <span>Choisissez votre tuteur</span>
                     <button
                       onClick={handleCycleSpeed}
                       className="text-amber-300 hover:underline font-mono"
@@ -1857,7 +1866,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                               )}
                             </div>
                             <p className="text-[10px] text-slate-300/80 truncate">
-                              {tutor.specialty}
+                              {tutor.voiceLabel} · {tutor.specialty}
                             </p>
                           </button>
                           <div className="flex items-center gap-1 shrink-0">
@@ -1922,10 +1931,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             {/* 1. Barre de sélection rapide des Tutrices Virtuelles (Mobile & Tablette) + Onglets Thématiques */}
             <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2 shrink-0 space-y-2">
-              {/* Sélecteur des 4 Tutrices Virtuelles & Appel direct */}
+              {/* Sélecteur des Tuteurs & tutrices virtuels & Appel direct */}
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 mr-1">
-                  Tutrices :
+                  Profils :
                 </span>
                 {VIRTUAL_TUTORS.map((tutor) => {
                   const active = selectedVoice === tutor.id;
@@ -2190,7 +2199,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                                 <button
                                   onClick={() => speak(msg.text, msg.id)}
                                   className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline"
-                                  title="Écouter cette réponse avec la voix d’Aïsha"
+                                  title="Écouter cette réponse avec le profil sélectionné"
                                 >
                                   <Volume2 className="w-3.5 h-3.5" /> Écouter Aïsha
                                 </button>
@@ -2531,7 +2540,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 </div>
 
                 <span className="text-[10px] text-slate-400 hidden sm:inline">
-                  Tutrice : {activeTutor.name} ({tutorSpeed}x)
+                  Tuteur : {activeTutor.name} ({tutorSpeed}x)
                 </span>
               </div>
             </div>
@@ -2935,7 +2944,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     type="button"
                     onClick={stopSpeaking}
                     className="px-3 py-2 rounded-full bg-amber-500/25 border border-amber-400/50 text-amber-200 text-xs font-bold flex items-center gap-1"
-                    title="Interrompre la voix de la tutrice"
+                    title="Interrompre la voix du tuteur"
                   >
                     <Pause className="w-3.5 h-3.5" />
                     <span>Stop voix</span>

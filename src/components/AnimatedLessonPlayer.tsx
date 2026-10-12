@@ -166,7 +166,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [voiceMuted, setVoiceMuted] = useState<boolean>(!autoPlayVoice);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
-  const [voicePersona, setVoicePersona] = useState<VoicePersona>('denise');
+  const [voicePersona, setVoicePersona] = useState<VoicePersona>(() => speechService.getVoicePersona());
 
   // Miniature Avatar inside Course Screen state
   const [avatarInCoursePosition, setAvatarInCoursePosition] = useState<'top-right' | 'top-left' | 'minimized'>('top-right');
@@ -541,7 +541,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const handleCycleVoicePersona = () => {
     speechService.unlockAudio();
-    const personas: VoicePersona[] = ['vivienne', 'charline', 'denise', 'eloise'];
+    const personas: VoicePersona[] = ['vivienne', 'charline', 'denise', 'eloise', 'henri'];
     const nextPersona = personas[(personas.indexOf(voicePersona) + 1) % personas.length] || 'vivienne';
     setVoicePersona(nextPersona);
     speechService.setVoicePersona(nextPersona);

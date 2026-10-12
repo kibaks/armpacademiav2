@@ -1,3 +1,4 @@
+import { TUTOR_VOICES } from '../../shared/tutorVoices';
 import { authenticatedFetch } from '../lib/adminApi';
 // Expressive Neural Human Voice, Millisecond Word-Boundary Lip-Sync & Facial Gesture Engine
 // Supports ElevenLabs Multilingual v2 API + Studio Neural HD Voices (Vivienne / Denise / Eloise)
@@ -17,7 +18,7 @@ import {
 export type LipViseme = 'closed' | 'narrow' | 'medium' | 'open' | 'wide' | 'round';
 export type { AvatarEmotion, TtsEmotionalTag };
 
-export type NeuralVoicePersona = 'vivienne' | 'denise' | 'eloise' | 'charline';
+export type NeuralVoicePersona = import('../../shared/tutorVoices').TutorPersona;
 export type VoicePersona = NeuralVoicePersona;
 
 export interface TtsWordBoundary {
@@ -28,6 +29,7 @@ export interface TtsWordBoundary {
 }
 
 export interface SpeechPlaybackState {
+  error?: string;
   isPlaying: boolean;
   isLoading: boolean;
   currentId: string | null;
@@ -46,6 +48,7 @@ export interface SpeechPlaybackState {
     | 'neural-denise-hd'
     | 'neural-eloise-hd'
     | 'neural-charline-hd'
+    | 'neural-henri-hd'
     | 'gemini-tts'
     | 'web-speech';
   currentSentence?: number;
@@ -587,6 +590,7 @@ class SpeechService {
 
   constructor() {
     if (typeof window !== 'undefined') {
+      try { const saved = localStorage.getItem('academia-tutor-persona'); if (saved && saved in TUTOR_VOICES) this.preferredPersona = saved as NeuralVoicePersona; } catch { /* Storage can be unavailable. */ }
       const unlockHandler = () => {
         this.unlockAudio();
         if (this.currentAudioElement && this.currentAudioElement.paused && this.state.isPlaying) {
@@ -615,6 +619,7 @@ class SpeechService {
 
   public setVoicePersona(persona: NeuralVoicePersona) {
     this.preferredPersona = persona;
+    try { localStorage.setItem('academia-tutor-persona', persona); } catch { /* Keep the current in-memory selection. */ }
   }
 
   public getVoicePersona(): NeuralVoicePersona {
@@ -1331,7 +1336,7 @@ class SpeechService {
 
     const pool = frVoices;
 
-    const naturalFemininePriority = [
+    const naturalFemininePriority = this.preferredPersona === 'henri' ? ['henri', 'remy', 'alain', 'fabrice', 'paul'] : [
       'vivienne',
       'denise',
       'eloise',
@@ -1364,6 +1369,7 @@ class SpeechService {
       if (match) return match;
     }
 
+    if (this.preferredPersona === 'henri') return null;
     const frFR = pool.find((v) => v.lang === 'fr-FR' || v.lang === 'fr_FR');
     if (frFR) return frFR;
 
@@ -1618,7 +1624,7 @@ class SpeechService {
     timeoutMs: number = 18000
   ): Promise<DecodedNeuralEntry | null> {
     if (!this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `aisha_human_voice_v3::${voice}::${sentence}`;
+    const cacheKey = `tutor_voice_v4::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1634,7 +1640,7 @@ class SpeechService {
         // Server down = instant connection error, so the ladder waits ~27s of
         // pure retry; server up but slow = each attempt allows up to
         // timeoutMs for ElevenLabs + edge to answer.
-        const NEURAL_BACKOFF_MS = [400, 800, 1600, 3200, 5000, 5000, 5000, 5000];
+        const NEURAL_BACKOFF_MS = [800];
         for (let attempt = 0; attempt <= NEURAL_BACKOFF_MS.length; attempt++) {
           try {
             const controller = new AbortController();
@@ -1652,6 +1658,7 @@ class SpeechService {
             });
             window.clearTimeout(timeoutId);
 
+            if ([401, 403, 429, 503].includes(response.status)) return null;
             if (response.ok && response.status !== 204) {
               const data = await response.json();
               const rawAudio = data?.audioData || data?.audioBase64;
@@ -1908,7 +1915,7 @@ class SpeechService {
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if (this.neuralTtsAvailable) {
-      const cacheKey = `aisha_human_voice_v3::${voiceName}::${sentence}`;
+      const cacheKey = `tutor_voice_v4::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -2291,8 +2298,10 @@ class SpeechService {
     //    entièrement lisible et la synthèse reprendra dès le retour du serveur.
     const allowBrowserVoice = await this.refreshBrowserFallbackFlag(true);
     if (!allowBrowserVoice) {
-      console.warn('[Speech] Voix neurale indisponible et voix machine désactivée (paramétrage) — lecture interrompue.');
+      console.warn('[Speech] Voix sélectionnée indisponible.');
       this.stop();
+      this.state.error = 'La voix sélectionnée est momentanément indisponible. La réponse reste disponible par écrit.';
+      this.notify();
       return;
     }
 

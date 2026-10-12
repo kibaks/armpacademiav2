@@ -1,3 +1,4 @@
+import { getTutorVoice, getElevenLabsTutorVoice } from './shared/tutorVoices.js';
 import { authRouter } from './backend/auth.js';
 import { cgpmpRouter } from './backend/cgpmp.js';
 import { storageRouter } from './backend/storage';
@@ -943,6 +944,7 @@ interface CachedTtsPayload {
     | 'neural-denise-hd'
     | 'neural-eloise-hd'
     | 'neural-charline-hd'
+    | 'neural-henri-hd'
     | 'gemini-tts';
   wordBoundaries: TtsWordBoundary[];
   emotion?: string;
@@ -1097,10 +1099,12 @@ async function synthesizeWithElevenLabs(
   if (!apiKey) return null;
 
   try {
+    const personaVoiceId = getElevenLabsTutorVoice(requestedVoice || 'vivienne', process.env);
+    if (!personaVoiceId) return null;
     const voiceId =
       requestedVoice && requestedVoice.length > 14 && !requestedVoice.startsWith('fr-')
         ? requestedVoice
-        : process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // Sarah / Bella Multilingual expressive female
+        : personaVoiceId; // Sarah / Bella Multilingual expressive female
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 14000);
@@ -1378,31 +1382,14 @@ async function synthesizeWithStudioNeuralHD(
   _emotionOption?: string,
   preferredVoice?: NeuralVoicePref
 ): Promise<CachedTtsPayload | null> {
-  const candidateVoices: Array<{ voice: string; tag: CachedTtsPayload['provider'] }> = [
-    { voice: 'fr-FR-DeniseNeural', tag: 'neural-denise-hd' },
-    { voice: 'fr-FR-VivienneMultilingualNeural', tag: 'neural-vivienne-hd' },
-    { voice: 'fr-FR-VivienneNeural', tag: 'neural-vivienne-hd' },
-  ];
-
-  // Voix préférée du paramétrage (tts-settings.json) placée en tête de la cascade
-  const preferredMap: Record<NeuralVoicePref, string> = {
-    denise: 'fr-FR-DeniseNeural',
-    'vivienne-multilingual': 'fr-FR-VivienneMultilingualNeural',
-    vivienne: 'fr-FR-VivienneNeural',
-  };
-  const preferred = preferredVoice ? preferredMap[preferredVoice] : undefined;
-  if (preferred) {
-    const idx = candidateVoices.findIndex((c) => c.voice === preferred);
-    if (idx > 0) {
-      candidateVoices.unshift(candidateVoices.splice(idx, 1)[0]);
-    }
-  }
+  const profile = getTutorVoice(_voiceOption);
+  const candidateVoices = profile.voices.map(voice => ({ voice, tag: (_voiceOption === 'henri' ? 'neural-henri-hd' : 'neural-vivienne-hd') as CachedTtsPayload['provider'] }));
 
   for (let attempt = 0; attempt < candidateVoices.length; attempt++) {
     const { voice, tag } = candidateVoices[attempt];
     try {
       // Natural, fluent and lively human cadence (+2%) matching standard French speech rate perfectly
-      const result = await runSingleEdgeSynthesis(text, voice, tag, '+2%', '+0Hz');
+      const result = await runSingleEdgeSynthesis(text, voice, tag, profile.rate, profile.pitch);
       if (result) return result;
     } catch {
       // Wait briefly before retrying
@@ -1676,13 +1663,13 @@ async function getOrSynthesizeTtsPayload(
 
   // Per-persona voice key (Aïsha = 'vivienne'); unknown values fall back to her.
   const requestedVoiceKey = String(voice || '').toLowerCase();
-  const voiceKey = (['vivienne', 'denise', 'eloise', 'charline'] as const).includes(
+  const voiceKey = (['vivienne', 'denise', 'eloise', 'charline', 'henri'] as const).includes(
     requestedVoiceKey as 'vivienne'
   )
     ? requestedVoiceKey
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `prof_vivienne_smile_v27::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `tutor_authority_v28::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
   if (cached) {
     ttsMemoryCache.set(cacheKey, cached);
@@ -1746,6 +1733,7 @@ async function getOrSynthesizeTtsPayload(
           if (ai && Date.now() > geminiTtsCooldownUntil) {
             try {
               const geminiVoiceMap: Record<string, string> = {
+                henri: 'Orus',
                 denise: 'Kore',
                 charline: 'Zephyr',
                 vivienne: 'Aoede',
@@ -1911,6 +1899,7 @@ const TUTOR_PERSONAS_META: Record<
   string,
   { name: string; title: string; specialty: string }
 > = {
+  henri: { name: 'Prof. Henri', title: 'Expert commande publique', specialty: 'la passation, le contrôle et la conformité des marchés publics' },
   denise: {
     name: 'Prof. Aïsha',
     title: 'Tutrice Principale • Loi 10/010 & Passation',

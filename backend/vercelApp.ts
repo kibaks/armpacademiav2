@@ -1,3 +1,4 @@
+import { getTutorVoice, getElevenLabsTutorVoice } from '../shared/tutorVoices.js';
 import { authRouter } from './auth.js';
 import { cgpmpRouter } from './cgpmp.js';
 import { storageRouter } from './storage.js';
@@ -855,14 +856,16 @@ function detectSentenceEmotion(text: string): string {
 // 1. Edge TTS Universal Synthesis
 async function synthesizeWithEdgeUniversal(
   text: string,
-  voiceName: string = 'fr-FR-VivienneMultilingualNeural'
+  voiceName: string = 'fr-FR-VivienneMultilingualNeural',
+  persona: string = 'vivienne'
 ): Promise<TtsSynthesisResult | null> {
   try {
     const comm = new Communicate(text, {
       voice: voiceName,
-      rate: '+2%',
-      pitch: '+0Hz',
+      rate: getTutorVoice(persona).rate,
+      pitch: getTutorVoice(persona).pitch,
       volume: '+0%',
+      connectionTimeout: 5000,
     });
 
     const audioChunks: Buffer[] = [];
@@ -896,10 +899,11 @@ async function synthesizeWithEdgeUniversal(
 }
 
 // 2. ElevenLabs Synthesis (if configured)
-async function synthesizeWithElevenLabs(text: string): Promise<TtsSynthesisResult | null> {
+async function synthesizeWithElevenLabs(text: string, persona: string): Promise<TtsSynthesisResult | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return null;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+  const voiceId = getElevenLabsTutorVoice(persona, process.env);
+  if (!voiceId) return null;
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -976,14 +980,6 @@ async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthe
   };
 }
 
-const TUTOR_VOICE_MAP: Record<string, string[]> = {
-  denise: ['fr-FR-DeniseNeural', 'fr-FR-VivienneMultilingualNeural', 'fr-FR-VivienneNeural'],
-  vivienne: ['fr-FR-VivienneMultilingualNeural', 'fr-FR-DeniseNeural', 'fr-FR-VivienneNeural'],
-  henri: ['fr-FR-RemyMultilingualNeural', 'fr-FR-HenriNeural', 'fr-FR-VivienneMultilingualNeural'],
-  eloi: ['fr-FR-VivienneMultilingualNeural', 'fr-FR-DeniseNeural'],
-  charline: ['fr-FR-DeniseNeural', 'fr-FR-VivienneMultilingualNeural']
-};
-
 // Cascaded Synthesis Engine
 async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): Promise<CachedTtsPayload> {
   const cleanSentence = text.trim().slice(0, 950);
@@ -991,7 +987,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
 
   // Try ElevenLabs if configured
   if (process.env.ELEVENLABS_API_KEY) {
-    const el = await synthesizeWithElevenLabs(cleanSentence);
+    const el = await synthesizeWithElevenLabs(cleanSentence, voiceKey);
     if (el) {
       const b64 = el.audioBuffer.toString('base64');
       return {
@@ -1006,9 +1002,9 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
   }
 
   // Try Edge Neural Voices
-  const candidateVoices = TUTOR_VOICE_MAP[voiceKey] || TUTOR_VOICE_MAP.denise;
+  const candidateVoices = getTutorVoice(voiceKey).voices;
   for (const v of candidateVoices) {
-    const res = await synthesizeWithEdgeUniversal(cleanSentence, v);
+    const res = await Promise.race([synthesizeWithEdgeUniversal(cleanSentence, v, voiceKey), new Promise<null>(resolve => setTimeout(() => resolve(null), 6500))]);
     if (res && res.audioBuffer.length > 256) {
       const b64 = res.audioBuffer.toString('base64');
       return {
@@ -1022,18 +1018,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
     }
   }
 
-  // Google Translate TTS Fallback
-  console.log('[TTS] Edge Neural unavailable, falling back to Google French TTS');
-  const gRes = await synthesizeWithGoogleTranslateTTS(cleanSentence);
-  const gB64 = gRes.audioBuffer.toString('base64');
-  return {
-    audioData: gB64,
-    audioBase64: gB64,
-    mimeType: 'audio/mpeg',
-    provider: 'google-fr-tts',
-    wordBoundaries: gRes.wordBoundaries,
-    emotion: detectSentenceEmotion(cleanSentence)
-  };
+  throw new Error('La voix sélectionnée est momentanément indisponible. Réessayez dans quelques instants.');
 }
 
 // ------------------------------------------------------------------
@@ -1077,7 +1062,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     }
 
     const cleanSentence = rawText.slice(0, 950);
-    const cacheKey = `v30:${voiceChoice}:${cleanSentence}`;
+    const cacheKey = `v31:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1112,7 +1097,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     if (result) {
       return res.json(result);
     }
-    return res.status(500).json({ error: 'Échec de la synthèse vocale' });
+    return res.status(503).json({ error: 'La voix sélectionnée est momentanément indisponible. Réessayez dans quelques instants.' });
   } catch (err: any) {
     console.error('[Neural TTS Vercel] Route error:', err?.message);
     return res.status(500).json({ error: 'Synthèse vocale temporairement indisponible.' });
@@ -1132,7 +1117,7 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     for (const s of sentences) {
       const cleanSentence = (s || '').toString().trim().slice(0, 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v30:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v31:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
 
       synthesizeSpeech(cleanSentence, voiceChoice)

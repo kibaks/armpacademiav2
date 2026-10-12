@@ -44,6 +44,7 @@ const SIZE_MAP: Record<string, { w: number; h: number }> = {
 };
 
 const TUTOR_ACCENT_BORDERS: Record<VoicePersona, string> = {
+  henri: 'border-sky-400/90 shadow-sky-500/25',
   denise: 'border-cyan-400/90 shadow-cyan-500/25',
   charline: 'border-fuchsia-400/90 shadow-fuchsia-500/25',
   vivienne: 'border-emerald-400/90 shadow-emerald-500/25',
@@ -169,6 +170,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
       )}
 
       <canvas
+        role="img" aria-label={tutorPersona === 'henri' ? 'Professeur Henri, tuteur masculin' : 'Tutrice virtuelle'}
         ref={wav2lipCanvasRef}
         width={isVisio ? 680 : isStudio || dim.w >= 180 ? 600 : 360}
         height={isVisio ? 640 : isStudio || dim.w >= 180 ? 580 : 380}
@@ -179,16 +181,6 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
         }
       />
 
-      {isVisio && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-slate-950/85 border border-cyan-400/50 backdrop-blur-sm pointer-events-none max-w-[92%] truncate shadow-lg">
-          <span
-            ref={postureBadgeRef as React.RefObject<HTMLSpanElement>}
-            className="text-[11px] font-extrabold text-amber-200 tracking-wide"
-          >
-            🌸 Wav2Lip 60 FPS • Port de tête féminin &amp; Sourire naturel
-          </span>
-        </div>
-      )}
 
       {showBadge && !isVisio && !isStudio && dim.w < 180 && (
         <span

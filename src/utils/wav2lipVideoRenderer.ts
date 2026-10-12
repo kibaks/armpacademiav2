@@ -8,6 +8,7 @@
 // - Exact Reference Mouth Articulation Display Model (Open Vowel Panel A + Rounded Pucker Panel B) locked to the voice.
 
 import imgTutrice from '../assets/images/aisha_cutout_foreground.png';
+import imgTutorMale from '../assets/images/henri_tutor_foreground.webp';
 import imgStudioBg from '../assets/images/studio_static_background.jpg';
 import type { AvatarComputedFrame } from '../workers/avatarExpressionWorker';
 
@@ -701,7 +702,7 @@ class SharedWav2LipWebGLCore {
   private posLoc = -1;
   private uvLoc = -1;
 
-  constructor() {
+  constructor(private foreground = imgTutrice) {
     if (typeof document !== 'undefined') {
       this.init();
     }
@@ -742,7 +743,7 @@ class SharedWav2LipWebGLCore {
         }
         this.isReady = true;
       };
-      img.src = imgTutrice;
+      img.src = this.foreground;
     } catch {
       // Fallback cleanly if WebGL is unavailable
     }
@@ -1286,3 +1287,6 @@ class SharedWav2LipWebGLCore {
 }
 
 export const wav2lipWebGLCore = new SharedWav2LipWebGLCore();
+
+const maleWav2lipCore = new SharedWav2LipWebGLCore(imgTutorMale);
+export function getTutorVideoRenderer(persona?: string) { return persona === 'henri' ? maleWav2lipCore : wav2lipWebGLCore; }
