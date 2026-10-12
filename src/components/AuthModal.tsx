@@ -58,6 +58,10 @@ import {
   formatMatriculeOrRccmMask,
   getDefaultMatriculePrefixByRole,
   filterEmailMask,
+  filterAddressMask,
+  validateCivilIdentity,
+  isValidPastDate,
+  type CivilIdentity,
   DRC_PROVINCES
 } from '../utils/inputMasks';
 import { AuthPortalLeftColumn } from './AuthPortalLeftColumn';
@@ -70,6 +74,7 @@ import { CgpmpAdminValidationPanel } from './CgpmpAdminValidationPanel';
 import { ArmpLogo } from './ArmpLogo';
 import { AuthShowcase } from './AuthShowcase';
 import { RegistrationProgress, RegistrationProfilePicker } from './RegistrationIntro';
+import { IdentityFields, MaskedPhoneInput } from './IdentityFields';
 import './AuthPortal.css';
 
 export interface RegisterLearnerData {
@@ -759,6 +764,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Registration steps (1 to 5 for CGPMP, 1 to 4 for other profiles)
   const [registerStep, setRegisterStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [stepError, setStepError] = useState<string | null>(null);
+  const [identityErrors, setIdentityErrors] = useState<Partial<Record<keyof CivilIdentity, string>>>({});
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
   // Google Auth State
@@ -768,17 +774,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [existingGoogleAccount, setExistingGoogleAccount] = useState<UserProfile | null>(null);
 
   // Civil Identity Fields (Step 2 — Separated from Step 1)
-  const [civiliteInput, setCiviliteInput] = useState<string>('M.');
+  const [civiliteInput, setCiviliteInput] = useState<string>('');
   const [nomInput, setNomInput] = useState<string>('');
   const [postnomInput, setPostnomInput] = useState<string>('');
   const [prenomInput, setPrenomInput] = useState<string>('');
   const [sexeInput, setSexeInput] = useState<'M' | 'F'>('M');
-  const [dateNaissanceInput, setDateNaissanceInput] = useState<string>('1984-06-15');
-  const [lieuNaissanceInput, setLieuNaissanceInput] = useState<string>('Kinshasa');
-  const [nationaliteInput, setNationaliteInput] = useState<string>('Congolaise (RDC)');
-  const [etatCivilInput, setEtatCivilInput] = useState<string>('Marié(e)');
-  const [pieceIdentiteInput, setPieceIdentiteInput] = useState<string>('ONIP-RDC-24389104');
-  const [adressePhysiqueInput, setAdressePhysiqueInput] = useState<string>('Boulevard du 30 Juin, Commune de la Gombe, Kinshasa');
+  const [dateNaissanceInput, setDateNaissanceInput] = useState<string>('');
+  const [lieuNaissanceInput, setLieuNaissanceInput] = useState<string>('');
+  const [nationaliteInput, setNationaliteInput] = useState<string>('');
+  const [etatCivilInput, setEtatCivilInput] = useState<string>('');
+  const [pieceIdentiteInput, setPieceIdentiteInput] = useState<string>('');
+  const [adressePhysiqueInput, setAdressePhysiqueInput] = useState<string>('');
 
   // Dynamic Profile Fields
   const initialConfig = ROLE_CREATION_CONFIG[initialRole] || ROLE_CREATION_CONFIG.cgpmp_member;
@@ -1060,6 +1066,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (stepError) dialogRef.current?.querySelector('[role="alert"]')?.scrollIntoView({ block: 'nearest' });
   }, [stepError]);
 
+  const identityValue: CivilIdentity = { nom: nomInput, postnom: postnomInput, prenom: prenomInput, email: emailInput, civilite: civiliteInput, sexe: sexeInput, naissance: dateNaissanceInput, lieu: lieuNaissanceInput, nationalite: nationaliteInput, etatCivil: etatCivilInput, piece: pieceIdentiteInput };
+  const changeIdentity = (field: keyof CivilIdentity, value: string) => {
+    const setters = { nom: setNomInput, postnom: setPostnomInput, prenom: setPrenomInput, email: setEmailInput, civilite: setCiviliteInput, naissance: setDateNaissanceInput, lieu: setLieuNaissanceInput, nationalite: setNationaliteInput, etatCivil: setEtatCivilInput, piece: setPieceIdentiteInput };
+    if (field === 'sexe') setSexeInput(value as 'M' | 'F'); else setters[field](value);
+    setIdentityErrors(previous => { const next = { ...previous }; delete next[field]; return next; });
+    setStepError(null);
+  };
+
   if (!isOpen) return null;
 
   const getFriendlyAuthError = (err: unknown): string => {
@@ -1203,20 +1217,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const cleanPrenom = filterPersonNameMask(prenomInput).trim();
     const cleanMail = filterEmailMask(emailInput).trim().toLowerCase();
 
-    if (cleanNom.length < 2) {
-      setStepError('Veuillez renseigner votre Nom de famille (au moins 2 lettres).');
-      return;
-    }
-    if (cleanPostnom.length < 2) {
-      setStepError('Veuillez renseigner votre Post-nom (au moins 2 lettres).');
-      return;
-    }
-    if (cleanPrenom.length < 2) {
-      setStepError('Veuillez renseigner votre Prénom (au moins 2 lettres).');
-      return;
-    }
-    if (!cleanMail || !cleanMail.includes('@') || !cleanMail.includes('.')) {
-      setStepError('Veuillez saisir une adresse email officielle valide.');
+    const errors = validateCivilIdentity({ ...identityValue, nom: cleanNom, postnom: cleanPostnom, prenom: cleanPrenom, email: cleanMail });
+    setIdentityErrors(errors);
+    const invalidField = Object.keys(errors)[0] as keyof CivilIdentity | undefined;
+    if (invalidField) {
+      setStepError(errors[invalidField]!);
+      document.getElementById(`identity-${invalidField}`)?.focus();
       return;
     }
 
@@ -1254,6 +1260,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       // Mandatory check for CGPMP: Document portant création de la cellule
       if (isCgpmp) {
+        if (!isValidPastDate(creationDocDate)) {
+          setStepError('Choisissez une date de signature valide, qui ne soit pas dans le futur.');
+          return;
+        }
         if (!creationDocRef.trim() || creationDocRef.trim().length < 4) {
           setStepError(
             'Condition CGPMP : Veuillez indiquer la référence officielle du document portant création de la cellule.'
@@ -2251,235 +2261,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             </div>
                           )}
 
-                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <div className="text-xs font-extrabold text-slate-900 dark:text-white">
-                                  {isCgpmp ? 'Identité du secrétaire permanent' : 'Votre identité'}
-                                </div>
-                                <p className="text-[11px] text-slate-500">
-                                  Renseignez vos coordonnées et vos informations personnelles.
-                                </p>
-                              </div>
-                              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO === 'true' && (<button
-                                type="button"
-                                onClick={() => {
-                                  setCiviliteInput('M.');
-                                  setNomInput('KABASELE');
-                                  setPostnomInput('LUKOJI');
-                                  setPrenomInput('Fidèle');
-                                  setSexeInput('M');
-                                  setDateNaissanceInput('1982-04-18');
-                                  setLieuNaissanceInput('Kinshasa');
-                                  setNationaliteInput('Congolaise (RDC)');
-                                  setEtatCivilInput('Marié(e)');
-                                  setPieceIdentiteInput('ONIP-RDC-24390812');
-                                  if (!emailInput) {
-                                    setEmailInput(
-                                      isCgpmp
-                                        ? 'sp.cgpmp@infrastructures.gouv.cd'
-                                        : 'f.kabasele@finances.gouv.cd'
-                                    );
-                                  }
-                                  setStepError(null);
-                                  onShowToast?.('Exemple d’identité civile complète pré-rempli.');
-                                }}
-                                className="px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 text-[11px] font-extrabold hover:bg-blue-200 transition cursor-pointer"
-                              >
-                                + Pré-remplir un exemple d’identité
-                              </button>)}
-                            </div>
-
-                            {/* Row 1: Civilité & Sexe */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Civilité / Titre *
-                                </label>
-                                <select
-                                  aria-label="Civilité" value={civiliteInput}
-                                  onChange={(e) => setCiviliteInput(e.target.value)}
-                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
-                                >
-                                  <option value="M.">Monsieur (M.)</option>
-                                  <option value="Mme">Madame (Mme)</option>
-                                  <option value="Ir.">Ingénieur (Ir.)</option>
-                                  <option value="Me">Maître (Me)</option>
-                                  <option value="Dr">Docteur (Dr)</option>
-                                  <option value="Pr.">Professeur (Pr.)</option>
-                                  <option value="Hon.">Honorable (Hon.)</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Sexe / Genre *
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSexeInput('M')}
-                                    className={`py-2.5 px-3 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
-                                      sexeInput === 'M'
-                                        ? 'border-blue-600 bg-blue-600 text-white'
-                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                                    }`}
-                                  >
-                                    Masculin (M)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSexeInput('F')}
-                                    className={`py-2.5 px-3 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
-                                      sexeInput === 'F'
-                                        ? 'border-blue-600 bg-blue-600 text-white'
-                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                                    }`}
-                                  >
-                                    Féminin (F)
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Row 2: Nom, Post-nom, Prénom */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Nom (Nom de famille) *
-                                </label>
-                                <div className="relative">
-                                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                                  <input
-                                    type="text"
-                                    required
-                                    aria-label="Nom (nom de famille)" value={nomInput}
-                                    onChange={(e) => setNomInput(filterPersonNameMask(e.target.value).toUpperCase())}
-                                    placeholder="ex: KABASELE"
-                                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase"
-                                  />
-                                </div>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Post-nom *
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  aria-label="Post-nom" value={postnomInput}
-                                  onChange={(e) => setPostnomInput(filterPersonNameMask(e.target.value).toUpperCase())}
-                                  placeholder="ex: LUKOJI"
-                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Prénom *
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  aria-label="Prénom" value={prenomInput}
-                                  onChange={(e) => setPrenomInput(filterPersonNameMask(e.target.value))}
-                                  placeholder="ex: Fidèle"
-                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Row 3: Adresse Email officielle & N° Pièce d'Identité */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  {isCgpmp ? 'Adresse Email officielle du Secrétaire Permanent *' : 'Adresse Email professionnelle / officielle *'}
-                                </label>
-                                <div className="relative">
-                                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                                  <input
-                                    type="email"
-                                    required
-                                    aria-label="Adresse email d’inscription" value={emailInput}
-                                    onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
-                                    placeholder={isCgpmp ? 'secretaire@institution.cd' : 'vous@exemple.cd'}
-                                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
-                                  />
-                                </div>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  N° Pièce d’Identité (Carte d’Électeur ONIP / Passeport) *
-                                </label>
-                                <input
-                                  type="text"
-                                  aria-label="Numéro de pièce d’identité" value={pieceIdentiteInput}
-                                  onChange={(e) => setPieceIdentiteInput(formatMatriculeOrRccmMask(e.target.value))}
-                                  placeholder="ex: ONIP-RDC-24389104"
-                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white uppercase"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Row 4: Date de naissance, Lieu de naissance, Nationalité, État civil */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Date de naissance
-                                </label>
-                                <input
-                                  type="date"
-                                  aria-label="Date de naissance" value={dateNaissanceInput}
-                                  onChange={(e) => setDateNaissanceInput(e.target.value)}
-                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Lieu de naissance
-                                </label>
-                                <input
-                                  type="text"
-                                  aria-label="Lieu de naissance" value={lieuNaissanceInput}
-                                  onChange={(e) => setLieuNaissanceInput(filterPersonNameMask(e.target.value))}
-                                  placeholder="ex: Kinshasa"
-                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  Nationalité
-                                </label>
-                                <input
-                                  type="text"
-                                  aria-label="Nationalité" value={nationaliteInput}
-                                  onChange={(e) => setNationaliteInput(e.target.value)}
-                                  placeholder="Congolaise (RDC)"
-                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                                  État civil
-                                </label>
-                                <select
-                                  aria-label="État civil" value={etatCivilInput}
-                                  onChange={(e) => setEtatCivilInput(e.target.value)}
-                                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
-                                >
-                                  <option value="Marié(e)">Marié(e)</option>
-                                  <option value="Célibataire">Célibataire</option>
-                                  <option value="Veuf / Veuve">Veuf / Veuve</option>
-                                  <option value="Divorcé(e)">Divorcé(e)</option>
-                                </select>
-                              </div>
-                            </div>
-                          </div>
+                          <IdentityFields value={identityValue} onChange={changeIdentity} errors={identityErrors} isCgpmp={isCgpmp} emailLocked={!!googleAuthUid} />
 
                           <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
                             <button
@@ -2519,7 +2301,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               <input
                                 type="text"
                                 required
-                                aria-label={activeRoleConfig.institutionLabel} value={institutionInput}
+                                maxLength={90} autoComplete="organization" aria-label={activeRoleConfig.institutionLabel} value={institutionInput}
                                 onChange={(e) => setInstitutionInput(filterInstitutionMask(e.target.value))}
                                 placeholder={activeRoleConfig.institutionPlaceholder}
                                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
@@ -2760,14 +2542,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               </div>
                               <div className="relative">
                                 <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                                <input
-                                  type="tel"
-                                  required
-                                  aria-label="Téléphone RDC" value={phoneInput}
-                                  onChange={(e) => setPhoneInput(formatDRCPhoneMask(e.target.value))}
-                                  placeholder="+243 81 234 5678"
-                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs font-bold text-slate-900 dark:text-white"
-                                />
+                                <MaskedPhoneInput aria-label="Téléphone RDC" value={phoneInput} onValueChange={setPhoneInput} required autoComplete="tel" inputMode="tel" placeholder="+243 81 234 5678" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs text-slate-900 dark:text-white" />
+
                               </div>
                             </div>
                           </div>
@@ -2778,8 +2554,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             </label>
                             <input
                               type="text"
-                              aria-label="Adresse physique" value={adressePhysiqueInput}
-                              onChange={(e) => setAdressePhysiqueInput(e.target.value)}
+                              maxLength={180} autoComplete="street-address" aria-label="Adresse physique" value={adressePhysiqueInput}
+                              onChange={(e) => setAdressePhysiqueInput(filterAddressMask(e.target.value))}
                               placeholder="ex: Boulevard du 30 Juin, Commune de la Gombe, Kinshasa"
                               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                             />
@@ -2795,7 +2571,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 <input
                                   type="text"
                                   required
-                                  aria-label="Matricule ou identifiant" value={matriculeInput}
+                                  maxLength={48} autoCapitalize="characters" spellCheck={false} aria-label="Matricule ou identifiant" value={matriculeInput}
                                   onChange={(e) =>
                                     setMatriculeInput(formatMatriculeOrRccmMask(e.target.value))
                                   }
@@ -2814,7 +2590,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                   type="text"
                                   required
                                   readOnly={isCgpmp}
-                                  value={isCgpmp ? creationDocRef : secondaryIdInput}
+                                  aria-label={activeRoleConfig.secondaryIdLabel} maxLength={48} autoCapitalize="characters" spellCheck={false} value={isCgpmp ? creationDocRef : secondaryIdInput}
                                   onChange={(e) =>
                                     setSecondaryIdInput(formatMatriculeOrRccmMask(e.target.value))
                                   }

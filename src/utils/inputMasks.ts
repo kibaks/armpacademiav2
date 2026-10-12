@@ -10,6 +10,7 @@ import { UserRole } from '../types';
 export function formatDRCPhoneMask(rawInput: string): string {
   // Extraire uniquement les chiffres
   let digits = (rawInput || '').replace(/\D/g, '');
+  if (digits.startsWith('00243')) digits = digits.slice(2);
 
   // Si l'utilisateur efface tout ou ne laisse que "243"
   if (!digits || digits === '243' || digits === '24' || digits === '2') {
@@ -61,13 +62,14 @@ export function isValidDRCPhone(formattedPhone: string): boolean {
  */
 export function filterPersonNameMask(rawInput: string): string {
   const cleaned = (rawInput || '')
-    .replace(/[^a-zA-ZÀ-ÿ\s\-'.]/g, '')
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{M}\s\-'’.]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/\-{2,}/g, '-')
     .slice(0, 70);
 
   // Mettre en majuscule l'initiale de chaque mot tout en préservant la saisie en cours
-  return cleaned.replace(/(^|[\s\-'])([a-zà-ÿ])/g, (_match, sep, char) => `${sep}${char.toUpperCase()}`);
+  return cleaned.replace(/(^|[\s\-'’])(\p{Ll})/gu, (_match, sep, char) => `${sep}${char.toUpperCase()}`);
 }
 
 /**
@@ -89,7 +91,8 @@ export function filterInstitutionMask(rawInput: string): string {
  */
 export function filterRoleTitleMask(rawInput: string): string {
   return (rawInput || '')
-    .replace(/[^a-zA-ZÀ-ÿ0-9\s\-'().,/&]/g, '')
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{M}0-9\s\-'’().,/&]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .slice(0, 75);
 }
@@ -98,15 +101,15 @@ export function filterRoleTitleMask(rawInput: string): string {
  * Masque verrouillé et filtré pour Matricule Administratif ou N° ARSP / RCCM (PME)
  * - Convertit tout en MAJUSCULES
  * - N'autorise que A-Z, 0-9, tiret (-) et slash (/)
- * - Limite à 28 caractères
+ * - Limite à 48 caractères
  */
 export function formatMatriculeOrRccmMask(rawInput: string): string {
   return (rawInput || '')
     .toUpperCase()
-    .replace(/[^A-Z0-9\-\/]/g, '')
+    .replace(/[^A-Z0-9.\-\/]/g, '')
     .replace(/[\-]{2,}/g, '-')
     .replace(/[\/]{2,}/g, '/')
-    .slice(0, 28);
+    .slice(0, 48);
 }
 
 /**
@@ -145,9 +148,38 @@ export function getDefaultMatriculePrefixByRole(role: UserRole): string {
 export function filterEmailMask(rawInput: string): string {
   return (rawInput || '')
     .replace(/\s+/g, '')
-    .replace(/[<>,;:"'[\]\\()]/g, '')
+    .replace(/[<>]/g, '')
     .toLowerCase()
-    .slice(0, 90);
+    .slice(0, 120);
+}
+
+export function filterAddressMask(value: string): string {
+  return value.normalize('NFC').replace(/[<>\u0000-\u001f]/g, '').replace(/\s{2,}/g, ' ').slice(0, 180);
+}
+
+export function todayIso(): string {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function isValidPastDate(value: string, today = todayIso()): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value && value <= today;
+}
+
+export interface CivilIdentity {
+  nom: string; postnom: string; prenom: string; email: string;
+  civilite: string; sexe: 'M' | 'F'; naissance: string; lieu: string; nationalite: string; etatCivil: string; piece: string;
+}
+export function validateCivilIdentity(identity: CivilIdentity): Partial<Record<keyof CivilIdentity, string>> {
+  const errors: Partial<Record<keyof CivilIdentity, string>> = {};
+  if (filterPersonNameMask(identity.nom).trim().length < 2) errors.nom = 'Saisissez votre nom (au moins 2 lettres).';
+  if (filterPersonNameMask(identity.postnom).trim().length < 2) errors.postnom = 'Saisissez votre post-nom (au moins 2 lettres).';
+  if (filterPersonNameMask(identity.prenom).trim().length < 2) errors.prenom = 'Saisissez votre prénom (au moins 2 lettres).';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identity.email)) errors.email = 'Saisissez une adresse email valide.';
+  if (identity.naissance && !isValidPastDate(identity.naissance)) errors.naissance = 'Choisissez une date de naissance valide, qui ne soit pas dans le futur.';
+  return errors;
 }
 
 /**

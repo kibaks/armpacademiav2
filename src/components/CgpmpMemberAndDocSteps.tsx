@@ -12,7 +12,7 @@ import {
   Clock
 } from 'lucide-react';
 import { CgpmpCellMember, CgpmpCreationDocumentInfo, CgpmpAccountCreationRequest } from '../types';
-import { filterPersonNameMask, filterEmailMask } from '../utils/inputMasks';
+import { filterPersonNameMask, filterEmailMask, filterRoleTitleMask, formatMatriculeOrRccmMask, todayIso } from '../utils/inputMasks';
 
 interface CgpmpDocSectionProps {
   creationDocType: CgpmpCreationDocumentInfo['documentType'];
@@ -51,7 +51,7 @@ export const CgpmpCreationDocumentSection: React.FC<CgpmpDocSectionProps> = ({
             Nature du Document portant création de la Cellule *
           </label>
           <select
-            value={creationDocType}
+            aria-label="Nature du document" value={creationDocType}
             onChange={(e) =>
               setCreationDocType(e.target.value as CgpmpCreationDocumentInfo['documentType'])
             }
@@ -72,8 +72,8 @@ export const CgpmpCreationDocumentSection: React.FC<CgpmpDocSectionProps> = ({
           <input
             type="text"
             required
-            value={creationDocRef}
-            onChange={(e) => setCreationDocRef(e.target.value.toUpperCase())}
+            aria-label="Référence de l’acte de création" maxLength={48} autoCapitalize="characters" spellCheck={false} value={creationDocRef}
+            onChange={(e) => setCreationDocRef(formatMatriculeOrRccmMask(e.target.value))}
             placeholder="ex: ARR-CAB-MIN/ITPR/2026/019"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
           />
@@ -86,7 +86,7 @@ export const CgpmpCreationDocumentSection: React.FC<CgpmpDocSectionProps> = ({
           <input
             type="date"
             required
-            value={creationDocDate}
+            aria-label="Date de signature" max={todayIso()} value={creationDocDate}
             onChange={(e) => setCreationDocDate(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
           />
@@ -99,8 +99,8 @@ export const CgpmpCreationDocumentSection: React.FC<CgpmpDocSectionProps> = ({
           <input
             type="text"
             required
-            value={creationDocSignatory}
-            onChange={(e) => setCreationDocSignatory(e.target.value)}
+            aria-label="Autorité signataire" maxLength={75} value={creationDocSignatory}
+            onChange={(e) => setCreationDocSignatory(filterRoleTitleMask(e.target.value))}
             placeholder="ex: Ministre d'État, Ministre du Budget"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white"
           />
@@ -283,7 +283,7 @@ export const CgpmpMembersRosterStep: React.FC<CgpmpMembersStepProps> = ({
               <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="text"
-                value={nom}
+                aria-label="Nom du membre" maxLength={70} value={nom}
                 onChange={(e) => setNom(filterPersonNameMask(e.target.value))}
                 placeholder="ex: KABUYA"
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white uppercase"
@@ -297,7 +297,7 @@ export const CgpmpMembersRosterStep: React.FC<CgpmpMembersStepProps> = ({
             </label>
             <input
               type="text"
-              value={postnom}
+              aria-label="Post-nom du membre" maxLength={70} value={postnom}
               onChange={(e) => setPostnom(filterPersonNameMask(e.target.value))}
               placeholder="ex: MUTOMBO"
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white uppercase"
@@ -310,7 +310,7 @@ export const CgpmpMembersRosterStep: React.FC<CgpmpMembersStepProps> = ({
             </label>
             <input
               type="text"
-              value={prenom}
+              aria-label="Prénom du membre" maxLength={70} value={prenom}
               onChange={(e) => setPrenom(filterPersonNameMask(e.target.value))}
               placeholder="ex: Célestin"
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
@@ -322,7 +322,7 @@ export const CgpmpMembersRosterStep: React.FC<CgpmpMembersStepProps> = ({
               Sexe *
             </label>
             <select
-              value={sexe}
+              aria-label="Sexe du membre" value={sexe}
               onChange={(e) => setSexe(e.target.value as 'M' | 'F')}
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
             >
@@ -341,7 +341,7 @@ export const CgpmpMembersRosterStep: React.FC<CgpmpMembersStepProps> = ({
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="email"
-                value={email}
+                aria-label="Email du membre" maxLength={120} value={email}
                 onChange={(e) => setEmail(filterEmailMask(e.target.value))}
                 placeholder="ex: c.kabuya@infrastructures.gouv.cd"
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
@@ -356,7 +356,7 @@ export const CgpmpMembersRosterStep: React.FC<CgpmpMembersStepProps> = ({
             <div className="relative">
               <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
               <select
-                value={functionInCell}
+                aria-label="Fonction du membre" value={functionInCell}
                 onChange={(e) => setFunctionInCell(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
               >
