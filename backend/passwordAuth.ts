@@ -146,6 +146,7 @@ passwordRouter.post('/auth/password/confirm', wrap(async (req, res) => {
 }));
 passwordRouter.use((error: any, _req: any, res: any, _next: any) => {
   console.error('[Account API]', error?.code || 'unavailable');
+  if (error.code === 'app/invalid-service-account-config') return res.status(503).json({ code: 'AUTH_CONFIGURATION_INVALID', error: 'La configuration du service de connexion est invalide. Contactez l’administrateur.' });
   const exists = error.code === 'auth/email-already-exists';
   res.status(exists ? 409 : ['auth/invalid-id-token', 'auth/id-token-expired', 'auth/id-token-revoked', 'auth/user-disabled', 'auth/user-not-found'].includes(error.code) ? 401 : 503).json({ error: exists ? 'Cette adresse possède déjà un compte. Utilisez la connexion ou « Mot de passe oublié ».' : 'La connexion est momentanément indisponible. Réessayez plus tard.' });
 });
