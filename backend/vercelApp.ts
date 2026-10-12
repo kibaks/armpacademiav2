@@ -1,3 +1,6 @@
+import { synthesizeElevenTutor } from './elevenTutorSpeech.js';
+import { voiceBudgets } from './voiceBudgets.js';
+import { synthesizeGeminiTutor } from './tutorSpeechProviders.js';
 import { getTutorVoice, getElevenLabsTutorVoice } from '../shared/tutorVoices.js';
 import { authRouter } from './auth.js';
 import { cgpmpRouter } from './cgpmp.js';
@@ -8,7 +11,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import WebSocket from 'ws';
 import { GoogleGenAI } from '@google/genai';
-import { Communicate } from 'edge-tts-universal';
+import { IsomorphicCommunicate as Communicate } from 'edge-tts-universal';
 
 dotenv.config();
 
@@ -899,37 +902,6 @@ async function synthesizeWithEdgeUniversal(
 }
 
 // 2. ElevenLabs Synthesis (if configured)
-async function synthesizeWithElevenLabs(text: string, persona: string): Promise<TtsSynthesisResult | null> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return null;
-  const voiceId = getElevenLabsTutorVoice(persona, process.env);
-  if (!voiceId) return null;
-  try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-      }),
-      signal: AbortSignal.timeout(9000)
-    });
-    if (!r.ok) return null;
-    const ab = await r.arrayBuffer();
-    return {
-      audioBuffer: Buffer.from(ab),
-      wordBoundaries: [],
-      provider: 'elevenlabs-v2'
-    };
-  } catch {
-    return null;
-  }
-}
-
 // 3. Google Translate TTS (Reliable HTTP fallback that never fails)
 async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthesisResult> {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -987,7 +959,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
 
   // Try ElevenLabs if configured
   if (process.env.ELEVENLABS_API_KEY) {
-    const el = await synthesizeWithElevenLabs(cleanSentence, voiceKey);
+    const el = await synthesizeElevenTutor(cleanSentence, voiceKey);
     if (el) {
       const b64 = el.audioBuffer.toString('base64');
       return {
@@ -1000,6 +972,14 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
       };
     }
   }
+
+  const gemini = await synthesizeGeminiTutor(cleanSentence, voiceKey, { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_TTS_MODEL });
+  if (gemini) {
+    const audio = gemini.audioBuffer.toString('base64');
+    return { audioData: audio, audioBase64: audio, mimeType: gemini.mimeType, provider: gemini.provider, wordBoundaries: [], emotion: detectSentenceEmotion(cleanSentence) };
+  }
+
+  if (process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY) throw new Error('Les fournisseurs studio sont momentanément indisponibles.');
 
   // Try Edge Neural Voices
   const candidateVoices = getTutorVoice(voiceKey).voices;
@@ -1028,22 +1008,28 @@ const DEFAULT_TTS_SETTINGS = {
   order: [
     { id: 'elevenlabs', name: 'ElevenLabs Studio v2', enabled: true },
     { id: 'neural', name: 'Studio Neural HD (Vivienne / Denise)', enabled: true },
-    { id: 'gemini', name: 'Gemini Audio TTS', enabled: false },
+    { id: 'gemini', name: 'Gemini Audio TTS', enabled: !!process.env.GEMINI_API_KEY },
   ],
   neuralVoice: 'vivienne-multilingual',
-  browserFallback: false,
+  browserFallback: true,
 };
 
 app.get(['/api/tts/settings', '/tts/settings'], (_req, res) => {
   res.json({
     ...DEFAULT_TTS_SETTINGS,
+    defaultVoiceMode: process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: {
       elevenlabs: !!process.env.ELEVENLABS_API_KEY,
       neural: true,
       gemini: !!process.env.GEMINI_API_KEY,
     },
-    elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
+    elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID ? 'Voix configurée' : 'Non configurée',
   });
+});
+
+app.get(['/api/tts/quota', '/tts/quota'], authenticate, requireAdmin, async (_req, res) => {
+  if (process.env.ELEVENLABS_API_KEY) await voiceBudgets.readElevenQuota(process.env.ELEVENLABS_API_KEY);
+  res.setHeader('Cache-Control', 'no-store'); res.json(voiceBudgets.snapshot());
 });
 
 app.post(['/api/tts/settings', '/tts/settings'], (_req, res) => {
@@ -1062,7 +1048,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     }
 
     const cleanSentence = rawText.slice(0, 950);
-    const cacheKey = `v31:${voiceChoice}:${cleanSentence}`;
+    const cacheKey = `v32:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1109,7 +1095,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
 // ------------------------------------------------------------------
 app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
   try {
-    const sentences: string[] = Array.isArray(req.body?.sentences) ? req.body.sentences.slice(0, 6) : [];
+    const sentences: string[] = Array.isArray(req.body?.sentences) ? req.body.sentences.slice(0, 2) : [];
     const voiceChoice = (req.body?.voice || 'denise').toString().toLowerCase();
 
     res.json({ status: 'prewarming', count: sentences.length, voice: voiceChoice });
@@ -1117,7 +1103,7 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     for (const s of sentences) {
       const cleanSentence = (s || '').toString().trim().slice(0, 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v31:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v32:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
 
       synthesizeSpeech(cleanSentence, voiceChoice)

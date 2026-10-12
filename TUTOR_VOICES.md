@@ -9,3 +9,21 @@ ElevenLabs est utilisé seulement si une clé et un identifiant vocal adaptés s
 Le service Edge reste disponible sans nouvelle configuration. Chaque essai est limité dans le temps. Une panne ne déclenche pas une voix d’un autre genre. Le client affiche un message et conserve la réponse écrite. Le secours navigateur demeure soumis au réglage existant.
 
 Validation : TypeScript, build et tests `tests/tutorVoices.test.ts`. Les portraits ont été vérifiés ensemble dans le navigateur. Les essais sonores locaux et sur la production précédente ont dépassé le délai ; une écoute réelle reste nécessaire lorsque le fournisseur répond ou qu’ElevenLabs est configuré.
+
+## Mode gratuit sans clé
+
+Le mode « Voix gratuites de cet appareil » est le choix initial. Il utilise uniquement la synthèse vocale du navigateur, sans envoyer le texte au serveur TTS. Le choix « Voix studio » active le serveur et reste mémorisé sur l’appareil. Le bouton « Écouter un exemple » permet de comparer les profils. Les voix françaises adaptées doivent être installées sur l’appareil ; aucun autre genre n’est substitué automatiquement.
+
+Pour la voix studio, configurer `GEMINI_API_KEY` sur Vercel (serveur uniquement), puis redéployer. `GEMINI_TTS_MODEL` est optionnel et vaut `gemini-3.8-flash-tts` par défaut. Les instructions de tonalité restent séparées du texte parlé. Sans fournisseur disponible, la réponse demeure lisible et une erreur explique l’indisponibilité. Ne jamais saisir de clé dans le chat ou dans une variable VITE.
+
+## Disponibilité des crédits et secours
+
+La chaîne studio utilise ElevenLabs puis Gemini. Si les deux sont indisponibles, la réponse écrite reste accessible et les voix gratuites de l’appareil servent de secours. Aucun fournisseur payant n’est relancé en boucle après un refus de quota.
+
+ElevenLabs : le serveur consulte le quota via `/v1/user/subscription`, garde le résultat une minute et réserve les caractères avant les appels concurrents. Si la clé n’a pas la permission `user_read`, le solde est explicitement inconnu ; la synthèse autorisée peut continuer jusqu’à un refus du fournisseur. Le compteur du fournisseur fait autorité entre les instances Vercel. Cette clé permet déjà les voix et la synthèse, mais la lecture du quota a été refusée pendant la vérification.
+
+Gemini : les réponses 429 et `RESOURCE_EXHAUSTED` suspendent les tentatives pendant le délai `Retry-After` lorsqu’il est fourni. Les tokens d’usage observés sont comptés par instance ; ils ne sont pas présentés comme un solde global restant. Les états sont réservés aux administrateurs via `/api/tts/quota`.
+
+Le préchargement est limité à la phrase suivante. Les résultats vocaux déjà générés restent en cache. Les voix studio masculine et féminine ont été générées réellement avec les deux fournisseurs pendant la validation.
+
+Références : https://elevenlabs.io/docs/api-reference/user/subscription/get et https://ai.google.dev/gemini-api/docs/generate-content/speech-generation.

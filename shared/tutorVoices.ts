@@ -9,8 +9,11 @@ export type TutorPersona = keyof typeof TUTOR_VOICES;
 export function getTutorVoice(persona?: string) {
   return TUTOR_VOICES[persona as TutorPersona] || TUTOR_VOICES.vivienne;
 }
+const DEFAULT_ELEVEN_VOICES: Record<TutorPersona, string> = {
+  henri: 'pNInz6obpgDQGcFmaJgB', vivienne: 'EXAVITQu4vr4xnSDxMaL', denise: 'XrExE9yKIg1WjnnlVkGX', charline: 'pFZP5JQG7iQjIQuC4Bku', eloise: 'Xb7hH8MSUJpSbSDYk0k2',
+};
 export function getElevenLabsTutorVoice(persona: string, env: Record<string, string | undefined>) {
   const specific = env[`ELEVENLABS_VOICE_ID_${persona.toUpperCase()}`];
   if (specific) return specific;
-  return getTutorVoice(persona).gender === 'male' ? env.ELEVENLABS_MALE_VOICE_ID : env.ELEVENLABS_FEMALE_VOICE_ID || env.ELEVENLABS_VOICE_ID;
+  return (getTutorVoice(persona).gender === 'male' ? env.ELEVENLABS_MALE_VOICE_ID : env.ELEVENLABS_FEMALE_VOICE_ID || env.ELEVENLABS_VOICE_ID) || DEFAULT_ELEVEN_VOICES[persona as TutorPersona] || DEFAULT_ELEVEN_VOICES.vivienne;
 }

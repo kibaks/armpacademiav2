@@ -1,3 +1,4 @@
+import { pickBrowserTutorVoice, browserTutorProsody } from './browserTutorVoices';
 import { TUTOR_VOICES } from '../../shared/tutorVoices';
 import { authenticatedFetch } from '../lib/adminApi';
 // Expressive Neural Human Voice, Millisecond Word-Boundary Lip-Sync & Facial Gesture Engine
@@ -521,6 +522,7 @@ class SpeechService {
   private lastFallbackRefreshAt = 0;
 
   private async refreshBrowserFallbackFlag(force = false): Promise<boolean> {
+    if (this.getVoiceMode() === 'device') return true;
     const now = Date.now();
     if (!force && now - this.lastFallbackRefreshAt < 15000) {
       return this.browserFallbackEnabled;
@@ -591,6 +593,7 @@ class SpeechService {
   constructor() {
     if (typeof window !== 'undefined') {
       try { const saved = localStorage.getItem('academia-tutor-persona'); if (saved && saved in TUTOR_VOICES) this.preferredPersona = saved as NeuralVoicePersona; } catch { /* Storage can be unavailable. */ }
+      void this.loadVoiceModeDefault();
       const unlockHandler = () => {
         this.unlockAudio();
         if (this.currentAudioElement && this.currentAudioElement.paused && this.state.isPlaying) {
@@ -617,6 +620,26 @@ class SpeechService {
     }
   }
 
+  private defaultVoiceMode: 'studio' | 'device' = 'device';
+  private explicitVoiceMode: 'studio' | 'device' | null = null;
+  private modeLoading: Promise<'studio' | 'device'> | null = null;
+  public loadVoiceModeDefault(): Promise<'studio' | 'device'> {
+    if (this.modeLoading) return this.modeLoading;
+    this.modeLoading = (async () => {
+      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; } } catch { /* Keep device playback when configuration cannot be loaded. */ }
+      return this.getVoiceMode();
+    })().finally(() => { this.modeLoading = null; });
+    return this.modeLoading;
+  }
+  public getVoiceMode(): 'studio' | 'device' {
+    if (this.explicitVoiceMode) return this.explicitVoiceMode;
+    try { const chosen = localStorage.getItem('academia-tutor-voice-mode'); return chosen === 'studio' || chosen === 'device' ? chosen : this.defaultVoiceMode; } catch { return this.defaultVoiceMode; }
+  }
+  public setVoiceMode(mode: 'studio' | 'device') {
+    this.stop();
+    this.explicitVoiceMode = mode;
+    try { localStorage.setItem('academia-tutor-voice-mode', mode); } catch { /* Browser storage is unavailable. */ }
+  }
   public setVoicePersona(persona: NeuralVoicePersona) {
     this.preferredPersona = persona;
     try { localStorage.setItem('academia-tutor-persona', persona); } catch { /* Keep the current in-memory selection. */ }
@@ -1326,54 +1349,7 @@ class SpeechService {
 
   private getBestFrenchVoice(): SpeechSynthesisVoice | null {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices || voices.length === 0) return null;
-
-    const frVoices = voices.filter(
-      (v) => v.lang.toLowerCase().startsWith('fr') || v.lang.toLowerCase().includes('fr-fr') || v.lang.toLowerCase().includes('fr_fr')
-    );
-    if (frVoices.length === 0) return null;
-
-    const pool = frVoices;
-
-    const naturalFemininePriority = this.preferredPersona === 'henri' ? ['henri', 'remy', 'alain', 'fabrice', 'paul'] : [
-      'vivienne',
-      'denise',
-      'eloise',
-      'charline',
-      'ariane',
-      'brigitte',
-      'céleste',
-      'celeste',
-      'amélie',
-      'amelie',
-      'audrey',
-      'aurélie',
-      'aurelie',
-      'hortense',
-      'julie',
-      'marie',
-      'céline',
-      'celine',
-      'léa',
-      'lea',
-      'chloé',
-      'chloe',
-      'google français',
-      'français',
-      'french',
-    ];
-
-    for (const keyword of naturalFemininePriority) {
-      const match = pool.find((v) => v.name.toLowerCase().includes(keyword));
-      if (match) return match;
-    }
-
-    if (this.preferredPersona === 'henri') return null;
-    const frFR = pool.find((v) => v.lang === 'fr-FR' || v.lang === 'fr_FR');
-    if (frFR) return frFR;
-
-    return pool[0] || null;
+    return pickBrowserTutorVoice(window.speechSynthesis.getVoices(), this.currentOptions?.voice || this.preferredPersona);
   }
 
   private clearCadenceTimer() {
@@ -1621,9 +1597,9 @@ class SpeechService {
   private async fetchNeuralAudioBuffer(
     sentence: string,
     voice: string = this.preferredPersona,
-    timeoutMs: number = 18000
+    timeoutMs: number = 35000
   ): Promise<DecodedNeuralEntry | null> {
-    if (!this.neuralTtsAvailable || !sentence.trim()) return null;
+    if (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable || !sentence.trim()) return null;
     const cacheKey = `tutor_voice_v4::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
@@ -1735,7 +1711,7 @@ class SpeechService {
 
   // Pre-warm lesson sentences sequentially: Sentence 1 gets 100% priority first, then Sentences 2..5
   public prewarmSentences(rawSentences: string[], voice?: string) {
-    if (typeof window === 'undefined' || !Array.isArray(rawSentences) || rawSentences.length === 0) {
+    if (this.getVoiceMode() === 'device' || typeof window === 'undefined' || !Array.isArray(rawSentences) || rawSentences.length === 0) {
       return;
     }
     const targetVoice = voice || this.preferredPersona;
@@ -1744,16 +1720,16 @@ class SpeechService {
 
     (async () => {
       // 1. Fetch & decode Sentence 1 FIRST with zero competition so the opening of the lesson is instant & pure Vivienne HD
-      await this.fetchNeuralAudioBuffer(normalized[0], targetVoice, 18000);
+      await this.fetchNeuralAudioBuffer(normalized[0], targetVoice, 35000);
 
       // 2. Then prewarm remaining sentences sequentially on server and client
       if (normalized.length > 1) {
         authenticatedFetch('/api/ai/tts/prewarm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sentences: normalized.slice(1), voice: targetVoice }),
+          body: JSON.stringify({ sentences: normalized.slice(1, 2), voice: targetVoice }),
         }).catch(() => {});
-        await this.fetchNeuralAudioBuffer(normalized[1], targetVoice, 18000);
+        await this.fetchNeuralAudioBuffer(normalized[1], targetVoice, 35000);
       }
     })();
   }
@@ -1872,7 +1848,7 @@ class SpeechService {
       currentId: id,
       textSnippet: sentences[startIdx].slice(0, 60),
       currentSentenceText: sentences[startIdx],
-      source: this.neuralTtsAvailable ? 'gemini-tts' : 'web-speech',
+      source: this.neuralTtsAvailable && this.getVoiceMode() !== 'device' ? 'gemini-tts' : 'web-speech',
       voiceProvider: 'neural-vivienne-hd',
       currentSentence: startIdx + 1,
       totalSentences: sentences.length,
@@ -1914,7 +1890,7 @@ class SpeechService {
     const userSpeed = this.currentOptions?.speed ?? 1.0;
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
-    if (this.neuralTtsAvailable) {
+    if (this.neuralTtsAvailable && this.getVoiceMode() !== 'device') {
       const cacheKey = `tutor_voice_v4::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
@@ -1930,15 +1906,13 @@ class SpeechService {
         };
         this.notify();
       }
-      const neuralEntry = await this.fetchNeuralAudioBuffer(sentence, voiceName, 18000);
+      const neuralEntry = await this.fetchNeuralAudioBuffer(sentence, voiceName, 35000);
       if (this.isCancelled || this.currentSentenceIndex !== sentenceIdx) return;
 
       // Now that the current sentence is ready, pre-fetch the next sentences in the background
       if (sentenceIdx + 1 < this.queue.length) {
-        this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 18000);
-        if (sentenceIdx + 2 < this.queue.length) {
-          this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 2], voiceName, 18000);
-        }
+        this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 35000);
+
       }
 
       if (neuralEntry) {
@@ -2317,14 +2291,26 @@ class SpeechService {
 
     const utterance = new SpeechSynthesisUtterance(sentence);
     utterance.lang = 'fr-FR';
-    const effectiveRate = Math.max(0.90, Math.min(1.25, 1.02 * userSpeed));
+    const prosody = browserTutorProsody(this.currentOptions?.voice || this.preferredPersona, userSpeed);
+    const effectiveRate = prosody.rate;
     utterance.rate = effectiveRate;
-    utterance.pitch = 1.0;
+    utterance.pitch = prosody.pitch;
 
-    const voice = this.getBestFrenchVoice();
-    if (voice) {
-      utterance.voice = voice;
+    if (synth.getVoices().length === 0) {
+      await new Promise<void>(resolve => {
+        const done = () => { clearTimeout(timer); synth.removeEventListener('voiceschanged', done); resolve(); };
+        const timer = setTimeout(done, 1500); synth.addEventListener('voiceschanged', done);
+      });
+      if (this.isCancelled) return;
     }
+    const voice = this.getBestFrenchVoice();
+    if (!voice) {
+      this.stop();
+      this.state.error = 'Aucune voix française adaptée à ce profil n’est disponible sur cet appareil. Installez une voix française masculine ou féminine dans les réglages de votre appareil, ou utilisez le mode studio.';
+      this.notify();
+      return;
+    }
+    utterance.voice = voice;
 
     this.currentUtterance = utterance;
     (window as any).__academiaActiveUtterance = utterance;

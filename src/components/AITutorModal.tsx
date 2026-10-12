@@ -554,6 +554,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [isCallConnecting, setIsCallConnecting] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
+  const [voiceMode, setVoiceMode] = useState(() => speechService.getVoiceMode());
+  useEffect(() => { if (isOpen) { let active = true; speechService.loadVoiceModeDefault().then(mode => { if (active) setVoiceMode(mode); }); return () => { active = false; }; } }, [isOpen]);
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
   const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
   const [showStudioStage, setShowStudioStage] = useState<boolean>(true);
@@ -1725,6 +1727,17 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           </div>
         )}
 
+        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2 text-xs bg-white dark:bg-slate-900">
+          <label htmlFor="tutor-voice-mode" className="font-semibold">Lecture vocale</label>
+          <select id="tutor-voice-mode" value={voiceMode} onChange={event => {
+            const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode);
+          }} className="rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-2">
+            <option value="studio">Voix studio · secours automatique</option><option value="device">Voix gratuites de cet appareil</option>
+          </select>
+          <button type="button" onClick={() => speak(activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed)} className="rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 font-semibold">Écouter un exemple</button>
+          {voiceMode === 'device' && <span className="text-slate-500">La voix dépend des voix françaises installées sur votre appareil.</span>}
+        </div>
+
         {/* =================================================================== */}
         {/* MAIN BODY — SPLIT STUDIO (LEFT: AÏSHA LIVE STAGE | RIGHT: Q&A CHAT) */}
         {/* =================================================================== */}
@@ -1762,7 +1775,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   <div className="flex items-center justify-between gap-1.5 px-0.5">
                     <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1 truncate">
                       <span>🌸</span>
-                      <span>Port de tête féminin, Sourire &amp; Émotions</span>
+                      <span>Expressions du tuteur</span>
                     </span>
                     <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
                       60 FPS
@@ -1798,7 +1811,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 <div className="p-2.5 sm:p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 flex items-center gap-1">
-                      <Volume2 className="w-3 h-3" /> Téléprompteur Aïsha
+                      <Volume2 className="w-3 h-3" /> Réponse en cours
                     </span>
                     {isSpeaking ? (
                       <button
@@ -2201,7 +2214,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                                   className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline"
                                   title="Écouter cette réponse avec le profil sélectionné"
                                 >
-                                  <Volume2 className="w-3.5 h-3.5" /> Écouter Aïsha
+                                  <Volume2 className="w-3.5 h-3.5" /> Écouter
                                 </button>
                               )}
 

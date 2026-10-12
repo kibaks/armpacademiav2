@@ -1,3 +1,6 @@
+import { synthesizeElevenTutor } from './backend/elevenTutorSpeech.js';
+import { voiceBudgets } from './backend/voiceBudgets.js';
+import { synthesizeGeminiTutor } from './backend/tutorSpeechProviders.js';
 import { getTutorVoice, getElevenLabsTutorVoice } from './shared/tutorVoices.js';
 import { authRouter } from './backend/auth.js';
 import { cgpmpRouter } from './backend/cgpmp.js';
@@ -16,7 +19,7 @@ import {
   type VideoGenerationReferenceImage,
 } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { Communicate } from 'edge-tts-universal';
+import { IsomorphicCommunicate as Communicate } from 'edge-tts-universal';
 import WebSocket from 'ws';
 import {
   type TtsEmotionalTag,
@@ -1002,7 +1005,6 @@ function saveTtsToDisk(cacheKey: string, payload: CachedTtsPayload): void {
   }
 }
 const inFlightServerTts = new Map<string, Promise<CachedTtsPayload | null>>();
-let geminiTtsCooldownUntil = 0;
 
 // Map spoken words sequentially to their character index in the sentence (with bounded lookahead so cursor never jumps ahead)
 function attachCharIndices(
@@ -1088,167 +1090,6 @@ function elevenLabsExpressiveSettings(emotion?: string): {
     default:
       return { ...base, stability: 0.52, style: 0.58 };
   }
-}
-
-async function synthesizeWithElevenLabs(
-  text: string,
-  requestedVoice?: string,
-  emotion?: string
-): Promise<CachedTtsPayload | null> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return null;
-
-  try {
-    const personaVoiceId = getElevenLabsTutorVoice(requestedVoice || 'vivienne', process.env);
-    if (!personaVoiceId) return null;
-    const voiceId =
-      requestedVoice && requestedVoice.length > 14 && !requestedVoice.startsWith('fr-')
-        ? requestedVoice
-        : personaVoiceId; // Sarah / Bella Multilingual expressive female
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 14000);
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: elevenLabsExpressiveSettings(emotion),
-        }),
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeoutId);
-
-    if (!response.ok) return null;
-    const data: any = await response.json();
-    if (!data?.audio_base64) return null;
-
-    const rawWords: Array<{ text: string; offsetMs: number; durationMs: number }> = [];
-    const chars: string[] = data?.alignment?.characters || [];
-    const starts: number[] = data?.alignment?.character_start_times_seconds || [];
-    const ends: number[] = data?.alignment?.character_end_times_seconds || [];
-
-    if (chars.length > 0 && starts.length === chars.length) {
-      let currentWord = '';
-      let wordStartSec = 0;
-      let wordEndSec = 0;
-      for (let i = 0; i < chars.length; i++) {
-        const ch = chars[i];
-        if (/\s/.test(ch)) {
-          if (currentWord.trim()) {
-            rawWords.push({
-              text: currentWord.trim(),
-              offsetMs: Math.round(wordStartSec * 1000),
-              durationMs: Math.max(40, Math.round((wordEndSec - wordStartSec) * 1000)),
-            });
-            currentWord = '';
-          }
-        } else {
-          if (!currentWord) {
-            wordStartSec = starts[i] || 0;
-          }
-          currentWord += ch;
-          wordEndSec = ends[i] || wordStartSec + 0.08;
-        }
-      }
-      if (currentWord.trim()) {
-        rawWords.push({
-          text: currentWord.trim(),
-          offsetMs: Math.round(wordStartSec * 1000),
-          durationMs: Math.max(40, Math.round((wordEndSec - wordStartSec) * 1000)),
-        });
-      }
-    }
-
-    const boundaries =
-      rawWords.length > 0
-        ? attachCharIndices(text, rawWords)
-        : buildEstimatedWordBoundaries(text);
-
-    return {
-      audioData: data.audio_base64,
-      mimeType: 'audio/mpeg',
-      provider: 'elevenlabs-v2',
-      wordBoundaries: boundaries,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ElevenLabs budget = real-time truth from the subscription API (free tier:
-// 10 000 chars/month). Local counter only as fallback when that call fails.
-// Circuit breaker: after 3 consecutive failures pause EL for 10 minutes so
-// sentences never stall behind a dead endpoint — they go straight to edge-tts.
-const ELEVENLABS_MONTHLY_CHAR_BUDGET = Number(process.env.ELEVENLABS_CHAR_BUDGET || 9600);
-let elevenUsedChars: number | null = null;
-let elevenUsedCharsAt = 0;
-let elevenLocalUsed = 0;
-let elevenConsecutiveFails = 0;
-let elevenDownUntil = 0;
-
-async function getElevenUsedChars(): Promise<number> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return Number.MAX_SAFE_INTEGER;
-  if (elevenUsedChars !== null && Date.now() - elevenUsedCharsAt < 600_000) {
-    return elevenUsedChars;
-  }
-  try {
-    const r = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
-      headers: { 'xi-api-key': apiKey },
-      signal: AbortSignal.timeout(6000),
-    });
-    if (r.ok) {
-      const d: any = await r.json();
-      elevenUsedChars = Number(d.character_count || 0);
-      elevenUsedCharsAt = Date.now();
-      return elevenUsedChars;
-    }
-  } catch {
-    // fall through to local counter
-  }
-  return elevenUsedChars !== null ? elevenUsedChars : elevenLocalUsed;
-}
-
-async function synthesizeWithElevenLabsBudgeted(
-  text: string,
-  requestedVoice?: string,
-  emotion?: string
-): Promise<CachedTtsPayload | null> {
-  if (!process.env.ELEVENLABS_API_KEY) return null;
-  if (Date.now() < elevenDownUntil) return null;
-
-  const used = await getElevenUsedChars();
-  if (used + text.length + 400 > ELEVENLABS_MONTHLY_CHAR_BUDGET) return null;
-
-  let result = await synthesizeWithElevenLabs(text, requestedVoice, emotion);
-  if (!result) {
-    // one quick retry for transient failures (network flap / 5xx)
-    await new Promise((r) => setTimeout(r, 250));
-    result = await synthesizeWithElevenLabs(text, requestedVoice, emotion);
-  }
-
-  if (result) {
-    elevenLocalUsed += text.length;
-    elevenUsedChars = (elevenUsedChars ?? 0) + text.length;
-    elevenUsedCharsAt = Date.now();
-    elevenConsecutiveFails = 0;
-  } else if (elevenDownUntil === 0 || Date.now() >= elevenDownUntil) {
-    elevenConsecutiveFails += 1;
-    if (elevenConsecutiveFails >= 3) {
-      elevenDownUntil = Date.now() + 600_000;
-      elevenConsecutiveFails = 0;
-      console.warn('[TTS] ElevenLabs circuit open — 10 min of edge-tts HD only');
-    }
-  }
-  return result;
 }
 
 // 2. Expressive Studio Neural HD Female Voice (fr-FR-VivienneMultilingualNeural Reference Voice)
@@ -1624,9 +1465,16 @@ function ttsAvailability() {
 app.get('/api/tts/settings', (_req, res) => {
   res.json({
     ...loadTtsSettings(),
+    browserFallback: true,
+    defaultVoiceMode: process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: ttsAvailability(),
     elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
   });
+});
+
+app.get('/api/tts/quota', authenticate, requireAdmin, async (_req, res) => {
+  if (process.env.ELEVENLABS_API_KEY) await voiceBudgets.readElevenQuota(process.env.ELEVENLABS_API_KEY);
+  res.setHeader('Cache-Control', 'no-store'); res.json(voiceBudgets.snapshot());
 });
 
 app.post('/api/tts/settings', (req, res) => {
@@ -1708,14 +1556,18 @@ async function getOrSynthesizeTtsPayload(
         // 1. ElevenLabs — voix la plus humaine (souffles, exclamations, émotion),
         //    protégée par un garde-mensuel doux (free tier = 10k caractères/mois).
         if (tier.id === 'elevenlabs' && process.env.ELEVENLABS_API_KEY) {
-          const elevenPayload = await synthesizeWithElevenLabsBudgeted(cleanText, voiceKey, emoKey);
+          const elevenPayload = await synthesizeElevenTutor(cleanText, voiceKey);
           if (elevenPayload) {
-            return storeInCache(elevenPayload);
+            return storeInCache({ audioData: elevenPayload.audioBuffer.toString('base64'), mimeType: elevenPayload.mimeType, provider: elevenPayload.provider, wordBoundaries: elevenPayload.wordBoundaries });
           }
         }
 
         // 2. Voix Neural Studio HD expressives (edge-tts Denise/Vivienne — sans clé)
         if (tier.id === 'neural') {
+          const gemini = await synthesizeGeminiTutor(cleanText, voiceKey, { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_TTS_MODEL });
+          if (gemini) return storeInCache({ audioData: gemini.audioBuffer.toString('base64'), mimeType: gemini.mimeType, provider: gemini.provider, wordBoundaries: buildEstimatedWordBoundaries(cleanText) });
+
+          if (process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY) continue;
           const studioNeuralPayload = await synthesizeWithStudioNeuralHD(
             cleanText,
             voiceKey,
@@ -1729,43 +1581,8 @@ async function getOrSynthesizeTtsPayload(
 
         // 3. Gemini TTS — optionnel, désactivé par défaut (nécessite une clé Google)
         if (tier.id === 'gemini') {
-          const ai = getAIClient();
-          if (ai && Date.now() > geminiTtsCooldownUntil) {
-            try {
-              const geminiVoiceMap: Record<string, string> = {
-                henri: 'Orus',
-                denise: 'Kore',
-                charline: 'Zephyr',
-                vivienne: 'Aoede',
-                eloise: 'Leda',
-              };
-              const geminiVoice = geminiVoiceMap[voiceKey] || 'Kore';
-              const ttsRes = await ai.models.generateContent({
-                model: 'gemini-3.8-flash-lite-tts',
-                contents: [{ role: 'user', parts: [{ text: cleanText }] }],
-                config: {
-                  responseModalities: ['AUDIO'],
-                  speechConfig: {
-                    voiceConfig: {
-                      prebuiltVoiceConfig: { voiceName: geminiVoice },
-                    },
-                  },
-                },
-              });
-              const b64 = ttsRes.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-              if (b64) {
-                const wavBuf = ensureWavBuffer(Buffer.from(b64, 'base64'));
-                return storeInCache({
-                  audioData: wavBuf.toString('base64'),
-                  mimeType: 'audio/wav',
-                  provider: 'gemini-tts',
-                  wordBoundaries: buildEstimatedWordBoundaries(cleanText),
-                });
-              }
-            } catch {
-              geminiTtsCooldownUntil = Date.now() + 60_000;
-            }
-          }
+          const gemini = await synthesizeGeminiTutor(cleanText, voiceKey, { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_TTS_MODEL });
+          if (gemini) return storeInCache({ audioData: gemini.audioBuffer.toString('base64'), mimeType: gemini.mimeType, provider: gemini.provider, wordBoundaries: buildEstimatedWordBoundaries(cleanText) });
         }
       }
 
@@ -1793,7 +1610,7 @@ app.post('/api/ai/tts/prewarm', async (req, res) => {
     }
     const valid = sentences
       .filter((s) => typeof s === 'string' && s.trim().length > 0)
-      .slice(0, 8);
+      .slice(0, 2);
 
     // Synthesize sequentially in background so Sentence 1 is never throttled by Sentences 2..5
     (async () => {

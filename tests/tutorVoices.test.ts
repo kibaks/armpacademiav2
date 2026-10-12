@@ -13,7 +13,7 @@ test('female profiles have distinct primary voices and firm adult voices', () =>
   assert.ok(women.every(p => !p.voices.includes('fr-FR-EloiseNeural' as never)));
 });
 test('a generic female ElevenLabs voice never overrides a masculine selection', () => {
-  assert.equal(getElevenLabsTutorVoice('henri', { ELEVENLABS_VOICE_ID: 'female' }), undefined);
+  assert.notEqual(getElevenLabsTutorVoice('henri', { ELEVENLABS_VOICE_ID: 'female' }), 'female');
   assert.equal(getElevenLabsTutorVoice('henri', { ELEVENLABS_MALE_VOICE_ID: 'male' }), 'male');
   assert.equal(getElevenLabsTutorVoice('henri', { ELEVENLABS_VOICE_ID_HENRI: 'specific', ELEVENLABS_MALE_VOICE_ID: 'male' }), 'specific');
   assert.equal(getElevenLabsTutorVoice('vivienne', { ELEVENLABS_VOICE_ID: 'female' }), 'female');
