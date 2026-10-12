@@ -1,3 +1,4 @@
+import { readTutorVoiceMode, TUTOR_VOICE_MODE_KEY } from './tutorVoiceMode';
 import { pickBrowserTutorVoice, browserTutorProsody } from './browserTutorVoices';
 import { TUTOR_VOICES } from '../../shared/tutorVoices';
 import { authenticatedFetch } from '../lib/adminApi';
@@ -620,7 +621,7 @@ class SpeechService {
     }
   }
 
-  private defaultVoiceMode: 'studio' | 'device' = 'device';
+  private defaultVoiceMode: 'studio' | 'device' = 'studio';
   private explicitVoiceMode: 'studio' | 'device' | null = null;
   private modeLoading: Promise<'studio' | 'device'> | null = null;
   public loadVoiceModeDefault(): Promise<'studio' | 'device'> {
@@ -633,12 +634,12 @@ class SpeechService {
   }
   public getVoiceMode(): 'studio' | 'device' {
     if (this.explicitVoiceMode) return this.explicitVoiceMode;
-    try { const chosen = localStorage.getItem('academia-tutor-voice-mode'); return chosen === 'studio' || chosen === 'device' ? chosen : this.defaultVoiceMode; } catch { return this.defaultVoiceMode; }
+    try { return readTutorVoiceMode(localStorage, this.defaultVoiceMode); } catch { return this.defaultVoiceMode; }
   }
   public setVoiceMode(mode: 'studio' | 'device') {
     this.stop();
     this.explicitVoiceMode = mode;
-    try { localStorage.setItem('academia-tutor-voice-mode', mode); } catch { /* Browser storage is unavailable. */ }
+    try { localStorage.setItem(TUTOR_VOICE_MODE_KEY, mode); } catch { /* Browser storage is unavailable. */ }
   }
   public setVoicePersona(persona: NeuralVoicePersona) {
     this.preferredPersona = persona;
@@ -1868,8 +1869,9 @@ class SpeechService {
     };
     this.notify();
 
-    // Synchronise l'autorisation de voix machine (paramétrage serveur) avant de jouer
-    await this.refreshBrowserFallbackFlag();
+    // Wait for provider configuration before the first sentence; studio failures never select a device voice automatically.
+    await this.loadVoiceModeDefault();
+    if (this.isCancelled || this.currentPlayingId !== id) return;
     await this.playNextInQueue();
   }
 
@@ -2270,7 +2272,7 @@ class SpeechService {
     //    paramétrage ⚙ Paramètres Voix (browserFallback, OFF par défaut).
     //    Sinon: arrêt propre, zéro voix robotisée — le message du chat reste
     //    entièrement lisible et la synthèse reprendra dès le retour du serveur.
-    const allowBrowserVoice = await this.refreshBrowserFallbackFlag(true);
+    const allowBrowserVoice = this.getVoiceMode() === 'device';
     if (!allowBrowserVoice) {
       console.warn('[Speech] Voix sélectionnée indisponible.');
       this.stop();

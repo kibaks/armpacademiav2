@@ -555,6 +555,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
   const [voiceMode, setVoiceMode] = useState(() => speechService.getVoiceMode());
+  const [playbackProvider, setPlaybackProvider] = useState('');
   useEffect(() => { if (isOpen) { let active = true; speechService.loadVoiceModeDefault().then(mode => { if (active) setVoiceMode(mode); }); return () => { active = false; }; } }, [isOpen]);
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
   const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
@@ -645,6 +646,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   useEffect(() => {
     const unsub = speechService.subscribe((st) => {
+      setPlaybackProvider(st.source === 'web-speech' ? 'Voix de l’appareil' : st.voiceProvider === 'gemini-tts' ? 'Gemini' : st.voiceProvider === 'elevenlabs-v2' ? 'ElevenLabs' : 'Voix studio');
       if (st.error) { setToastNotice(st.error); setTimeout(() => setToastNotice(null), 6500); }
       if (st.currentId && st.currentId.startsWith('tutor-')) {
         setIsSpeaking(Boolean(st.isPlaying && !st.isLoading));
@@ -1732,9 +1734,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <select id="tutor-voice-mode" value={voiceMode} onChange={event => {
             const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode);
           }} className="rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-2">
-            <option value="studio">Voix studio · secours automatique</option><option value="device">Voix gratuites de cet appareil</option>
+            <option value="studio">Voix studio · Gemini / ElevenLabs</option><option value="device">Voix gratuites de cet appareil</option>
           </select>
           <button type="button" onClick={() => speak(activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed)} className="rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 font-semibold">Écouter un exemple</button>
+          {isSpeaking && <span role="status" className="text-blue-700 dark:text-blue-200 font-semibold">Lecture : {playbackProvider}</span>}
           {voiceMode === 'device' && <span className="text-slate-500">La voix dépend des voix françaises installées sur votre appareil.</span>}
         </div>
 
