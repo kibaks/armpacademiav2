@@ -7,8 +7,35 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    function requiresSecondFactor() {
+      let profile = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(profile) && 'twoFactorEnabled' in get(profile).data &&
+        get(profile).data.twoFactorEnabled == true;
+    }
+
+    function hasSecondFactor() {
+      let proof = /databases/$(database)/documents/mfaSessions/$(request.auth.token.appSessionId);
+      return exists(proof) &&
+        get(proof).data.authTime == request.auth.token.appAuthTime &&
+        get(proof).data.expiresAt > request.time.toMillis();
+    }
+
+    function hasBackendSession() {
+      let session = /databases/$(database)/documents/authSessions/$(request.auth.token.appSessionId);
+      let account = /databases/$(database)/documents/authAccounts/$(request.auth.uid);
+      let profile = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(session) && get(session).data.uid == request.auth.uid && get(session).data.role == request.auth.token.role &&
+        get(session).data.expiresAt > request.time.toMillis() &&
+        get(session).data.version == (exists(account) ? get(account).data.version : 0) &&
+        (!exists(account) || !('demoExpiresAt' in get(account).data) || get(account).data.demoExpiresAt > request.time.toMillis()) &&
+        (!exists(profile) ||
+          ((!('disabled' in get(profile).data) || get(profile).data.disabled != true) &&
+           (!('role' in get(profile).data) || get(profile).data.role == request.auth.token.role)));
+    }
+
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && 'appSessionId' in request.auth.token &&
+        hasBackendSession() && (!requiresSecondFactor() || hasSecondFactor());
     }
 
     function isOwner(userId) {
@@ -107,8 +134,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().email == request.auth.token.email && isPublicRole(incoming().role);
-      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled']);
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().email == request.auth.token.email && isPublicRole(incoming().role) && incoming().role == request.auth.token.role && (!('twoFactorEnabled' in incoming()) || incoming().twoFactorEnabled == false);
+      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled', 'twoFactorEnabled']);
       allow delete: if false;
     }
     match /trainingRequests/{requestId} {

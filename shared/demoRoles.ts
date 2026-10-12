@@ -1,0 +1,1 @@
+export const demoRoles = ['cgpmp_member', 'super_admin', 'ac_agent', 'armp_agent', 'dgcmp_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier', 'dfat_admin', 'formateur'] as const;

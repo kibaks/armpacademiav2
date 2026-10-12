@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -579,7 +580,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     setIsAskingTutorQA(true);
 
     try {
-      const res = await fetch('/api/ai/tutor', {
+      const res = await authenticatedFetch('/api/ai/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

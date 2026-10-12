@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef } from 'react';
 import { 
   User, 
@@ -682,18 +683,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     setShow2FASetupModal(true);
     // Envoi réel du code OTP
     try {
-      const res = await fetch('/api/2fa/send', {
+      const res = await authenticatedFetch('/api/2fa/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentProfile.email }),
+        body: JSON.stringify({ enroll: true }),
       });
       const data = await res.json();
       if (data.ok) {
-        setOtp2FAHint(
-          data.devCode
-            ? `Mode sans provider mail — code de test : ${data.devCode}`
-            : `Code envoyé à ${currentProfile.email} (valable 10 minutes).`
-        );
+        setOtp2FAHint(`Code envoyé à ${currentProfile.email} (valable 10 minutes).`);
       } else {
         setOtp2FAError(data.error || 'Envoi du code impossible.');
       }
@@ -707,7 +704,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     setIsVerifying2FA(true);
     setOtp2FAError(null);
     try {
-      const res = await fetch('/api/2fa/verify', {
+      const res = await authenticatedFetch('/api/2fa/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: currentProfile.email, code: otpInput }),

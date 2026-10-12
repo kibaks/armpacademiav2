@@ -108,8 +108,11 @@ async function uploadImageThroughApp(file: File, opts: UploadOptions): Promise<A
   if (!imageMime(file.name)) throw new Error('Formats acceptés : JPG, JPEG, PNG, GIF et WebP.');
   if (file.size > MAX_IMAGE_BYTES) throw new Error('Image trop volumineuse : maximum 3 Mo. Réduisez sa taille.');
   if (!file.size) throw new Error('Le fichier image est vide.');
+  await auth.authStateReady();
   if (!auth.currentUser) throw new Error('Connectez-vous pour importer une image.');
-  const token = await auth.currentUser.getIdToken();
+  const user = auth.currentUser;
+  const token = await user.getIdToken();
+  if (auth.currentUser !== user) throw new Error('La session a changé.');
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/storage/images');
@@ -125,6 +128,8 @@ async function uploadImageThroughApp(file: File, opts: UploadOptions): Promise<A
     xhr.onload = () => {
       try {
         const payload = JSON.parse(xhr.responseText || '{}');
+        if (auth.currentUser !== user) throw new Error('La session a changé.');
+        if (['SESSION_INVALID', 'AUTH_REQUIRED', 'MFA_REQUIRED'].includes(payload.code)) window.dispatchEvent(new CustomEvent('academia-session-required', { detail: { uid: user.uid, code: payload.code } }));
         if (xhr.status < 200 || xhr.status >= 300) throw new Error(payload.message || payload.error || 'Upload refusé (' + xhr.status + ').');
         if (!payload.data?.url) throw new Error('Réponse du serveur de stockage invalide.');
         opts.onProgress?.(100); resolve(payload.data);

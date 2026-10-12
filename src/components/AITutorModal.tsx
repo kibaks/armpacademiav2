@@ -1251,7 +1251,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         audioBase64: mediaToSend?.type === 'audio' ? mediaToSend.audioBase64 : undefined,
         audioMimeType: mediaToSend?.type === 'audio' ? mediaToSend.mimeType : undefined
       };
-      const response = await fetch('/api/ai/tutor', {
+      const response = await authenticatedFetch('/api/ai/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)

@@ -249,13 +249,13 @@ export const ContenuLocalSection: React.FC<{
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
             <div>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5" /> Comptes Démo PME • Accès Immédiat Formation
+                <Sparkles className="w-3.5 h-3.5" /> Profils métiers PME • Parcours de formation
               </span>
               <h3 className="mt-2.5 text-2xl sm:text-3xl font-bold tracking-tight">
-                Testez l’espace formation PME avec 4 profils métiers réels
+                Découvrez les parcours de formation de 4 profils métiers PME
               </h3>
               <p className="mt-1.5 text-xs sm:text-sm text-emerald-100/80 max-w-2xl">
-                Connectez-vous en 1 clic avec un compte démo PME congolaise certifiée ARSP (BTP, Médical, Numérique ou Agro-industrie) pour suivre les modules dédiés au Contenu Local (Loi 17/001), aux Appels d’Offres et à l’Exécution Financière.
+                Ces profils illustrent les métiers du BTP, du médical, du numérique et de l’agro-industrie. Connectez-vous avec votre compte personnel pour suivre les modules dédiés au contenu local, aux appels d’offres et à l’exécution financière.
               </p>
             </div>
             <button
@@ -314,7 +314,7 @@ export const ContenuLocalSection: React.FC<{
                   className="mt-4 w-full py-2 px-3 rounded-xl bg-white text-slate-950 hover:bg-emerald-300 font-extrabold text-[11px] transition flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <PlayCircle className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>Ouvrir ce compte Démo PME</span>
+                  <span>Suivre le parcours avec mon compte</span>
                 </button>
               </div>
             ))}

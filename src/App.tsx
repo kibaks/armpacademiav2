@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { authenticatedFetch } from './lib/adminApi';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Header 
 } from './components/Header';
@@ -80,9 +81,10 @@ import {
   deleteCustomCourseFromFirestore,
   fetchAllUserProfilesFromFirestore,
   testFirestoreConnection,
+  restoreBackendSession,
   firebaseLogout 
 } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onIdTokenChanged } from 'firebase/auth';
 
 import { 
   Bot, 
@@ -124,6 +126,7 @@ export default function App() {
   const [firestoreProfiles, setFirestoreProfiles] = useState<UserProfile[]>([]);
 
   // Authentication & Session State
+  const sessionGeneration = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [pendingCourseForAuth, setPendingCourseForAuth] = useState<CourseModule | null>(null);
@@ -242,81 +245,85 @@ export default function App() {
     localStorage.setItem('armp_current_role', currentRole);
   }, [currentRole]);
 
-  // 4. Initial Firebase Auth Subscription & Session Restoring on Page Refresh
+  // Backend JWT authenticates the session; Firebase bridges direct Firestore access.
   useEffect(() => {
-    setPreloaderStatus("Vérification de la session et des accès institutionnels...");
-
-    const preloadingTimeout = window.setTimeout(() => setIsAppLoading(false), 12000);
-
-    // Subscribe to Firebase Auth state
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const timeout = window.setTimeout(() => setIsAppLoading(false), 12000);
+    const reset = () => {
       setIsAuthenticated(false);
-      if (firebaseUser) {
-        setPreloaderStatus(`Chargement du profil sécurisé (${firebaseUser.email || 'Agent'})...`);
-        try {
-          const userProfile = await getOrInitUserProfile(firebaseUser, currentRole);
-          setCurrentRole(userProfile.role);
-          setProfiles(prev => ({
-            ...prev,
-            [userProfile.role]: userProfile
-          }));
-          setIsAuthenticated(true);
-          localStorage.setItem('armp_session_profile', JSON.stringify(userProfile));
-        } catch (err) {
-          console.error("Erreur de synchronisation Firestore profil:", err);
+      setProfiles(DEMO_PROFILES);
+      setFirestoreProfiles([]);
+      setRequests([]);
+      setCgpmpAccountRequests([]);
+      setSelectedCourseForPlayer(null);
+      setIsTutorOpen(false);
+      setIsPlacementOpen(false);
+      localStorage.removeItem('armp_session_profile');
+      localStorage.removeItem('academia_cgpmp_member_credentials_v1');
+    };
+    let lastSessionUid: string | null = null;
+    const restore = async () => {
+      const generation = ++sessionGeneration.current;
+      const user = auth.currentUser;
+      const active = () => generation === sessionGeneration.current && auth.currentUser === user;
+      if (!user || lastSessionUid !== user.uid) reset();
+      else setIsAuthenticated(false);
+      try {
+        if (!user) return;
+        const token = await user.getIdTokenResult();
+        if (!active() || !token.claims.appSessionId) return;
+        const response = await authenticatedFetch('/api/auth/session');
+        const session = await response.json();
+        if (!active()) return;
+        if (!response.ok) {
+          reset(); lastSessionUid = null;
+          if (session.code === 'MFA_REQUIRED') { setAuthModalMode('login'); setIsAuthModalOpen(true); }
+          else if (['SESSION_INVALID', 'AUTH_REQUIRED'].includes(session.code)) { setAuthModalMode('login'); setIsAuthModalOpen(true); await firebaseLogout(); }
+          else if (session.code !== 'PROFILE_REQUIRED') showToast(session.error || 'Session indisponible.');
+          return;
         }
-
-        // Fetch persistent training requests, custom courses & all user profiles from Firestore when authenticated
-        try {
-          setPreloaderStatus("Synchronisation des dossiers CGPMP & visas DFAT...");
-          const [firestoreReqs, remoteCourses, remoteProfiles, remoteCgpmpAccounts] = await Promise.all([
-            fetchTrainingRequestsFromFirestore().catch(() => []),
-            fetchCustomCoursesFromFirestore().catch(() => null),
-            fetchAllUserProfilesFromFirestore().catch(() => []),
-            fetchCgpmpAccountRequestsFromFirestore().catch(() => [])
-          ]);
-          if (remoteCgpmpAccounts && remoteCgpmpAccounts.length > 0) {
-            setCgpmpAccountRequests(remoteCgpmpAccounts);
-          }
-          if (firestoreReqs && firestoreReqs.length > 0) {
-            setRequests(prev => {
-              const map = new Map<string, TrainingRequest>();
-              firestoreReqs.forEach(r => map.set(r.id, r));
-              prev.forEach(r => {
-                if (!map.has(r.id)) map.set(r.id, r);
-              });
-              return Array.from(map.values());
-            });
-          }
-          if (remoteCourses !== null) {
-            const map = new Map<string, CourseModule>();
-            COURSES_DATA.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
-            remoteCourses.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
-            setCourses(Array.from(map.values()));
-            localStorage.setItem('armp_courses_custom', JSON.stringify(remoteCourses));
-          }
-          if (remoteProfiles && remoteProfiles.length > 0) {
-            setFirestoreProfiles(remoteProfiles);
-          }
-        } catch (err) {
-          console.warn("Erreur chargement données Firestore:", err);
+        const profile = await getOrInitUserProfile(user);
+        if (!active() || session.uid !== user.uid) return;
+        lastSessionUid = user.uid;
+        setCurrentRole(profile.role);
+        setProfiles({ ...DEMO_PROFILES, [profile.role]: profile });
+        setIsAuthenticated(true);
+        localStorage.setItem('armp_session_profile', JSON.stringify(profile));
+        const [requests, courses, profiles, accounts] = await Promise.all([
+          fetchTrainingRequestsFromFirestore(), fetchCustomCoursesFromFirestore(),
+          fetchAllUserProfilesFromFirestore(), fetchCgpmpAccountRequestsFromFirestore()
+        ]);
+        if (!active()) return;
+        setRequests(requests);
+        setFirestoreProfiles(profiles);
+        setCgpmpAccountRequests(accounts);
+        if (courses) {
+          const map = new Map<string, CourseModule>();
+          COURSES_DATA.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
+          courses.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
+          setCourses(Array.from(map.values()));
         }
-      } else {
-        localStorage.removeItem('armp_session_profile');
-        setIsAuthenticated(false);
-      }
-
-      // Verify connection to Firestore
-      await testFirestoreConnection();
-
-      // Finish Preloading
-      setPreloaderStatus("Système ACADEMIA ITECH opérationnel.");
-      setTimeout(() => {
-        setIsAppLoading(false);
-      }, 400);
-    });
-
-    return () => { window.clearTimeout(preloadingTimeout); unsubscribe(); };
+      } catch { if (active()) showToast('Chargement de la session ou des données indisponible. Réessayez.'); }
+      finally { if (active()) setIsAppLoading(false); }
+    };
+    const required = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.uid !== auth.currentUser?.uid) return;
+      ++sessionGeneration.current;
+      reset();
+      setAuthModalMode('login'); setIsAuthModalOpen(true);
+      if (detail.code !== 'MFA_REQUIRED') void firebaseLogout().catch(() => {});
+    };
+    const refreshed = () => { void restore(); };
+    const unsubscribe = onIdTokenChanged(auth, () => { void restore(); });
+    void restoreBackendSession().catch(() => showToast('Restauration de session indisponible. Réessayez.'));
+    window.addEventListener('academia-session-required', required);
+    window.addEventListener('academia-session-verified', refreshed);
+    return () => {
+      ++sessionGeneration.current;
+      window.clearTimeout(timeout); unsubscribe();
+      window.removeEventListener('academia-session-required', required);
+      window.removeEventListener('academia-session-verified', refreshed);
+    };
   }, []);
 
   const currentProfile = profiles[currentRole] || profiles['cgpmp_member'];
@@ -382,30 +389,16 @@ export default function App() {
       showToast('Connectez-vous avec un compte Firebase réel.');
       setIsAuthModalOpen(true); return;
     }
-    try { profile = await getOrInitUserProfile(auth.currentUser); }
-    catch { showToast('Profil Firebase indisponible.'); return; }
-    setCurrentRole(profile.role);
-    setProfiles(prev => ({
-      ...prev,
-      [profile.role]: profile
-    }));
-    setIsAuthenticated(true);
+    const user = auth.currentUser;
+    const generation = sessionGeneration.current;
+    try {
+    const response = await authenticatedFetch('/api/auth/session');
+    if (!response.ok) return;
+    try { profile = await getOrInitUserProfile(user); }
+    catch (error) { showToast(error instanceof Error ? error.message : 'Profil Firebase indisponible.'); return; }
+    if (auth.currentUser !== user || generation !== sessionGeneration.current) return;
+    window.dispatchEvent(new Event('academia-session-verified'));
     setIsAuthModalOpen(false);
-    localStorage.setItem('armp_session_profile', JSON.stringify(profile));
-
-    // Also fetch training requests now that user is logged in
-    fetchTrainingRequestsFromFirestore().then(firestoreReqs => {
-      if (firestoreReqs && firestoreReqs.length > 0) {
-        setRequests(prev => {
-          const map = new Map<string, TrainingRequest>();
-          firestoreReqs.forEach(r => map.set(r.id, r));
-          prev.forEach(r => {
-            if (!map.has(r.id)) map.set(r.id, r);
-          });
-          return Array.from(map.values());
-        });
-      }
-    }).catch(err => console.warn("Erreur chargement requêtes post-login:", err));
 
     if (pendingCourseForAuth) {
       setSelectedCourseForPlayer(pendingCourseForAuth);
@@ -422,6 +415,7 @@ export default function App() {
       setTimeout(() => setIsPlacementOpen(true), 400);
       showToast('✅ Test de niveau débloqué — bienvenue !');
     }
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Connexion indisponible.'); setIsAuthModalOpen(true); }
   };
 
   // Fast institutional demo login
@@ -462,32 +456,31 @@ export default function App() {
 
   // Two-Factor Authentication (2FA) Toggle in Profile
   const handleToggleTwoFactor = async (enabled: boolean) => {
-    const updated: UserProfile = {
-      ...currentProfile,
-      twoFactorEnabled: enabled
-    };
-    setProfiles(prev => ({
-      ...prev,
-      [currentRole]: updated
-    }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-    showToast(
-      enabled
-        ? "Sécurité renforcée : Authentification à double facteur (2FA) activée."
-        : "Authentification à double facteur (2FA) désactivée."
-    );
     try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Failed to sync 2FA to Firestore", e);
-    }
+      if (!enabled) {
+        const response = await authenticatedFetch('/api/auth/mfa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Modification refusée.');
+      }
+      window.dispatchEvent(new Event('academia-session-verified'));
+      showToast(enabled ? 'Double authentification activée après vérification du code.' : 'Double authentification désactivée.');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Modification de sécurité indisponible.'); }
   };
 
   const handleLogout = async () => {
+    ++sessionGeneration.current;
+    setIsAuthenticated(false);
+    setProfiles(DEMO_PROFILES);
+    setFirestoreProfiles([]);
+    setRequests([]);
+    setCgpmpAccountRequests([]);
+    setIsTutorOpen(false);
+    setIsPlacementOpen(false);
     try {
       await firebaseLogout();
     } catch (e) {
-      console.warn("Erreur lors de la déconnexion Firebase", e);
+      showToast("Déconnexion impossible. Réessayez.");
+      return;
     }
     localStorage.removeItem('armp_session_profile');
     setIsAuthenticated(false);
@@ -968,12 +961,11 @@ export default function App() {
               onExploreCourses={() => setActiveTab('catalogue')}
               onOpenTuteur={handleOpenTutor}
               onSelectPmeDemoAccount={(demoProfile, openModuleId) => {
-                handleLoginSuccess(demoProfile);
+                // The public examples never replace the signed-in identity.
                 if (openModuleId) {
                   const targetMod = courses.find((c) => c.id === openModuleId);
                   if (targetMod) {
-                    setSelectedCourseForPlayer(targetMod);
-                    setSubDetailBreadcrumb(`${targetMod.code} • ${targetMod.title}`);
+                    handleOpenCourse(targetMod);
                     return;
                   }
                 }

@@ -1,3 +1,5 @@
+import { authRouter } from './backend/auth.js';
+import { cgpmpRouter } from './backend/cgpmp.js';
 import { storageRouter } from './backend/storage';
 import { adminRouter, learningRouter, authenticate, requireAdmin, services } from './backend/admin';
 import express from 'express';
@@ -45,6 +47,8 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '25mb' }));
 app.disable('x-powered-by');
+app.use('/api', authRouter);
+app.use('/api/cgpmp', cgpmpRouter);
 app.use('/api/storage', storageRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
@@ -54,6 +58,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 });
 
 
+app.use(['/api/ai', '/ai'], authenticate);
 // Lazy initialize Gemini AI client (supports dynamic API_KEY from paid_model_flow as well as GEMINI_API_KEY)
 let aiClient: GoogleGenAI | null = null;
 let lastUsedApiKey: string | null = null;
@@ -2138,69 +2143,6 @@ function levelFromScore(score: number, s: LevelSettings = DEFAULT_LEVEL_SETTINGS
   return s.labels.debutant;
 }
 
-// ============================================================================
-// 2FA — code OTP à usage unique (authentification à double facteur)
-// - envoyé par email via RESEND_API_KEY si configuré
-// - sinon renvoyé en devCode (mode démo / sans provider mail)
-// ============================================================================
-const otpStore = new Map<string, { code: string; expires: number; attempts: number }>();
-
-app.post('/api/2fa/send', async (req, res) => {
-  try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    if (!email.includes('@')) return res.status(400).json({ ok: false, error: 'Adresse email invalide.' });
-    const code = String(crypto.randomInt(100000, 1000000));
-    otpStore.set(email, { code, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
-    let delivered = false;
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (resendApiKey) {
-      try {
-        const r = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendApiKey}` },
-          body: JSON.stringify({
-            from: 'ARMP RDC Academia <no-reply@armp-rdc.org>',
-            to: [email],
-            subject: '[ARMP RDC] Votre code de vérification (2FA)',
-            text: `Code de vérification ACADEMIA : ${code} — valable 10 minutes. Ne le partagez avec personne.`,
-          }),
-        });
-        delivered = r.ok;
-      } catch {
-        delivered = false;
-      }
-    }
-    if (!delivered && process.env.NODE_ENV === 'production') {
-      otpStore.delete(email);
-      return res.status(503).json({ ok: false, error: 'Envoi du code indisponible.' });
-    }
-    res.json({ ok: true, delivered, ...(delivered || process.env.NODE_ENV === 'production' ? {} : { devCode: code }) });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message || 'send failed' });
-  }
-});
-
-app.post('/api/2fa/verify', (req, res) => {
-  const email = String(req.body?.email || '').trim().toLowerCase();
-  const code = String(req.body?.code || '').trim();
-  const entry = otpStore.get(email);
-  if (!entry) return res.status(400).json({ ok: false, error: 'Aucun code actif — demandez-en un nouveau.' });
-  if (Date.now() > entry.expires) {
-    otpStore.delete(email);
-    return res.status(400).json({ ok: false, error: 'Code expiré — demandez-en un nouveau.' });
-  }
-  if (entry.attempts >= 5) {
-    otpStore.delete(email);
-    return res.status(400).json({ ok: false, error: 'Trop de tentatives — demandez un nouveau code.' });
-  }
-  if (entry.code !== code) {
-    entry.attempts += 1;
-    return res.status(400).json({ ok: false, error: `Code incorrect (${5 - entry.attempts} tentative(s) restante(s)).` });
-  }
-  otpStore.delete(email);
-  res.json({ ok: true });
-});
-
 app.post('/api/ai/placement-quiz', async (req, res) => {
   try {
     const { role, institution, answers } = req.body;
@@ -3084,125 +3026,6 @@ app.get('/api/ai/flow-video/stream', (req, res) => {
 // ============================================================================
 // CGPMP ACCOUNT CREATION VALIDATION & CREDENTIALS EMAIL DISPATCH (ARMP ADMIN)
 // ============================================================================
-app.post('/api/cgpmp/send-credentials-email', async (req, res) => {
-  try {
-    const {
-      requestId,
-      institution,
-      creationDocument,
-      permanentSecretary,
-      members,
-      validatedBy
-    } = req.body || {};
-
-    if (!requestId || !permanentSecretary?.email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Paramètres de la demande CGPMP incomplets.'
-      });
-    }
-
-    const adminValidator = validatedBy || 'Administration Générale ARMP (Direction DFAT)';
-    const nowLabel = new Date().toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    const docRef = creationDocument?.documentRef || 'Acte portant création CGPMP';
-
-    const dispatchedEmails: any[] = [];
-
-    // 1. Credentials Email for the Secrétaire Permanent
-    const spPass =
-      permanentSecretary.tempPassword ||
-      `ARMP-SP-${Math.floor(1000 + Math.random() * 9000)}`;
-    const spMatricule =
-      permanentSecretary.matricule ||
-      `CGPMP-SP-2026-${Math.floor(100 + Math.random() * 900)}`;
-
-    dispatchedEmails.push({
-      id: `MAIL-SP-${Date.now()}`,
-      recipientName: permanentSecretary.name,
-      recipientEmail: permanentSecretary.email.trim().toLowerCase(),
-      recipientRoleInCell: 'Secrétaire Permanent de la CGPMP',
-      loginEmail: permanentSecretary.email.trim().toLowerCase(),
-      tempPassword: spPass,
-      matricule: spMatricule,
-      subject: `[ARMP RDC] Validation officielle CGPMP (${institution}) & Coordonnées d'Authentification Secrétaire Permanent`,
-      bodyPreview: `Bonjour ${permanentSecretary.name}, L'Administration de l'ARMP (${adminValidator}) a validé votre demande de création de compte CGPMP ainsi que l'acte portant création (${docRef}). Vos coordonnées d'authentification : Identifiant = ${permanentSecretary.email.trim().toLowerCase()} | Mot de passe = ${spPass} | Matricule = ${spMatricule}.`,
-      sentAt: nowLabel,
-      validatedByAdmin: adminValidator
-    });
-
-    // 2. Credentials Emails for each Member added by the Secrétaire Permanent
-    if (Array.isArray(members)) {
-      members.forEach((m: any, idx: number) => {
-        if (!m?.email) return;
-        const cleanEmail = String(m.email).trim().toLowerCase();
-        const memPass =
-          m.generatedPassword ||
-          `ARMP-MEM-${2026}-${String(idx + 1).padStart(2, '0')}${Math.floor(10 + Math.random() * 89)}`;
-        const memMatricule =
-          m.matricule ||
-          `CGPMP-MEM-2026-${String(idx + 1).padStart(3, '0')}`;
-
-        dispatchedEmails.push({
-          id: `MAIL-MEM-${Date.now()}-${idx + 1}`,
-          recipientName: m.fullName || 'Membre CGPMP',
-          recipientEmail: cleanEmail,
-          recipientRoleInCell: m.functionInCell || 'Membre de la Cellule CGPMP',
-          loginEmail: cleanEmail,
-          tempPassword: memPass,
-          matricule: memMatricule,
-          subject: `[ARMP RDC] Vos Coordonnées d'Authentification Membre CGPMP — ${institution}`,
-          bodyPreview: `Bonjour ${m.fullName}, Suite à votre inscription par le Secrétaire Permanent (${permanentSecretary.name}) et à la validation de l'acte de création (${docRef}) par l'Administration de l'ARMP, voici vos coordonnées d'authentification sur ACADEMIA ITECH : Identifiant = ${cleanEmail} | Mot de passe = ${memPass} | Matricule = ${memMatricule}.`,
-          sentAt: nowLabel,
-          validatedByAdmin: adminValidator
-        });
-      });
-    }
-
-    // Optional real email webhook / Resend API if RESEND_API_KEY is present in environment
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (resendApiKey) {
-      for (const mail of dispatchedEmails) {
-        try {
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${resendApiKey}`
-            },
-            body: JSON.stringify({
-              from: 'ARMP RDC Academia <no-reply@armp-rdc.org>',
-              to: [mail.recipientEmail],
-              subject: mail.subject,
-              text: mail.bodyPreview
-            })
-          });
-        } catch {
-          // Continue cleanly if external mail relay is unreachable
-        }
-      }
-    }
-
-    return res.json({
-      success: true,
-      requestId,
-      validatedAt: nowLabel,
-      dispatchedCount: dispatchedEmails.length,
-      dispatchedEmails
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      message: err?.message || 'Erreur lors de l’envoi des coordonnées par mail.'
-    });
-  }
-});
-
 // Vite Middleware or Production Static Handler
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

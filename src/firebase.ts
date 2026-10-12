@@ -1,10 +1,8 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { 
   getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+  signInWithCustomToken,
   signOut, 
-  sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup,
   updateProfile as updateAuthProfile,
@@ -371,19 +369,12 @@ export async function getOrInitUserProfile(user: FirebaseUser, fallbackRole: Use
 
     if (snap.exists()) {
       const profile = snap.data() as UserProfile;
-      const token = await user.getIdTokenResult(true);
+      const token = await user.getIdTokenResult();
       const privileged = ['super_admin', 'dfat_admin', 'formateur', 'armp_agent', 'dgcmp_agent'];
+      if (privileged.includes(profile.role) && !token.claims.role) throw new Error('Les permissions Firebase du compte ne sont pas configurées. Contactez le superadministrateur.');
       return { ...profile, id: user.uid, role: token.claims.role as UserRole || (privileged.includes(profile.role) ? 'particulier' : profile.role) };
     } else {
-      // Create new profile document in Firestore
-      const newProfile = buildDefaultProfile(
-        user.uid, 
-        user.email || '', 
-        user.displayName || user.email?.split('@')[0] || 'Apprenant ARMP', 
-        ['particulier', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'ac_agent', 'cgpmp_member'].includes(fallbackRole) ? fallbackRole : 'particulier'
-      );
-      await setDoc(userDocRef, newProfile);
-      return newProfile;
+      throw new Error('Complétez votre inscription pour créer votre profil.');
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
@@ -513,7 +504,8 @@ export async function syncUserProfileToFirestore(profile: UserProfile): Promise<
   const path = `users/${profile.id}`;
   try {
     const userDocRef = doc(db, 'users', profile.id);
-    await setDoc(userDocRef, JSON.parse(JSON.stringify(profile)), { merge: true });
+    const { id, email, role, twoFactorEnabled, disabled, ...editable } = profile as UserProfile & { disabled?: boolean };
+    await updateDoc(userDocRef, JSON.parse(JSON.stringify(editable)));
     saveProfileToLocalRegistry(profile);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -597,253 +589,45 @@ export function saveLocalCgpmpAccountRequestsList(list: CgpmpAccountCreationRequ
   }
 }
 
-export function saveCgpmpMemberCredentialToLocal(cred: CgpmpMemberStoredCredential): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const raw = localStorage.getItem(LOCAL_CGPMP_MEMBER_CREDS_KEY);
-    const map: Record<string, CgpmpMemberStoredCredential> = raw ? JSON.parse(raw) : {};
-    map[cred.email.trim().toLowerCase()] = cred;
-    localStorage.setItem(LOCAL_CGPMP_MEMBER_CREDS_KEY, JSON.stringify(map));
-    saveProfileToLocalRegistry(cred.profile);
-  } catch {
-    // Ignore quota errors
-  }
+export function saveCgpmpMemberCredentialToLocal(_cred: CgpmpMemberStoredCredential): void {
+  if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_CGPMP_MEMBER_CREDS_KEY);
 }
-
-export function getCgpmpMemberCredentialFromLocal(email: string): CgpmpMemberStoredCredential | null {
-  if (typeof window === 'undefined' || !email) return null;
-  try {
-    const clean = email.trim().toLowerCase();
-    const raw = localStorage.getItem(LOCAL_CGPMP_MEMBER_CREDS_KEY);
-    if (raw) {
-      const map: Record<string, CgpmpMemberStoredCredential> = JSON.parse(raw);
-      if (map[clean]) return map[clean];
-    }
-    // Also check validated requests in getLocalCgpmpAccountRequests()
-    const allReqs = getLocalCgpmpAccountRequests();
-    for (const req of allReqs) {
-      if (req.status === 'Validé par ARMP — Coordonnées envoyées' && req.dispatchedEmails) {
-        const mail = req.dispatchedEmails.find(
-          (m) => m.loginEmail.trim().toLowerCase() === clean || m.recipientEmail.trim().toLowerCase() === clean
-        );
-        if (mail) {
-          const prof: UserProfile = {
-            ...buildDefaultProfile(
-              `USR-CGPMP-${mail.matricule}`,
-              mail.loginEmail,
-              mail.recipientName,
-              'cgpmp_member'
-            ),
-            role: 'cgpmp_member',
-            roleTitle: mail.recipientRoleInCell,
-            institution: req.institution,
-            matricule: mail.matricule,
-            secondaryIdNumber: req.creationDocument.documentRef,
-            subCategory: req.subCategory,
-            province: req.province,
-            location: `${req.province}, RDC`,
-            bio: `${mail.recipientRoleInCell} au sein de ${req.institution}. Acte de création CGPMP validé par l'ARMP : ${req.creationDocument.documentRef}.`
-          };
-          return {
-            email: mail.loginEmail,
-            password: mail.tempPassword,
-            requestId: req.id,
-            institution: req.institution,
-            fullName: mail.recipientName,
-            roleInCell: mail.recipientRoleInCell,
-            matricule: mail.matricule,
-            documentRef: req.creationDocument.documentRef,
-            profile: prof
-          };
-        }
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
+export function getCgpmpMemberCredentialFromLocal(_email: string): CgpmpMemberStoredCredential | null {
+  if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_CGPMP_MEMBER_CREDS_KEY);
+  return null;
 }
 
 export async function saveCgpmpAccountRequestToFirestore(req: CgpmpAccountCreationRequest): Promise<void> {
-  // Always persist locally first
-  const currentList = getLocalCgpmpAccountRequests();
-  const nextList = [req, ...currentList.filter((r) => r.id !== req.id)];
-  saveLocalCgpmpAccountRequestsList(nextList);
-
-  const path = `cgpmpAccountRequests/${req.id}`;
-  try {
-    const clean = JSON.parse(JSON.stringify(req));
-    // Strip large base64 fileDataUrl from Firestore document if > 150KB to respect 1MB limit
-    if (clean.creationDocument?.fileDataUrl && clean.creationDocument.fileDataUrl.length > 150000) {
-      delete clean.creationDocument.fileDataUrl;
-    }
-    await setDoc(doc(db, 'cgpmpAccountRequests', req.id), clean, { merge: true });
-  } catch (error) {
-    console.warn('Info: CGPMP Account Request saved locally; Firestore sync:', error);
-  }
+  if (!auth.currentUser) throw new Error('Connectez-vous avant de soumettre une demande CGPMP.');
+  const clean = JSON.parse(JSON.stringify(req));
+  clean.members = (clean.members || []).map(({ generatedPassword, ...member }: any) => member);
+  if (clean.creationDocument?.fileDataUrl?.length > 150000) delete clean.creationDocument.fileDataUrl;
+  await setDoc(doc(db, 'cgpmpAccountRequests', req.id), clean, { merge: true });
 }
 
 export async function fetchCgpmpAccountRequestsFromFirestore(): Promise<CgpmpAccountCreationRequest[]> {
-  const localReqs = getLocalCgpmpAccountRequests();
-  try {
-    if (!auth.currentUser) return [];
-    const token = await auth.currentUser.getIdTokenResult();
-    const source = ['super_admin','dfat_admin'].includes(token.claims.role as string) ? collection(db, 'cgpmpAccountRequests') : query(collection(db, 'cgpmpAccountRequests'), where('permanentSecretaryEmail', '==', auth.currentUser.email));
-    const snap = await getDocs(source);
-    const map = new Map<string, CgpmpAccountCreationRequest>();
-    snap.forEach((d) => {
-      const data = d.data() as CgpmpAccountCreationRequest;
-      map.set(data.id, data);
-    });
-    localReqs.forEach((r) => {
-      if (!map.has(r.id)) map.set(r.id, r);
-    });
-    const merged = Array.from(map.values());
-    saveLocalCgpmpAccountRequestsList(merged);
-    return merged;
-  } catch {
-    return localReqs;
-  }
+  if (!auth.currentUser) return [];
+  const user = auth.currentUser;
+  const token = await user.getIdTokenResult();
+  const source = ['super_admin', 'dfat_admin'].includes(token.claims.role as string)
+    ? collection(db, 'cgpmpAccountRequests')
+    : query(collection(db, 'cgpmpAccountRequests'), where('permanentSecretaryEmail', '==', user.email));
+  const snap = await getDocs(source);
+  if (auth.currentUser !== user) return [];
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }) as CgpmpAccountCreationRequest);
 }
 
 export async function validateCgpmpAccountRequestByArmp(
-  req: CgpmpAccountCreationRequest,
-  adminName: string,
-  adminNote?: string
+  req: CgpmpAccountCreationRequest, _adminName: string, _adminNote?: string
 ): Promise<CgpmpAccountCreationRequest> {
-  let dispatchedEmails: DispatchedCredentialEmail[] = [];
-  const decidedAt = new Date().toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  const { authenticatedFetch } = await import('./lib/adminApi');
+  const response = await authenticatedFetch('/api/cgpmp/send-credentials-email', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: req.id })
   });
-
-  try {
-    const { authenticatedFetch } = await import('./lib/adminApi');
-    const res = await authenticatedFetch('/api/cgpmp/send-credentials-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId: req.id,
-        institution: req.institution,
-        creationDocument: req.creationDocument,
-        permanentSecretary: {
-          name: req.permanentSecretaryName,
-          email: req.permanentSecretaryEmail,
-          matricule: req.permanentSecretaryMatricule
-        },
-        members: req.members,
-        validatedBy: adminName
-      })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.dispatchedEmails)) {
-        dispatchedEmails = data.dispatchedEmails;
-      }
-    }
-  } catch {
-    // Fallback local email dispatch generation if offline
-  }
-
-  if (dispatchedEmails.length === 0) {
-    const spPass = `ARMP-SP-${Math.floor(1000 + Math.random() * 9000)}`;
-    dispatchedEmails.push({
-      id: `MAIL-SP-${Date.now()}`,
-      recipientName: req.permanentSecretaryName,
-      recipientEmail: req.permanentSecretaryEmail.trim().toLowerCase(),
-      recipientRoleInCell: 'Secrétaire Permanent de la CGPMP',
-      loginEmail: req.permanentSecretaryEmail.trim().toLowerCase(),
-      tempPassword: spPass,
-      matricule: req.permanentSecretaryMatricule || 'CGPMP-SP-2026-001',
-      subject: `[ARMP RDC] Validation CGPMP (${req.institution}) & Coordonnées Secrétaire Permanent`,
-      bodyPreview: `Validation ARMP accordée (${req.creationDocument.documentRef}). Identifiant : ${req.permanentSecretaryEmail.trim().toLowerCase()} | Mot de passe : ${spPass}`,
-      sentAt: decidedAt,
-      validatedByAdmin: adminName
-    });
-
-    req.members.forEach((m, idx) => {
-      const memPass = `ARMP-MEM-2026-${String(idx + 1).padStart(2, '0')}`;
-      const memMatricule = m.matricule || `CGPMP-MEM-2026-${String(idx + 1).padStart(3, '0')}`;
-      dispatchedEmails.push({
-        id: `MAIL-MEM-${Date.now()}-${idx + 1}`,
-        recipientName: m.fullName,
-        recipientEmail: m.email.trim().toLowerCase(),
-        recipientRoleInCell: m.functionInCell || 'Membre de la CGPMP',
-        loginEmail: m.email.trim().toLowerCase(),
-        tempPassword: memPass,
-        matricule: memMatricule,
-        subject: `[ARMP RDC] Vos Coordonnées d'Authentification Membre CGPMP — ${req.institution}`,
-        bodyPreview: `Compte Membre CGPMP validé par l'ARMP (${req.creationDocument.documentRef}). Identifiant : ${m.email.trim().toLowerCase()} | Mot de passe : ${memPass}`,
-        sentAt: decidedAt,
-        validatedByAdmin: adminName
-      });
-    });
-  }
-
-  // Provision real UserProfiles and store credentials for the Secrétaire Permanent + each Member
-  const updatedMembers = req.members.map((m) => {
-    const foundMail = dispatchedEmails.find(
-      (em) => em.recipientEmail.trim().toLowerCase() === m.email.trim().toLowerCase()
-    );
-    return {
-      ...m,
-      matricule: foundMail?.matricule || m.matricule,
-      generatedPassword: foundMail?.tempPassword || m.generatedPassword,
-      credentialsSentAt: decidedAt,
-      accountActivated: true
-    };
-  });
-
-  for (const mail of dispatchedEmails) {
-    const memberProfile: UserProfile = {
-      ...buildDefaultProfile(
-        `USR-CGPMP-${mail.matricule.replace(/[^a-zA-Z0-9_-]/g, '')}`,
-        mail.loginEmail,
-        mail.recipientName,
-        'cgpmp_member'
-      ),
-      role: 'cgpmp_member',
-      roleTitle: mail.recipientRoleInCell,
-      institution: req.institution,
-      matricule: mail.matricule,
-      secondaryIdNumber: req.creationDocument.documentRef,
-      subCategory: req.subCategory,
-      province: req.province,
-      location: `${req.province}, RDC`,
-      phone: req.permanentSecretaryPhone,
-      bio: `${mail.recipientRoleInCell} • ${req.institution} (${req.province}). Compte CGPMP créé sur base de l'acte ${req.creationDocument.documentRef} et validé par l'Administration de l'ARMP (${adminName}).`
-    };
-
-    saveCgpmpMemberCredentialToLocal({
-      email: mail.loginEmail,
-      password: mail.tempPassword,
-      requestId: req.id,
-      institution: req.institution,
-      fullName: mail.recipientName,
-      roleInCell: mail.recipientRoleInCell,
-      matricule: mail.matricule,
-      documentRef: req.creationDocument.documentRef,
-      profile: memberProfile
-    });
-  }
-
-  const updatedReq: CgpmpAccountCreationRequest = {
-    ...req,
-    members: updatedMembers,
-    status: 'Validé par ARMP — Coordonnées envoyées',
-    validatedBy: adminName,
-    armpAdminNote:
-      adminNote ||
-      `Acte portant création (${req.creationDocument.documentRef}) et liste des ${req.members.length} membres vérifiés et validés par l'Administration de l'ARMP. Coordonnées d'authentification envoyées par mail.`,
-    decidedAt,
-    dispatchedEmails
-  };
-
-  await saveCgpmpAccountRequestToFirestore(updatedReq);
-  return updatedReq;
+  const data = await response.json();
+  if (!response.ok || !data.request) throw new Error(data.error || 'Création des comptes impossible.');
+  saveLocalCgpmpAccountRequestsList([data.request, ...getLocalCgpmpAccountRequests().filter(r => r.id !== req.id)]);
+  return data.request;
 }
 
 export async function rejectCgpmpAccountRequestByArmp(
@@ -872,6 +656,9 @@ export async function rejectCgpmpAccountRequestByArmp(
 }
 
 // Authentication Helpers
+let backendAuthGeneration = 0;
+let backendRestore: Promise<void> | null = null;
+
 export async function firebaseRegisterUser(
   email: string,
   pass: string,
@@ -879,35 +666,64 @@ export async function firebaseRegisterUser(
   role: UserRole,
   extraDetails?: Partial<UserProfile>
 ): Promise<UserProfile> {
-  if (['super_admin', 'dfat_admin', 'formateur', 'armp_agent', 'dgcmp_agent'].includes(role)) throw new Error('Ce rôle nécessite une création par le superadministrateur.');
-  const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-  const user = userCredential.user;
+  ++backendAuthGeneration;
+  const session = await accountRequest('/auth/register', { email, password: pass, name, role, details: extraDetails });
+  const credential = await signInWithCustomToken(auth, session.bridgeToken);
+  return getLoginProfile(credential.user);
+}
 
-  if (name) {
-    await updateAuthProfile(user, { displayName: name });
-  }
+async function accountRequest(path: string, body: unknown) {
+  const response = await fetch(`/api${path}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Connexion indisponible.');
+  return data;
+}
 
-  const newProfile: UserProfile = {
-    ...buildDefaultProfile(user.uid, email, name, role),
-    ...extraDetails,
-    id: user.uid,
-    email: email,
-    name: name,
-    role: role
-  };
+export async function restoreBackendSession() {
+  if (backendRestore) return backendRestore;
+  const generation = backendAuthGeneration;
+  backendRestore = (async () => {
+    await auth.authStateReady();
+    const response = await fetch('/api/auth/bridge', { method: 'POST', credentials: 'same-origin', signal: AbortSignal.timeout(15000) });
+    if (generation !== backendAuthGeneration) return;
+    if (response.status === 401) { await signOut(auth); return; }
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Restauration de session indisponible.');
+    const current = auth.currentUser;
+    const claims = await current?.getIdTokenResult();
+    if (generation !== backendAuthGeneration) return;
+    if (current?.uid === data.uid && claims?.claims.appSessionId === data.appSessionId && claims?.claims.role === data.role) return;
+    await signInWithCustomToken(auth, data.bridgeToken);
+  })().finally(() => { backendRestore = null; });
+  return backendRestore;
+}
 
-  await syncUserProfileToFirestore(newProfile);
-  return newProfile;
+async function exchangeGoogle(user: FirebaseUser) {
+  const session = await accountRequest('/auth/google', { idToken: await user.getIdToken() });
+  return (await signInWithCustomToken(auth, session.bridgeToken)).user;
+}
+
+async function getLoginProfile(user: FirebaseUser): Promise<UserProfile> {
+  const { authenticatedFetch } = await import('./lib/adminApi');
+  const response = await authenticatedFetch('/api/auth/session');
+  const data = await response.json();
+  if (auth.currentUser !== user) throw new Error('La session a changé.');
+  if (data.code === 'MFA_REQUIRED' && data.mfaProfile?.id === user.uid) return data.mfaProfile as UserProfile;
+  if (!response.ok) throw new Error(data.error || 'Vérification de session indisponible.');
+  return getOrInitUserProfile(user);
 }
 
 export async function firebaseLoginUser(email: string, pass: string): Promise<UserProfile> {
-  const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass);
-  return getOrInitUserProfile(credential.user);
+  ++backendAuthGeneration;
+  const session = await accountRequest('/auth/login', { email: email.trim().toLowerCase(), password: pass });
+  const credential = await signInWithCustomToken(auth, session.bridgeToken);
+  return getLoginProfile(credential.user);
 }
 
 export async function firebaseGoogleLogin(): Promise<UserProfile> {
+  ++backendAuthGeneration;
   const userCredential = await signInWithPopup(auth, googleProvider);
-  return await getOrInitUserProfile(userCredential.user);
+  return await getLoginProfile(await exchangeGoogle(userCredential.user));
 }
 
 export async function firebaseGoogleAuthenticate(
@@ -921,13 +737,16 @@ export async function firebaseGoogleAuthenticate(
   isNewAccount: boolean;
   existingSource?: string | null;
 }> {
+  ++backendAuthGeneration;
   const userCredential = await signInWithPopup(auth, googleProvider);
-  const user = userCredential.user;
-  const check = await checkExistingRegisteredUser({
-    uid: user.uid,
-    email: user.email,
-    knownProfiles
-  });
+  const user = await exchangeGoogle(userCredential.user);
+  const { authenticatedFetch } = await import('./lib/adminApi');
+  const response = await authenticatedFetch('/api/auth/session');
+  const session = await response.json();
+  if (auth.currentUser !== user) throw new Error('La session a changé.');
+  if (!response.ok && !['MFA_REQUIRED', 'PROFILE_REQUIRED'].includes(session.code)) throw new Error(session.error || 'Vérification de session indisponible.');
+  const profile = session.code === 'MFA_REQUIRED' ? session.mfaProfile as UserProfile : response.ok ? await getOrInitUserProfile(user) : null;
+  const check = { exists: !!profile, profile, source: 'firebase_session' };
   if (check.exists && check.profile) {
     return {
       uid: user.uid,
@@ -958,26 +777,19 @@ export async function saveGoogleRegisteredProfile(params: {
   photoURL?: string | null;
   extraDetails?: Partial<UserProfile>;
 }): Promise<UserProfile> {
-  const base = buildDefaultProfile(params.uid, params.email, params.name, params.role);
-  const newProfile: UserProfile = {
-    ...base,
-    ...params.extraDetails,
-    id: params.uid,
-    email: params.email,
-    name: params.name,
-    role: params.role,
-    avatarUrl: params.photoURL || base.avatarUrl
-  };
-  saveProfileToLocalRegistry(newProfile);
-  await syncUserProfileToFirestore(newProfile);
-  return newProfile;
+  if (!auth.currentUser || auth.currentUser.uid !== params.uid) throw new Error('Une connexion Google réelle est requise.');
+  const session = await accountRequest('/auth/profile', { name: params.name, role: params.role, details: params.extraDetails });
+  const credential = await signInWithCustomToken(auth, session.bridgeToken);
+  return getLoginProfile(credential.user);
 }
 
 export async function firebaseResetPassword(email: string): Promise<void> {
-  await sendPasswordResetEmail(auth, email);
+  await accountRequest('/auth/password/request', { email });
 }
 
 export async function firebaseLogout(): Promise<void> {
+  ++backendAuthGeneration;
+  await accountRequest('/auth/logout', {});
   await signOut(auth);
 }
 

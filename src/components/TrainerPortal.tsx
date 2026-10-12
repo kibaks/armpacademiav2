@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   GraduationCap,
@@ -264,7 +265,7 @@ L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'éval
     setAiGenerating(true);
     setTrainerNotice(null);
     try {
-      const response = await fetch('/api/ai/generate-animated-module', {
+      const response = await authenticatedFetch('/api/ai/generate-animated-module', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

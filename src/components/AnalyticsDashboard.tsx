@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart3, 
@@ -264,7 +265,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const handleGenerateAIReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const res = await fetch('/api/ai/generate-report', {
+      const res = await authenticatedFetch('/api/ai/generate-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

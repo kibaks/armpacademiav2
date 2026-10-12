@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Play,
@@ -828,7 +829,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       try {
         setFlowVideoStatus('generating');
         setFlowStatusMessage('Génération vidéo Google Flow (Veo HD) d’Aïsha en cours…');
-        const startRes = await fetch('/api/ai/flow-video/start', {
+        const startRes = await authenticatedFetch('/api/ai/flow-video/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -866,7 +867,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         const pollTimer = window.setInterval(async () => {
           attempts += 1;
           try {
-            const stRes = await fetch('/api/ai/flow-video/status', {
+            const stRes = await authenticatedFetch('/api/ai/flow-video/status', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ operationName: opName })

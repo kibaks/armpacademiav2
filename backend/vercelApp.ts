@@ -1,3 +1,5 @@
+import { authRouter } from './auth.js';
+import { cgpmpRouter } from './cgpmp.js';
 import { storageRouter } from './storage.js';
 import { adminRouter, learningRouter, authenticate, requireAdmin } from './admin.js';
 import express from 'express';
@@ -25,6 +27,7 @@ try {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 
 // Ensure compatibility with both Vercel rewrites (/api/...) and direct route requests
@@ -37,6 +40,8 @@ app.use((req, _res, next) => {
 
 
 app.disable('x-powered-by');
+app.use('/api', authRouter);
+app.use('/api/cgpmp', cgpmpRouter);
 app.use('/api/storage', storageRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
@@ -44,6 +49,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
  if (req.method === 'GET') return next();
  authenticate(req, res, () => requireAdmin(req, res, next));
 });
+app.use(['/api/ai', '/ai'], authenticate);
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;
 function getAIClient(): GoogleGenAI | null {

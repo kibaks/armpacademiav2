@@ -1,3 +1,4 @@
+process.env.APP_ORIGIN = 'https://academia.example.com';
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import express from 'express';

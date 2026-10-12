@@ -106,7 +106,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
   const fetchQuestions = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/ai/placement-quiz', {
+      const res = await authenticatedFetch('/api/ai/placement-quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -181,7 +181,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
         };
       });
 
-      const res = await fetch('/api/ai/placement-quiz', {
+      const res = await authenticatedFetch('/api/ai/placement-quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../lib/adminApi';
 // Expressive Neural Human Voice, Millisecond Word-Boundary Lip-Sync & Facial Gesture Engine
 // Supports ElevenLabs Multilingual v2 API + Studio Neural HD Voices (Vivienne / Denise / Eloise)
 // with real-time Web Audio AnalyserNode & exact millisecond WordBoundary synchronization
@@ -1639,7 +1640,7 @@ class SpeechService {
             const controller = new AbortController();
             const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
-            const response = await fetch('/api/ai/tts', {
+            const response = await authenticatedFetch('/api/ai/tts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1740,7 +1741,7 @@ class SpeechService {
 
       // 2. Then prewarm remaining sentences sequentially on server and client
       if (normalized.length > 1) {
-        fetch('/api/ai/tts/prewarm', {
+        authenticatedFetch('/api/ai/tts/prewarm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sentences: normalized.slice(1), voice: targetVoice }),

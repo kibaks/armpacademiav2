@@ -1,3 +1,4 @@
+process.env.APP_ORIGIN = 'https://academia.example.com';
 import assert from 'node:assert/strict';
 import { after, mock, test } from 'node:test';
 import express from 'express';
@@ -5,8 +6,8 @@ import { adminRouter, learningRouter, services } from '../backend/admin';
 
 const { auth, db } = services();
 mock.method(auth, 'verifyIdToken', async (token: string) => {
-  if (token === 'invalid') throw new Error('invalid-token');
-  return { uid: token, role: token === 'admin' ? 'super_admin' : token === 'dfat' ? 'dfat_admin' : 'particulier', email: 'learner@example.com' };
+  if (token === 'invalid') throw Object.assign(new Error('invalid-token'), { code: 'auth/invalid-id-token' });
+  return { firebase: { sign_in_provider: 'google.com' }, uid: token, appSessionId: token, auth_time: 1, role: token === 'admin' ? 'super_admin' : token === 'dfat' ? 'dfat_admin' : 'particulier', email: 'learner@example.com' };
 });
 mock.method(auth, 'createUser', async (data: any) => ({ uid: 'new-user', email: data.email, displayName: data.displayName }));
 mock.method(auth, 'getUser', async (id: string) => ({ uid: id, email: 'user@example.com', customClaims: { role: id === 'protected' ? 'super_admin' : 'particulier' } }));
@@ -19,7 +20,7 @@ mock.method(auth, 'generatePasswordResetLink', async () => 'https://example.com/
 const fixture = { tests: [{ id: 'test-1', title: 'Test', level: 'Initiation', passPct: 60, active: true, questions: [{ id: 'q1', question: 'Question', options: ['A','B','C','D'], answer: 2 }] }] };
 const writes: any[] = [];
 mock.method(db, 'collection', (name: string) => ({
-  doc: (id?: string) => ({ id: id || 'attempt-1', get: async () => ({ exists: true, data: () => fixture }), set: async (data: any) => { writes.push(data); }, update: async (data: any) => { writes.push(data); }, delete: async () => {} }),
+  doc: (id?: string) => ({ id: id || 'attempt-1', get: async () => ({ exists: true, data: () => name === 'authSessions' ? { uid: id, authTime: 1, expiresAt: Date.now() + 60000, version: 0 } : fixture }), set: async (data: any) => { writes.push(data); }, update: async (data: any) => { writes.push(data); }, delete: async () => {} }),
   add: async (data: any) => { writes.push(data); },
   orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
 }));
@@ -75,7 +76,7 @@ test('only superadministrators can create users, with real Firebase UIDs and res
   const response = await request('/admin/users', 'admin', body);
   const data = await response.json();
   assert.equal(response.status, 201); assert.equal(data.profile.id, 'new-user');
-  assert.equal(data.resetLink, 'https://example.com/reset');
+  assert.match(data.resetLink, /^https:\/\/academia\.example\.com\/#reset=[A-Za-z0-9_-]{43}$/);
   assert.equal('password' in data, false);
   assert.equal(claimChanges.at(-1).claims.role, 'formateur');
 });

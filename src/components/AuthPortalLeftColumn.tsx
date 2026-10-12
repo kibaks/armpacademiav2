@@ -27,6 +27,7 @@ import {
 import { PME_DEMO_ACCOUNTS } from '../data/initialData';
 
 interface AuthPortalLeftColumnProps {
+  allowAdmin?: boolean;
   mode: 'login' | 'register' | 'forgot_password' | 'armp_admin';
   onChangeMode?: (nextMode: 'login' | 'register' | 'forgot_password' | 'armp_admin') => void;
   onClose?: () => void;
@@ -69,6 +70,7 @@ interface AuthPortalLeftColumnProps {
 
 export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
   mode,
+  allowAdmin = false,
   onChangeMode,
   onClose,
   selectedRole,
@@ -188,7 +190,7 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
       </div>
 
       {/* LEFT COLUMN FOR LOGIN / FORGOT PASSWORD / ARMP ADMIN */}
-      {(mode === 'login' || mode === 'forgot_password' || mode === 'armp_admin') && (
+      {mode === 'armp_admin' && (
         <div className="space-y-5">
           {/* CGPMP Email Credentials Dispatch & Status Tracker */}
           <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 space-y-4">
@@ -197,7 +199,7 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
                 <Mail className="w-4 h-4 text-amber-300 shrink-0" />
                 <span>Coordonnées CGPMP envoyées par mail (Après validation ARMP)</span>
               </div>
-              {mode !== 'armp_admin' && (
+              {allowAdmin && mode !== 'armp_admin' && (
                 <button
                   type="button"
                   onClick={onOpenArmpValidationView}
@@ -293,7 +295,7 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
           </div>
 
           {/* Fast Institutional Demo Access — Regroupé dans un expandable pour éviter la surcharge */}
-          <details className="group rounded-2xl bg-slate-900/60 border border-white/10 overflow-hidden transition-all">
+          {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO === 'true' && <details className="group rounded-2xl bg-slate-900/60 border border-white/10 overflow-hidden transition-all">
             <summary className="p-4 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition list-none">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
@@ -444,7 +446,7 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
               </div>
             </div>
             </div>
-          </details>
+          </details>}
         </div>
       )}
 
@@ -666,50 +668,7 @@ export const AuthPortalLeftColumn: React.FC<AuthPortalLeftColumnProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-2 text-xs">
-              <div className="flex items-center gap-2 font-extrabold text-white">
-                <User className="w-4 h-4 text-amber-300" />
-                <span>Synthèse Identité & Profil ({roleLabel})</span>
-              </div>
-              <div className="space-y-1.5 text-slate-300">
-                <div className="flex justify-between py-1 border-b border-white/10">
-                  <span>Nom complet :</span>
-                  <strong className="text-white truncate max-w-[240px]">
-                    {composedFullName || 'À renseigner (Étape 2)'}
-                  </strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/10">
-                  <span>Sexe & Nationalité :</span>
-                  <strong className="text-white">
-                    {sexeInput === 'F' ? 'Féminin (F)' : 'Masculin (M)'} • {nationaliteInput || 'RDC'}
-                  </strong>
-                </div>
-                <div className="flex justify-between py-1 border-b border-white/10">
-                  <span>Email officiel :</span>
-                  <strong className="text-sky-300 font-mono truncate max-w-[240px]">
-                    {emailInput || (isGoogleVerified ? 'Vérifié Google' : 'Étape 2')}
-                  </strong>
-                </div>
-                { (dateNaissanceInput || pieceIdentiteInput) && (
-                  <div className="flex justify-between py-1 border-b border-white/10">
-                    <span>Pièce / Naissance :</span>
-                    <strong className="text-white truncate max-w-[240px]">
-                      {[pieceIdentiteInput, lieuNaissanceInput, dateNaissanceInput]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </strong>
-                  </div>
-                )}
-                <div className="flex justify-between py-1">
-                  <span>Institution :</span>
-                  <strong className="text-white truncate max-w-[240px]">
-                    {institutionInput || '—'}
-                  </strong>
-                </div>
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>
