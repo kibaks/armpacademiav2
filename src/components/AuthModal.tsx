@@ -69,6 +69,7 @@ import {
 import { CgpmpAdminValidationPanel } from './CgpmpAdminValidationPanel';
 import { ArmpLogo } from './ArmpLogo';
 import { AuthShowcase } from './AuthShowcase';
+import { RegistrationProgress, RegistrationProfilePicker } from './RegistrationIntro';
 import './AuthPortal.css';
 
 export interface RegisterLearnerData {
@@ -1045,6 +1046,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    const panel = dialog?.querySelector<HTMLElement>('.auth-portal__panel');
+    if (panel) panel.scrollTop = 0;
+    const target = dialog?.querySelector<HTMLElement>('input:not([disabled]), [role="radio"][aria-checked="true"]')
+      || dialog?.querySelector<HTMLElement>('button:not([disabled])');
+    target?.focus({ preventScroll: true });
+  }, [isOpen, mode, registerStep]);
+
+  useEffect(() => {
+    if (stepError) dialogRef.current?.querySelector('[role="alert"]')?.scrollIntoView({ block: 'nearest' });
+  }, [stepError]);
+
   if (!isOpen) return null;
 
   const getFriendlyAuthError = (err: unknown): string => {
@@ -1562,7 +1577,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const phoneDigitsCount = phoneInput.replace(/\D/g, '').replace(/^243/, '').length;
   const isPhoneComplete = isValidDRCPhone(phoneInput);
 
-  const isCompactAuth = mode === 'login' || mode === 'forgot_password';
+  const isVisualAuth = mode !== 'armp_admin';
 
   return (
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Accès à ACADEMIA" onKeyDown={event => {
@@ -1572,8 +1587,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const first = elements[0], last = elements[elements.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }} className={`auth-portal ${isCompactAuth ? 'auth-portal--compact' : ''} fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200`}>
-      {isCompactAuth ? <AuthShowcase onClose={canClose ? onClose : undefined} /> : <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-[#08244D] text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-6 sm:p-8 xl:p-10">
+    }} className={`auth-portal ${isVisualAuth ? 'auth-portal--compact' : ''} ${mode === 'register' ? 'auth-portal--register' : ''} fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200`}>
+      {isVisualAuth ? <AuthShowcase onClose={canClose ? onClose : undefined} /> : <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-[#08244D] text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-6 sm:p-8 xl:p-10">
         <AuthPortalLeftColumn
           mode={mode}
           allowAdmin={!!auth.currentUser && ['super_admin', 'dfat_admin'].includes(initialRole) && allProfiles?.[initialRole]?.id === auth.currentUser.uid}
@@ -1637,26 +1652,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       {/* Authentication and the existing registration workflow. */}
       <div className="auth-portal__panel lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-white dark:bg-slate-950 p-6 sm:p-8 xl:p-10 flex flex-col justify-start">
         <div className="auth-portal__content w-full space-y-5">
-          {isCompactAuth ? <header className="auth-portal__brand">
+          {isVisualAuth ? <header className="auth-portal__brand">
             <ArmpLogo size="lg" />
             <div className="auth-portal__brand-text"><strong>ACADEMIA</strong><span>Votre espace de formation</span></div>
           </header> : <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
             <ArmpLogo size="2xl" />
             <div className="text-xs sm:text-right text-slate-600 dark:text-slate-400">
               <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white block">
-                {mode === 'register'
-                  ? (isCgpmp
-                      ? `Demande de Compte CGPMP (${activeRoleConfig.label}) — Étape ${registerStep}/5`
-                      : `Création de Compte (${activeRoleConfig.label}) — Étape ${registerStep}/4`)
-                  : mode === 'armp_admin'
-                  ? 'Validation Administrative ARMP & Envoi Mail CGPMP'
-                  : 'Réinitialisation des accès'}
+                Validation administrative ARMP
               </span>
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 ACADEMIA
               </span>
             </div>
           </div>}
+          {mode === 'register' && !submittedCgpmpRequest && <>
+            <div className="auth-register__heading">
+              <span className="auth-portal__eyebrow">{isCgpmp ? 'VOTRE CELLULE, VOTRE ESPACE' : 'VOTRE PARCOURS COMMENCE ICI'}</span>
+              <h2>{isCgpmp ? 'Demander un compte CGPMP.' : 'Créez votre espace.'}</h2>
+              <p>{isCgpmp ? 'Constituez le dossier de votre cellule pour validation par l’ARMP.' : 'Un profil adapté à votre activité, un parcours à votre rythme.'}</p>
+            </div>
+            <RegistrationProgress step={registerStep} isCgpmp={isCgpmp} onSelectStep={step => { setRegisterStep(step); setStepError(null); }} />
+          </>}
           {courseTitle && (
             <div className="p-3.5 rounded-2xl bg-blue-950 text-white border border-blue-700 flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
@@ -1713,7 +1730,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               }}
             />
           ) : (
-            <form onSubmit={handleSubmit} className="w-full space-y-5">
+            <form onSubmit={handleSubmit} className={`w-full space-y-5 ${mode === 'register' ? 'auth-register-form' : ''}`}>
                   {/* ======================================================== */}
                   {/* MODE 1: FORGOT PASSWORD */}
                   {/* ======================================================== */}
@@ -2097,172 +2114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {/* STEP 1: ROLE SELECTION + CGPMP PERMANENT SECRETARY CONDITION (SEPARATED FROM NAMES & EMAILS) */}
                       {registerStep === 1 && (
                         <div className="space-y-4">
-                          <div className="space-y-3">
-                            <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200">
-                              Étape 1/{isCgpmp ? 5 : 4} — Choisissez le profil de compte à créer *
-                            </label>
-
-                            {/* Catégorie 1 : Autorité Contractante */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                🏛️ Autorité Contractante
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {((isCgpmp ? ['cgpmp_member'] : ['ac_agent']) as UserRole[]).map((rKey) => {
-                                  const cfg = ROLE_CREATION_CONFIG[rKey];
-                                  const isSelected = selectedRole === rKey;
-                                  return (
-                                    <button
-                                      key={rKey}
-                                      type="button"
-                                      onClick={() => handleSelectRoleInRegistration(rKey)}
-                                      className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                                        isSelected
-                                          ? 'border-blue-600 bg-blue-50/90 dark:bg-blue-950/60 ring-2 ring-blue-500/30'
-                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
-                                      }`}
-                                    >
-                                      <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
-                                        {cfg.label}
-                                      </span>
-                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                        {cfg.shortDesc}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Catégorie 2 : Opérateurs Économiques */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                🏢 Opérateurs Économiques
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {(['pme', 'grande_entreprise'] as UserRole[]).map((rKey) => {
-                                  const cfg = ROLE_CREATION_CONFIG[rKey];
-                                  const isSelected = selectedRole === rKey;
-                                  return (
-                                    <button
-                                      key={rKey}
-                                      type="button"
-                                      onClick={() => handleSelectRoleInRegistration(rKey)}
-                                      className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                                        isSelected
-                                          ? 'border-teal-600 bg-teal-50/90 dark:bg-teal-950/60 ring-2 ring-teal-500/30'
-                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
-                                      }`}
-                                    >
-                                      <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
-                                        {cfg.label}
-                                      </span>
-                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                        {cfg.shortDesc}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Catégorie 3 : Sociétés civiles */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                ⚖️ Sociétés Civiles
-                              </span>
-                              <div>
-                                {(['societe_civile'] as UserRole[]).map((rKey) => {
-                                  const cfg = ROLE_CREATION_CONFIG[rKey];
-                                  const isSelected = selectedRole === rKey;
-                                  return (
-                                    <button
-                                      key={rKey}
-                                      type="button"
-                                      onClick={() => handleSelectRoleInRegistration(rKey)}
-                                      className={`w-full p-3 rounded-xl border text-left transition cursor-pointer ${
-                                        isSelected
-                                          ? 'border-emerald-600 bg-emerald-50/90 dark:bg-emerald-950/60 ring-2 ring-emerald-500/30'
-                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
-                                      }`}
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
-                                          {cfg.label}
-                                        </span>
-                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
-                                          Contrôle Citoyen
-                                        </span>
-                                      </div>
-                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                        {cfg.shortDesc}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Catégorie 4 : Indépendant */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                👤 Indépendant
-                              </span>
-                              <div>
-                                {(['independant'] as UserRole[]).map((rKey) => {
-                                  const cfg = ROLE_CREATION_CONFIG[rKey];
-                                  const isSelected = selectedRole === rKey;
-                                  return (
-                                    <button
-                                      key={rKey}
-                                      type="button"
-                                      onClick={() => handleSelectRoleInRegistration(rKey)}
-                                      className={`w-full p-3 rounded-xl border text-left transition cursor-pointer ${
-                                        isSelected
-                                          ? 'border-cyan-600 bg-cyan-50/90 dark:bg-cyan-950/60 ring-2 ring-cyan-500/30'
-                                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:bg-slate-50'
-                                      }`}
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <span className="block text-xs font-extrabold text-slate-900 dark:text-white truncate">
-                                          {cfg.label}
-                                        </span>
-                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-800 dark:text-cyan-300">
-                                          Expert Libéral
-                                        </span>
-                                      </div>
-                                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                        {cfg.shortDesc}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Formateur & Régulateurs */}
-                            <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                              <span>Autres habilitations :</span>
-                              {(['armp_agent', 'dgcmp_agent', 'formateur'] as UserRole[]).map((rKey) => {
-                                const cfg = ROLE_CREATION_CONFIG[rKey];
-                                const isSelected = selectedRole === rKey;
-                                return (
-                                  <button
-                                    key={rKey}
-                                    type="button"
-                                    onClick={() => handleSelectRoleInRegistration(rKey)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                                      isSelected
-                                        ? 'border-amber-500 bg-amber-50 text-amber-900'
-                                        : 'border-slate-200 text-slate-700 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    {cfg.label.split(' ')[0]} {rKey === 'armp_agent' ? 'ARMP' : rKey === 'dgcmp_agent' ? 'DGCMP' : 'Formateur'}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
+                          {!isCgpmp && <RegistrationProfilePicker role={selectedRole} onSelect={handleSelectRoleInRegistration} />}
 
                           {/* EXCLUSIVE CGPMP CONDITION: SEUL LE SECRÉTAIRE PERMANENT PEUT CRÉER LE COMPTE CGPMP */}
                           {isCgpmp && (
@@ -2333,22 +2185,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             </div>
                           )}
 
-                          {/* Summary of what Steps 2 to 5 will collect */}
-                          {(!isCgpmp || cgpmpApplicantCapacity === 'secretaire_permanent') && (
-                            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-                              <div className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
-                                Profil sélectionné : <span className="text-blue-600 dark:text-blue-400">{activeRoleConfig.label}</span>
-                              </div>
-                              <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                                L’étape suivante (<strong>Étape 2/{isCgpmp ? 5 : 4}</strong>) est dédiée à vos informations d’identité civile complète (<strong>Nom, Post-nom, Prénom, Sexe, Date et Lieu de naissance, Nationalité, Pièce d’identité et Adresse Email officielle</strong>).
-                              </p>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                          {(!isCgpmp || cgpmpApplicantCapacity === 'secretaire_permanent') && <div className="auth-register__actions">
+                            <button type="button" onClick={handleNextStep} className="auth-register__continue">Continuer <ArrowRight size={17} aria-hidden="true" /></button>
+                            <div className="auth-portal__divider"><span>ou</span></div>
                                 <button
                                   type="button"
                                   onClick={handleGoogleRegistrationStep1}
                                   disabled={isSubmitting}
-                                  className="py-3 px-4 rounded-xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-900 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                                  className="auth-register__google py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-900 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
                                 >
                                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -2356,24 +2200,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                                   </svg>
-                                  <span>Pré-remplir avec Google</span>
+                                  <span>Continuer avec Google</span>
                                 </button>
-
-                                <button
-                                  type="button"
-                                  onClick={handleNextStep}
-                                  className="py-3 px-4 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-                                >
-                                  <span>Continuer vers l’Identité Civile (Étape 2/{isCgpmp ? 5 : 4})</span>
-                                  <ArrowRight className="w-4 h-4 shrink-0" />
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                          </div>}
                         </div>
                       )}
 
-                      {!googleAuthUid && registerStep >= 2 && (
+                      {!googleAuthUid && registerStep === (isCgpmp ? 5 : 4) && (
                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                           Mot de passe de votre compte (12 caractères minimum)
                           <input type="password" autoComplete="new-password" minLength={12} required value={passwordInput} onChange={event => setPasswordInput(event.target.value)} className="mt-2 w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white" />
@@ -2382,7 +2215,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                       {/* STEP 2 (NOUVELLE ÉTAPE DÉDIÉE): IDENTITÉ CIVILE COMPLÈTE (NOM, POSTNOM, PRÉNOM, SEXE, EMAIL & AUTRES INFOS UTILES) */}
                       {registerStep === 2 && (
-                        <div className="space-y-4">
+                        <div className="auth-register__step space-y-4">
                           {/* Existing Google Account Detected Card */}
                           {existingGoogleAccount && (
                             <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-400 space-y-3">
@@ -2422,13 +2255,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <div className="text-xs font-extrabold text-slate-900 dark:text-white">
-                                  Étape 2/{isCgpmp ? 5 : 4} — Identité Civile Complète & Adresse Email {isCgpmp ? 'du Secrétaire Permanent CGPMP' : 'du Titulaire'}
+                                  {isCgpmp ? 'Identité du secrétaire permanent' : 'Votre identité'}
                                 </div>
                                 <p className="text-[11px] text-slate-500">
-                                  Renseignez votre Nom, Post-nom, Prénom, Sexe et toutes les informations civiles requises.
+                                  Renseignez vos coordonnées et vos informations personnelles.
                                 </p>
                               </div>
-                              <button
+                              {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO === 'true' && (<button
                                 type="button"
                                 onClick={() => {
                                   setCiviliteInput('M.');
@@ -2454,7 +2287,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 className="px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 text-[11px] font-extrabold hover:bg-blue-200 transition cursor-pointer"
                               >
                                 + Pré-remplir un exemple d’identité
-                              </button>
+                              </button>)}
                             </div>
 
                             {/* Row 1: Civilité & Sexe */}
@@ -2464,7 +2297,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                   Civilité / Titre *
                                 </label>
                                 <select
-                                  value={civiliteInput}
+                                  aria-label="Civilité" value={civiliteInput}
                                   onChange={(e) => setCiviliteInput(e.target.value)}
                                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                                 >
@@ -2520,7 +2353,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                   <input
                                     type="text"
                                     required
-                                    value={nomInput}
+                                    aria-label="Nom (nom de famille)" value={nomInput}
                                     onChange={(e) => setNomInput(filterPersonNameMask(e.target.value).toUpperCase())}
                                     placeholder="ex: KABASELE"
                                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase"
@@ -2535,7 +2368,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 <input
                                   type="text"
                                   required
-                                  value={postnomInput}
+                                  aria-label="Post-nom" value={postnomInput}
                                   onChange={(e) => setPostnomInput(filterPersonNameMask(e.target.value).toUpperCase())}
                                   placeholder="ex: LUKOJI"
                                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white uppercase"
@@ -2549,7 +2382,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 <input
                                   type="text"
                                   required
-                                  value={prenomInput}
+                                  aria-label="Prénom" value={prenomInput}
                                   onChange={(e) => setPrenomInput(filterPersonNameMask(e.target.value))}
                                   placeholder="ex: Fidèle"
                                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
@@ -2568,9 +2401,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                   <input
                                     type="email"
                                     required
-                                    value={emailInput}
+                                    aria-label="Adresse email d’inscription" value={emailInput}
                                     onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
-                                    placeholder="ex: sp.cgpmp@finances.gouv.cd"
+                                    placeholder={isCgpmp ? 'secretaire@institution.cd' : 'vous@exemple.cd'}
                                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
                                   />
                                 </div>
@@ -2582,7 +2415,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 </label>
                                 <input
                                   type="text"
-                                  value={pieceIdentiteInput}
+                                  aria-label="Numéro de pièce d’identité" value={pieceIdentiteInput}
                                   onChange={(e) => setPieceIdentiteInput(formatMatriculeOrRccmMask(e.target.value))}
                                   placeholder="ex: ONIP-RDC-24389104"
                                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white uppercase"
@@ -2598,7 +2431,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 </label>
                                 <input
                                   type="date"
-                                  value={dateNaissanceInput}
+                                  aria-label="Date de naissance" value={dateNaissanceInput}
                                   onChange={(e) => setDateNaissanceInput(e.target.value)}
                                   className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                                 />
@@ -2610,7 +2443,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 </label>
                                 <input
                                   type="text"
-                                  value={lieuNaissanceInput}
+                                  aria-label="Lieu de naissance" value={lieuNaissanceInput}
                                   onChange={(e) => setLieuNaissanceInput(filterPersonNameMask(e.target.value))}
                                   placeholder="ex: Kinshasa"
                                   className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
@@ -2623,7 +2456,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 </label>
                                 <input
                                   type="text"
-                                  value={nationaliteInput}
+                                  aria-label="Nationalité" value={nationaliteInput}
                                   onChange={(e) => setNationaliteInput(e.target.value)}
                                   placeholder="Congolaise (RDC)"
                                   className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
@@ -2635,7 +2468,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                   État civil
                                 </label>
                                 <select
-                                  value={etatCivilInput}
+                                  aria-label="État civil" value={etatCivilInput}
                                   onChange={(e) => setEtatCivilInput(e.target.value)}
                                   className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                                 >
@@ -2665,8 +2498,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             >
                               <span>
                                 {isCgpmp
-                                  ? 'Suivant : Document de Création CGPMP (Étape 3/5)'
-                                  : 'Suivant : Institution & Fonction (Étape 3/4)'}
+                                  ? 'Continuer vers la cellule'
+                                  : 'Continuer vers l’activité'}
                               </span>
                               <ArrowRight className="w-3.5 h-3.5" />
                             </button>
@@ -2676,7 +2509,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                       {/* STEP 3: INSTITUTION + MANDATORY CGPMP CREATION DOCUMENT (OR ROLE DYNAMIC FIELDS) */}
                       {registerStep === 3 && (
-                        <div className="space-y-4">
+                        <div className="auth-register__step space-y-4">
                           <div>
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                               {activeRoleConfig.institutionLabel}
@@ -2686,7 +2519,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               <input
                                 type="text"
                                 required
-                                value={institutionInput}
+                                aria-label={activeRoleConfig.institutionLabel} value={institutionInput}
                                 onChange={(e) => setInstitutionInput(filterInstitutionMask(e.target.value))}
                                 placeholder={activeRoleConfig.institutionPlaceholder}
                                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
@@ -2716,7 +2549,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 {activeRoleConfig.subCategoryLabel}
                               </label>
                               <select
-                                value={subCategoryInput}
+                                aria-label="Catégorie d’activité" value={subCategoryInput}
                                 onChange={(e) => setSubCategoryInput(e.target.value)}
                                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                               >
@@ -2771,7 +2604,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 {activeRoleConfig.specialtyLabel}
                               </label>
                               <select
-                                value={specialtyInput}
+                                aria-label="Spécialité" value={specialtyInput}
                                 onChange={(e) => setSpecialtyInput(e.target.value)}
                                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                               >
@@ -2811,7 +2644,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                       {/* STEP 4 FOR CGPMP: LISTE DES MEMBRES (NOM, POST-NOM, PRÉNOM, SEXE & ADRESSES EMAIL) */}
                       {registerStep === 4 && isCgpmp && (
-                        <div className="space-y-4">
+                        <div className="auth-register__step space-y-4">
                           <CgpmpMembersRosterStep
                             permanentSecretaryName={composeOfficialFullName() || nameInput || 'Secrétaire Permanent'}
                             permanentSecretaryEmail={emailInput}
@@ -2890,7 +2723,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                       {/* FINAL STEP (STEP 5 FOR CGPMP, STEP 4 FOR OTHERS): DRC PHONE MASK, MATRICULE & SUBMIT */}
                       {((registerStep === 5 && isCgpmp) || (registerStep === 4 && !isCgpmp)) && (
-                        <div className="space-y-4">
+                        <div className="auth-register__step space-y-4">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -2899,7 +2732,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               <div className="relative">
                                 <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                                 <select
-                                  value={provinceInput}
+                                  aria-label="Province" value={provinceInput}
                                   onChange={(e) => setProvinceInput(e.target.value)}
                                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                                 >
@@ -2930,7 +2763,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 <input
                                   type="tel"
                                   required
-                                  value={phoneInput}
+                                  aria-label="Téléphone RDC" value={phoneInput}
                                   onChange={(e) => setPhoneInput(formatDRCPhoneMask(e.target.value))}
                                   placeholder="+243 81 234 5678"
                                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs font-bold text-slate-900 dark:text-white"
@@ -2945,7 +2778,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             </label>
                             <input
                               type="text"
-                              value={adressePhysiqueInput}
+                              aria-label="Adresse physique" value={adressePhysiqueInput}
                               onChange={(e) => setAdressePhysiqueInput(e.target.value)}
                               placeholder="ex: Boulevard du 30 Juin, Commune de la Gombe, Kinshasa"
                               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
@@ -2962,7 +2795,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 <input
                                   type="text"
                                   required
-                                  value={matriculeInput}
+                                  aria-label="Matricule ou identifiant" value={matriculeInput}
                                   onChange={(e) =>
                                     setMatriculeInput(formatMatriculeOrRccmMask(e.target.value))
                                   }
@@ -3065,8 +2898,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 {isSubmitting
                                   ? 'Transmission en cours...'
                                   : isCgpmp
-                                  ? `Soumettre la Demande CGPMP (${cgpmpMembers.length + 1} membres) à la Validation ARMP`
-                                  : 'Finaliser mon inscription & Accéder à mon compte'}
+                                  ? 'Soumettre ma demande'
+                                  : 'Créer mon compte'}
                               </span>
                             </button>
                           </div>
@@ -3077,7 +2910,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </form>
           )}
         </div>
-        {isCompactAuth && <footer className="auth-portal__footer"><span>ARMP · République démocratique du Congo</span><span><Lock size={12} aria-hidden="true" /> Connexion sécurisée</span></footer>}
+        {mode === 'register' && <div className="auth-register__login">Vous avez déjà un compte ? <button type="button" onClick={() => { setMode('login'); setStepError(null); }}>Se connecter</button>
+          {!isCgpmp && <button type="button" className="auth-portal__cgpmp" onClick={() => { handleSelectRoleInRegistration('cgpmp_member'); setRegisterStep(1); setStepError(null); }}>Demander un compte CGPMP <ArrowRight size={14} aria-hidden="true" /></button>}
+          {isCgpmp && <button type="button" className="auth-portal__cgpmp" onClick={() => { handleSelectRoleInRegistration('particulier'); setRegisterStep(1); setStepError(null); }}>Créer un compte personnel <ArrowRight size={14} aria-hidden="true" /></button>}
+        </div>}
+        {isVisualAuth && <footer className="auth-portal__footer"><span>ARMP · République démocratique du Congo</span><span><Lock size={12} aria-hidden="true" /> Connexion sécurisée</span></footer>}
       </div>
     </div>
   );
