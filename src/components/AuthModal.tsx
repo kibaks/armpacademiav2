@@ -1,5 +1,5 @@
 import { authenticatedFetch } from '../lib/adminApi';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -68,6 +68,8 @@ import {
 } from './CgpmpMemberAndDocSteps';
 import { CgpmpAdminValidationPanel } from './CgpmpAdminValidationPanel';
 import { ArmpLogo } from './ArmpLogo';
+import { AuthShowcase } from './AuthShowcase';
+import './AuthPortal.css';
 
 export interface RegisterLearnerData {
   name: string;
@@ -1030,6 +1032,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   }, [isOpen]);
 
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.querySelector<HTMLInputElement>('input:not([disabled])')?.focus({ preventScroll: true });
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const getFriendlyAuthError = (err: unknown): string => {
@@ -1547,10 +1562,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const phoneDigitsCount = phoneInput.replace(/\D/g, '').replace(/^243/, '').length;
   const isPhoneComplete = isValidDRCPhone(phoneInput);
 
+  const isCompactAuth = mode === 'login' || mode === 'forgot_password';
+
   return (
-    <div className="fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200">
-      {/* COLUMN 1 (LEFT — 6 COLS EQUAL 50% FULL HEIGHT): LOGO, STEPS, LIVE CGPMP DOSSIER, CREDENTIALS SENT BY MAIL & DEMO ACCESS */}
-      <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-[#08244D] text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-6 sm:p-8 xl:p-10">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Accès à ACADEMIA" onKeyDown={event => {
+      if (event.key === 'Escape' && canClose) { event.stopPropagation(); onClose(); }
+      if (event.key !== 'Tab') return;
+      const elements = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')).filter(element => element.offsetParent !== null);
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }} className={`auth-portal ${isCompactAuth ? 'auth-portal--compact' : ''} fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200`}>
+      {isCompactAuth ? <AuthShowcase onClose={canClose ? onClose : undefined} /> : <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-[#08244D] text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-6 sm:p-8 xl:p-10">
         <AuthPortalLeftColumn
           mode={mode}
           allowAdmin={!!auth.currentUser && ['super_admin', 'dfat_admin'].includes(initialRole) && allProfiles?.[initialRole]?.id === auth.currentUser.uid}
@@ -1609,19 +1632,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           }}
           onOpenArmpValidationView={() => setMode('armp_admin')}
         />
-      </div>
+      </div>}
 
-      {/* COLUMN 2 (RIGHT — 6 COLS EQUAL 50% FULL HEIGHT & FULL WIDTH): AUTHENTICATION, REGISTRATION STEPS OR ARMP VALIDATION */}
-      <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-white dark:bg-slate-950 p-6 sm:p-8 xl:p-10 flex flex-col justify-start">
-        <div className="w-full space-y-5">
-          {/* Large Official ARMP Logo in the White Column */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      {/* Authentication and the existing registration workflow. */}
+      <div className="auth-portal__panel lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-white dark:bg-slate-950 p-6 sm:p-8 xl:p-10 flex flex-col justify-start">
+        <div className="auth-portal__content w-full space-y-5">
+          {isCompactAuth ? <header className="auth-portal__brand">
+            <ArmpLogo size="lg" />
+            <div className="auth-portal__brand-text"><strong>ACADEMIA</strong><span>Votre espace de formation</span></div>
+          </header> : <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
             <ArmpLogo size="2xl" />
             <div className="text-xs sm:text-right text-slate-600 dark:text-slate-400">
               <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white block">
-                {mode === 'login'
-                  ? 'Connexion'
-                  : mode === 'register'
+                {mode === 'register'
                   ? (isCgpmp
                       ? `Demande de Compte CGPMP (${activeRoleConfig.label}) — Étape ${registerStep}/5`
                       : `Création de Compte (${activeRoleConfig.label}) — Étape ${registerStep}/4`)
@@ -1633,7 +1656,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 ACADEMIA
               </span>
             </div>
-          </div>
+          </div>}
           {courseTitle && (
             <div className="p-3.5 rounded-2xl bg-blue-950 text-white border border-blue-700 flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
@@ -1647,7 +1670,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {stepError && (
-            <div className="p-4 rounded-2xl border bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-start justify-between gap-3">
+            <div role="alert" className="p-4 rounded-2xl border bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs flex items-start justify-between gap-3">
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="font-semibold leading-relaxed">{stepError}</span>
@@ -1696,6 +1719,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {/* ======================================================== */}
                   {mode === 'forgot_password' && (
                     <div className="space-y-4">
+                      <div className="auth-portal__welcome"><span className="auth-portal__eyebrow">RÉINITIALISATION</span><h2>Retrouvez<br />votre accès.</h2></div>
                       {resetSuccessMessage ? (
                         <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs space-y-2">
                           <div className="font-bold flex items-center gap-2">
@@ -1719,12 +1743,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             Saisissez votre adresse email professionnelle pour recevoir un lien de réinitialisation.
                           </p>
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              Adresse Email officielle *
+                            <label htmlFor="academia-reset-email" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Adresse email
                             </label>
                             <div className="relative">
                               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                               <input
+                                id="academia-reset-email"
+                                autoComplete="email"
                                 type="email"
                                 required
                                 value={emailInput}
@@ -1830,63 +1856,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   )}
                   {mode === 'login' && !twoFAProfile && (
                     <div className="space-y-4">
-                      {/* Entête du formulaire de connexion */}
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                            <Shield className="w-5 h-5 text-[#0C3B7C] dark:text-blue-400" />
-                            <span>Connexion à votre espace</span>
-                          </h3>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
-                            Portail Officiel RDC
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Connectez-vous à l'aide de vos identifiants pour accéder aux marchés publics et formations.
-                        </p>
-                      </div>
-
-                      {/* 1. GOOGLE SIGN IN */}
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignIn}
-                        disabled={isSubmitting}
-                        className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-800 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2.5 shadow-xs cursor-pointer"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                        </svg>
-                        <span>Continuer avec Google</span>
-                      </button>
-
-                      <div className="relative my-1">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-slate-200 dark:border-slate-800" />
-                        </div>
-                        <div className="relative flex justify-center text-[11px]">
-                          <span className="bg-white dark:bg-slate-950 px-3 text-slate-500 font-bold">
-                            ou avec vos identifiants officiels
-                          </span>
-                        </div>
+                      <div className="auth-portal__welcome">
+                        <span className="auth-portal__eyebrow">VOTRE PARCOURS CONTINUE ICI</span>
+                        <h2>Heureux de vous<br />retrouver.</h2>
+                        <p>Connectez-vous pour retrouver vos formations et votre progression.</p>
                       </div>
 
                       {/* 2. FORMULAIRE EMAIL & MOT DE PASSE */}
-                      <div className="space-y-3.5">
+                      <div className="auth-portal__credentials space-y-3.5">
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                            Adresse Email officielle ou personnelle *
+                          <label htmlFor="academia-login-email" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                            Adresse email
                           </label>
                           <div className="relative">
                             <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                             <input
+                              id="academia-login-email"
+                              autoComplete="username"
+                              inputMode="email"
+                              autoCapitalize="none"
+                              spellCheck={false}
                               type="email"
                               required
                               value={emailInput}
                               onChange={(e) => setEmailInput(filterEmailMask(e.target.value))}
-                              placeholder="ex: s.mwanza@budget.gouv.cd"
+                              placeholder="vous@exemple.cd"
                               className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
                           </div>
@@ -1894,8 +1888,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                              Mot de passe *
+                            <label htmlFor="academia-login-password" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Mot de passe
                             </label>
                             <button
                               type="button"
@@ -1911,6 +1905,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           <div className="relative">
                             <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                             <input
+                              id="academia-login-password"
+                              autoComplete="current-password"
                               type={showPassword ? 'text' : 'password'}
                               required
                               value={passwordInput}
@@ -1932,7 +1928,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <button
                           type="submit"
                           disabled={isSubmitting}
-                          className="w-full py-3.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                          className="auth-portal__submit w-full py-3.5 rounded-xl bg-[#0C3B7C] hover:bg-blue-800 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                         >
                           {isSubmitting ? (
                             <>
@@ -1941,33 +1937,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             </>
                           ) : (
                             <>
-                              <span>Se connecter à mon espace</span>
+                              <span>Se connecter</span>
                               <ArrowRight className="w-4 h-4" />
                             </>
                           )}
                         </button>
                       </div>
 
-                      {/* Info CGPMP discrète */}
+                      <div className="auth-portal__divider"><span>ou</span></div>
+                      {/* 1. GOOGLE SIGN IN */}
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={isSubmitting}
+                        className="auth-portal__google w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-800 dark:text-white font-extrabold text-xs transition flex items-center justify-center gap-2.5 shadow-xs cursor-pointer"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                        </svg>
+                        <span>Continuer avec Google</span>
+                      </button>
 
-
-                      {/* Redirection Création de compte */}
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                        <p className="text-[11px] leading-relaxed">
-                          Vous n’avez pas encore de compte ? Créez un profil adapté à votre activité.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMode('register');
-                            setRegisterStep(1);
-                            setStepError(null);
-                          }}
-                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shrink-0 cursor-pointer"
-                        >
-                          Créer un compte →
-                        </button>
-                      </div>
+                      <p className="auth-portal__signup">Vous découvrez ACADEMIA ? <button type="button" onClick={() => { if (isCgpmp) handleSelectRoleInRegistration('particulier'); setMode('register'); setRegisterStep(1); setStepError(null); }}>Créer un compte</button></p>
+                      <button type="button" className="auth-portal__cgpmp" onClick={() => { handleSelectRoleInRegistration('cgpmp_member'); setMode('register'); setRegisterStep(1); setStepError(null); }}>Demander un compte CGPMP <ArrowRight size={14} aria-hidden="true" /></button>
 
                       {/* 3. REGROUPEMENT DES COMPTES DÉMOS DANS UN EXPANDABLE POUR ÉVITER LA SURCHARGE */}
                       {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO === 'true' && <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
@@ -3082,6 +3077,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </form>
           )}
         </div>
+        {isCompactAuth && <footer className="auth-portal__footer"><span>ARMP · République démocratique du Congo</span><span><Lock size={12} aria-hidden="true" /> Connexion sécurisée</span></footer>}
       </div>
     </div>
   );
