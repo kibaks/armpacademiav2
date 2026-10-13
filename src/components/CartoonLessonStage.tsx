@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { cartoonSceneKind, cartoonSpeechMouth, CARTOON_SCENE_LABELS } from '../utils/cartoonLessonScene';
 import { sampleLessonStoryboard, motionWindow, typewriterCount } from '../utils/motionLessonStoryboard';
+import { WHITEBOARD_STROKES, sampleDrawing } from '../utils/whiteboardAnimation';
 import './CartoonLesson.css';
 
 type StageProps = { screen: SingleScreenCardData; progress: number; playing: boolean; speaking: boolean; mouthOpenness: number; viseme: string; male?: boolean; legalRef: string; sceneCount: number; reducedMotion?: boolean };
@@ -53,8 +54,10 @@ function sceneProps(c:Pen,kind:ReturnType<typeof cartoonSceneKind>,t:number,p:nu
  c.restore();
 }
 function character(c:Pen,t:number,speaking:boolean,openness:number,viseme:string,male:boolean){
- c.save();c.translate(198,345);
- const pulse=speaking?Math.sin(t*2.4):Math.sin(t*1.1)*.25;
+ c.save();c.translate(198+Math.sin(t*.9)*5,345);
+ c.rotate(Math.sin(t*.9)*.018);
+ const pulse=Math.sin(t*1.6)*(speaking?1:.65);
+ const gesture=(1-Math.cos(t*.85))*.5;
  const skin='#9B5B3F', darkSkin='#78442F';
  ellipse(c,0,194,92,12,'#D5D9C7');
  // Legs and shoes share the same local body coordinates.
@@ -64,17 +67,17 @@ function character(c:Pen,t:number,speaking:boolean,openness:number,viseme:string
  c.beginPath();c.moveTo(-20,-76);c.lineTo(0,15);c.lineTo(23,-76);c.closePath();c.fillStyle='#FFF8EA';c.fill();line(c,[0,17,0,78],ink,2);ellipse(c,11,43,3,3,gold);
  // Continuous shoulder → elbow → wrist paths: no detached hand sprites.
  line(c,[-44,-58,-73,-6,-50,34],ink,28);line(c,[-44,-58,-73,-6,-50,34],sleeve,22);ellipse(c,-48,40,12,17,skin);
- const palmX=100,palmY=-51-pulse*9;
+ const palmX=78+gesture*36,palmY=-35-gesture*57-pulse*12;
  line(c,[44,-58,65,-3,palmX,palmY+13],ink,29);line(c,[44,-58,65,-3,palmX,palmY+13],sleeve,23);line(c,[91,palmY+21,104,palmY+5],skin,17);
  c.save();c.translate(palmX+6,palmY);c.rotate(-.38);ellipse(c,0,0,20,9,skin);line(c,[-2,0,14,-12],skin,7);for(let i=0;i<3;i++)line(c,[6+i*4,-3,18+i*4,-5+i*3],darkSkin,1.3);c.restore();
  box(c,-15,-110,31,39,skin,9);ellipse(c,0,-145,58,65,'#192C31');
- c.save();c.translate(0,-143);c.rotate(pulse*.018);
+ c.save();c.translate(0,-143);c.rotate(pulse*.055);
  ellipse(c,-42,0,11,16,skin);ellipse(c,43,0,11,16,skin);ellipse(c,0,-4,46,55,skin);
  if(male){c.beginPath();c.moveTo(-46,-15);c.quadraticCurveTo(-53,-68,2,-66);c.quadraticCurveTo(47,-66,48,-13);c.lineTo(25,-40);c.quadraticCurveTo(-12,-22,-46,-15);c.fillStyle='#172B30';c.fill();}
  else{ellipse(c,-39,-25,23,44,'#182E33');ellipse(c,4,-52,49,25,'#182E33');ellipse(c,44,-15,17,45,'#182E33');for(let i=0;i<6;i++)line(c,[-39+i*7,-54,-42+i*5,-6],'#314347',2);ellipse(c,-42,20,4,6,gold);ellipse(c,42,20,4,6,gold);}
  const blink=(t%5.6)>5.43;
  if(blink){line(c,[-26,-6,-13,-6],ink,3);line(c,[14,-6,27,-6],ink,3);}else{ellipse(c,-19,-5,8,6,'#FFF8EA');ellipse(c,20,-5,8,6,'#FFF8EA');ellipse(c,-17,-5,3,4,ink);ellipse(c,22,-5,3,4,ink);}
- line(c,[-28,-20,-12,-22],ink,3);line(c,[12,-22,28,-20],ink,3);line(c,[3,-2,-1,13,6,14],darkSkin,2);
+ line(c,[-28,-20-pulse*3,-12,-22-pulse*3],ink,3);line(c,[12,-22-pulse*3,28,-20-pulse*3],ink,3);line(c,[3,-2,-1,13,6,14],darkSkin,2);
  const mouth=cartoonSpeechMouth(speaking,openness,viseme);
  if(mouth.height<=3){c.beginPath();c.moveTo(-12,25);c.quadraticCurveTo(0,34,13,25);c.strokeStyle='#552E29';c.lineWidth=3;c.stroke();}else{ellipse(c,0,28,mouth.width/2,mouth.height/2,'#512D2B');box(c,-mouth.width*.32,24,mouth.width*.64,3,'#FFF9EB',1);}
  c.restore();c.restore();
@@ -108,7 +111,7 @@ function trace(c:Pen,points:number[],p:number,color=teal,width=4){
 function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=false){
  const portrait=w/h<1, W=portrait?720:1280,H=portrait?1120:720;
  const shot=sampleLessonStoryboard(props.screen,props.progress,portrait?20:32);
- const reveal=reduced?1:shot.titleReveal, diagram=reduced?1:shot.diagramReveal;
+ const reveal=reduced?1:shot.titleReveal;
  c.save();c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,w,h);c.scale(w/W,h/H);
  const kind=cartoonSceneKind(props.screen.animationId);
  c.fillStyle='#FFF9ED';c.fillRect(0,0,W,H);
@@ -123,10 +126,27 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  c.restore();trace(c,[margin,portrait?202:163,margin+105,portrait?202:163],reveal,coral,5);
  const artY=portrait?150:40,artScale=portrait?.84:1;
  c.save();c.translate(portrait?0:-18,artY);c.scale(artScale,artScale);
- // The illustrations build in a left-to-right reveal rather than appearing all at once.
+ // Real vector strokes and the marker share the same path and progress.
  box(c,323,169,454,330,'#FFFDF7',22,true);
- c.save();c.beginPath();c.rect(325,112,452*diagram,400);c.clip();
- c.translate(0,-29+(1-diagram)*15);sceneProps(c,kind,time,reduced?1:props.progress);c.restore();
+ const drawingProgress=reduced?1:Math.max(0,Math.min(1,(props.progress-.035)/.27));
+ const drawing=sampleDrawing(WHITEBOARD_STROKES[kind],drawingProgress);
+ {
+  c.save();c.translate(350,225);
+  WHITEBOARD_STROKES[kind].forEach((points,index)=>trace(c,points,drawing.visible[index],ink,4));
+  if(!drawing.complete && props.progress>=.035){
+   const {x:dx,y:dy}=drawing.cursor;
+   c.save();c.translate(dx,dy);c.rotate(-.3);
+   // Marker tip stays exactly on the freshly drawn line.
+   line(c,[0,0,30,-44],ink,13);line(c,[5,-7,27,-40],'#FFF9ED',7);
+   ellipse(c,44,-19,22,15,'#A96B49');
+   box(c,38,-10,34,70,'#A96B49',15);box(c,34,47,43,22,teal,6);
+   line(c,[24,-30,42,-32,50,-16],'#A96B49',12);
+   for(let finger=0;finger<3;finger++)line(c,[32+finger*7,-25,40+finger*7,-13],'#75452F',1.4);
+   c.restore();
+  }
+  if(drawing.complete)label(c,CARTOON_SCENE_LABELS[kind],195,244,16,teal);
+  c.restore();
+ }
  const arrow=motionWindow(props.progress,.12,.36);
  trace(c,[285,282,320,282,320,223,350,223],reduced?1:arrow,coral,4);
  if(arrow>.95||reduced)line(c,[340,214,350,223,340,232],coral,3);
