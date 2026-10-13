@@ -11,3 +11,6 @@
 .cartoon-player:fullscreen{border-radius:0;border:0;overflow:auto;width:100%;height:100%;}
 
 .cartoon-player[data-motion="reduced"] *{animation:none!important;transition:none!important}
+
+.cartoon-film{background:#fff9ed}.cartoon-film__frame{margin:0;width:100%;overflow:hidden}.cartoon-film__canvas{display:block;width:100%;height:auto;aspect-ratio:16/9}.cartoon-film__transcript{padding:12px 25px;color:#486b60;border-top:1px solid #dbe4da;font-size:12px}.cartoon-film__transcript summary{cursor:pointer;min-height:36px;display:list-item;align-content:center;font-weight:650}.cartoon-film__transcript summary:focus-visible{outline:3px solid #d77946;outline-offset:3px}.cartoon-film__transcript h3{margin:16px 0 10px;font-size:18px;font-weight:800}.cartoon-film__transcript h4{margin:14px 0 8px;font-weight:750}.cartoon-film__transcript p{line-height:1.8;max-width:85ch}.cartoon-film__transcript small{display:block;margin-top:14px}.cartoon-film__transcript[open]{padding-bottom:22px}
+@media(max-width:760px){.cartoon-film__canvas{aspect-ratio:9/14}.cartoon-film__transcript{padding:10px 18px}}

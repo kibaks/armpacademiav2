@@ -775,7 +775,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         </div>
       </header>
       {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
-        <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && motionEnabled} speaking={isSpeaking} mouthOpenness={isSpeaking ? dampedFace.mouth : 0} viseme={isSpeaking ? effectiveViseme : 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || 'Loi n° 10/010'} sceneCount={calibratedLesson.acts.length} />}
+        <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && motionEnabled} speaking={isSpeaking} mouthOpenness={isSpeaking ? dampedFace.mouth : 0} viseme={isSpeaking ? effectiveViseme : 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || 'Loi n° 10/010'} sceneCount={calibratedLesson.acts.length} reducedMotion={!motionEnabled} />}
       <div className="cartoon-player__transport">
         <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
         <div className="cartoon-player__tools">

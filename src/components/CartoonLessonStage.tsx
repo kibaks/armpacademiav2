@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { cartoonSceneKind, cartoonSpeechMouth, CARTOON_SCENE_LABELS } from '../utils/cartoonLessonScene';
+import { sampleLessonStoryboard, motionWindow, lessonKeywords } from '../utils/motionLessonStoryboard';
 import './CartoonLesson.css';
 
-type StageProps = { screen: SingleScreenCardData; progress: number; playing: boolean; speaking: boolean; mouthOpenness: number; viseme: string; male?: boolean; legalRef: string; sceneCount: number };
+type StageProps = { screen: SingleScreenCardData; progress: number; playing: boolean; speaking: boolean; mouthOpenness: number; viseme: string; male?: boolean; legalRef: string; sceneCount: number; reducedMotion?: boolean };
 const ink = '#203B50', teal = '#287A75', gold = '#EAB859', coral = '#E77E65';
 type Pen = CanvasRenderingContext2D;
 function line(c: Pen, points: number[], color = ink, width = 3) {
@@ -78,29 +79,95 @@ function character(c:Pen,t:number,speaking:boolean,openness:number,viseme:string
  if(mouth.height<=3){c.beginPath();c.moveTo(-12,25);c.quadraticCurveTo(0,34,13,25);c.strokeStyle='#552E29';c.lineWidth=3;c.stroke();}else{ellipse(c,0,28,mouth.width/2,mouth.height/2,'#512D2B');box(c,-mouth.width*.32,24,mouth.width*.64,3,'#FFF9EB',1);}
  c.restore();c.restore();
 }
-function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number){
- c.save();c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,w,h);c.scale(w/800,h/650);
+function wrapCanvasText(c: Pen, text: string, width: number): string[] {
+ const lines: string[] = []; let current = '';
+ for (const word of text.trim().split(/\s+/)) {
+  if (current && c.measureText(current + ' ' + word).width > width) { lines.push(current); current=word; }
+  else current += (current ? ' ' : '') + word;
+ }
+ if (current) lines.push(current);
+ return lines;
+}
+const textLayoutCache = new WeakMap<Pen,Map<string,{lines:string[];size:number}>>();
+function fitCanvasText(c: Pen, text: string, width: number, height: number, preferred: number, weight=600) {
+ const key=JSON.stringify([text,width,height,preferred,weight]);
+ let cache=textLayoutCache.get(c);if(!cache){cache=new Map();textLayoutCache.set(c,cache);}
+ const cached=cache.get(key);if(cached){c.font=`${weight} ${cached.size}px system-ui, sans-serif`;return cached;}
+ let size=preferred,lines:string[]=[];
+ while(true){c.font=`${weight} ${size}px system-ui, sans-serif`;lines=wrapCanvasText(c,text,width);if(lines.length*size*1.4<=height||size<=Math.min(16,preferred))break;size--;}
+ const result={lines,size};if(cache.size>=128)cache.clear();cache.set(key,result);return result;
+}
+function paragraph(c:Pen,text:string,x:number,y:number,width:number,height:number,size:number,color=ink,weight=600){
+ const layout=fitCanvasText(c,text,width,height,size,weight);c.fillStyle=color;c.textAlign='left';
+ layout.lines.forEach((value,index)=>c.fillText(value,x,y+index*layout.size*1.4));return layout;
+}
+function trace(c:Pen,points:number[],p:number,color=teal,width=4){
+ let length=0;for(let i=2;i<points.length;i+=2)length+=Math.hypot(points[i]-points[i-2],points[i+1]-points[i-1]);
+ c.save();c.setLineDash([length]);c.lineDashOffset=length*(1-Math.max(0,Math.min(1,p)));line(c,points,color,width);c.restore();
+}
+function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=false){
+ const portrait=w/h<1, W=portrait?720:1280,H=portrait?1120:720;
+ const shot=sampleLessonStoryboard(props.screen,props.progress,portrait?20:32);
+ const reveal=reduced?1:shot.titleReveal, diagram=reduced?1:shot.diagramReveal;
+ c.save();c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,w,h);c.scale(w/W,h/H);
  const kind=cartoonSceneKind(props.screen.animationId);
- c.fillStyle='#EDF2E6';c.fillRect(0,0,800,650);c.fillStyle='#D6E9E6';c.fillRect(0,0,800,468);
- ellipse(c,638,99,48,48,'#FFF3C6');cloud(c,99+(Math.sin(time*.15)*8),98,.8);cloud(c,428,70,.65);
- // A quiet skyline and stage floor establish a continuous illustrated setting.
- for(let i=0;i<9;i++){const x=346+i*53,y=207-(i%3)*32;box(c,x,y,40,261-y,'#BED4CC',4);for(let j=0;j<3;j++)box(c,x+11,y+15+j*23,17,9,'#D6E9E6',2);}
- c.fillStyle='#EEF2E3';c.fillRect(0,458,800,192);line(c,[0,459,800,459],'#A1BFB4',2);
- box(c,321,206,445,314,'#FFF9E8',24);box(c,321,206,445,44,'#FAF0D7',24);
- for(let i=0;i<3;i++)ellipse(c,343+i*14,228,4,4,[coral,gold,teal][i]);
- sceneProps(c,kind,time,props.progress);
- plant(c,62,538);plant(c,754,562);
+ c.fillStyle='#FFF9ED';c.fillRect(0,0,W,H);
+ c.fillStyle='#E2EFE7';c.beginPath();c.ellipse(portrait?70:160,portrait?450:470,portrait?580:675,portrait?360:335,0,0,Math.PI*2);c.fill();
+ // Subtle background texture and visual depth, kept away from the captions.
+ for(let x=24;x<W;x+=28)for(let y=24;y<H;y+=28){ellipse(c,x,y,.8,.8,'#D3DECE');}
+ const margin=portrait?38:48;
+ box(c,margin,24,portrait?210:140,portrait?36:28,ink,8);label(c,'ACADEMIA • ANIMÉ',margin+(portrait?105:70),portrait?48:43,portrait?19:10,'#FFF5DA');
+ c.textAlign='right';c.fillStyle='#58766C';c.font=`700 ${portrait?20:12}px system-ui, sans-serif`;c.fillText(`SÉQUENCE ${String(props.screen.screenNumber).padStart(2,'0')} / ${String(props.sceneCount).padStart(2,'0')}`,W-margin,43);
+ c.save();c.translate(0,(1-reveal)*14);c.globalAlpha=.75+.25*reveal;
+ paragraph(c,props.screen.title,margin,portrait?100:99,W-margin*2,portrait?112:96,portrait?34:36,ink,800);
+ c.restore();trace(c,[margin,portrait?202:163,margin+105,portrait?202:163],reveal,coral,5);
+ const artY=portrait?150:40,artScale=portrait?.84:1;
+ c.save();c.translate(portrait?0:-18,artY);c.scale(artScale,artScale);
+ // The illustrations build in a left-to-right reveal rather than appearing all at once.
+ box(c,323,169,454,330,'#FFFDF7',22,true);
+ c.save();c.beginPath();c.rect(325,112,452*diagram,400);c.clip();
+ c.translate(0,-29+(1-diagram)*15);sceneProps(c,kind,time,reduced?1:props.progress);c.restore();
+ const arrow=motionWindow(props.progress,.12,.36);
+ trace(c,[285,282,320,282,320,223,350,223],reduced?1:arrow,coral,4);
+ if(arrow>.95||reduced)line(c,[340,214,350,223,340,232],coral,3);
  character(c,time,props.speaking,props.mouthOpenness,props.viseme,Boolean(props.male));
+ c.restore();
+ const x=portrait?38:824,y=portrait?650:208,bw=portrait?644:408,bh=portrait?355:366;
+ c.save();c.translate(0,reduced?0:(1-motionWindow(shot.pageProgress,0,.13))*10);
+ box(c,x+4,y+7,bw,bh,'#203B5010',20);box(c,x,y,bw,bh,shot.phase==='rule'?'#FFF0CF':'#FFFFFF',20);
+ c.textAlign='left';c.font=`800 ${portrait?20:12}px system-ui, sans-serif`;c.fillStyle=shot.phase==='rule'?'#926027':teal;
+ c.fillText(shot.phase==='rule'?'LE BON RÉFLEXE':'COMPRENDRE EN PRATIQUE',x+25,y+34);
+ trace(c,[x+25,y+49,x+bw-25,y+49],reduced?1:motionWindow(shot.pageProgress,0,.18),shot.phase==='rule'?gold:teal,3);
+ const captionLayout=paragraph(c,shot.text,x+25,y+91,bw-50,bh-146,portrait?30:25,ink,600);
+ const currentLine=Math.min(captionLayout.lines.length-1,Math.floor(shot.pageProgress*captionLayout.lines.length));
+ if(currentLine>=0){const lineText=captionLayout.lines[currentLine],lineWidth=Math.min(bw-50,c.measureText(lineText).width);const fraction=shot.pageProgress>=1?1:(shot.pageProgress*captionLayout.lines.length)%1;
+ trace(c,[x+25,y+99+currentLine*captionLayout.size*1.4,x+25+lineWidth,y+99+currentLine*captionLayout.size*1.4],reduced?1:Math.max(.12,fraction),gold,3);}
+
+ const keywords=lessonKeywords(shot.phase==='rule'?shot.text:props.screen.title+' '+shot.text).slice(0,portrait?2:3);let tx=x+25;
+ keywords.forEach((word,index)=>{
+  c.font=`700 ${portrait?18:11}px system-ui, sans-serif`;const tw=Math.min(c.measureText(word).width+21,(bw-50)/keywords.length-5);
+  const enter=reduced?1:motionWindow(shot.pageProgress,.02+index*.045,.15+index*.045);
+  c.save();c.globalAlpha=.35+.65*enter;c.translate(0,(1-enter)*6);box(c,tx,y+bh-52,tw,26,shot.phase==='rule'?'#F1DCA9':'#E5F0E8',6);
+  c.fillStyle=teal;c.textAlign='left';c.fillText(word,tx+10,y+bh-35,tw-18);c.restore();tx+=tw+6;
+ });
+ c.textAlign='right';c.fillStyle='#72877C';c.font=`600 ${portrait?15:10}px system-ui, sans-serif`;c.fillText(`${shot.pageIndex+1} / ${shot.pageCount}`,x+bw-25,y+bh-12);
+ c.restore();
+ // Shape-layer progress and a lower-third stay inside the video composition.
+ const lowerY=portrait?1060:657;
+ box(c,margin,lowerY-32,portrait?285:243,39,ink,12);c.fillStyle='#FFF8E4';c.textAlign='left';c.font=`700 ${portrait?23:13}px system-ui, sans-serif`;c.fillText(`${props.male?'Prof. Henri':'Prof. Aïsha'}  •  ${shot.phase==='rule'?'À retenir':'Explication'}`,margin+16,lowerY-8);
+ paragraph(c,props.screen.legalArticle||props.legalRef,portrait?340:820,lowerY-15,portrait?342:410,45,portrait?24:13,'#506D61',600);
+ box(c,margin,H-24,W-margin*2,4,'#D6E4D8',2);box(c,margin,H-24,(W-margin*2)*Math.max(0,Math.min(1,props.progress)),4,shot.phase==='rule'?coral:teal,2);
  c.restore();
 }
 export const CartoonLessonStage: React.FC<StageProps> = props => {
  const canvasRef=useRef<HTMLCanvasElement>(null),latest=useRef(props);latest.current=props;
- const [reduced,setReduced]=useState(false);
+ const [systemReduced,setReduced]=useState(false);
+ const reduced=systemReduced||Boolean(props.reducedMotion);
  useEffect(()=>{const media=window.matchMedia('(prefers-reduced-motion: reduce)');const update=()=>setReduced(media.matches);update();media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
  useEffect(()=>{
   const canvas=canvasRef.current;if(!canvas)return;const context=canvas.getContext('2d');if(!context)return;
   let frame=0,last=0;let disposed=false;
-  const paint=(time:number)=>{if(disposed)return;if(!document.hidden&&(time-last>=33||!last)){const rect=canvas.getBoundingClientRect(),ratio=Math.min(window.devicePixelRatio||1,2);const w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);if(w&&h){if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}drawScene(context,latest.current,reduced?0:time/1000,w,h);}last=time;}if(props.playing&&!reduced)frame=requestAnimationFrame(paint);};
+  const paint=(time:number)=>{if(disposed)return;if(!document.hidden&&(time-last>=33||!last)){const rect=canvas.getBoundingClientRect(),ratio=Math.min(window.devicePixelRatio||1,2);const w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);if(w&&h){if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}drawScene(context,latest.current,reduced?0:time/1000,w,h,reduced);}last=time;}if(props.playing&&!reduced)frame=requestAnimationFrame(paint);};
   const redraw=()=>{last=0;if(!props.playing||reduced)paint(performance.now());};
   const resize=new ResizeObserver(redraw);resize.observe(canvas);frame=requestAnimationFrame(paint);document.addEventListener('visibilitychange',redraw);
   return()=>{disposed=true;cancelAnimationFrame(frame);resize.disconnect();document.removeEventListener('visibilitychange',redraw);};
@@ -108,25 +175,16 @@ export const CartoonLessonStage: React.FC<StageProps> = props => {
  useEffect(()=>{
   if(props.playing&&!reduced)return;
   const canvas=canvasRef.current,context=canvas?.getContext('2d');
-  if(canvas&&context)drawScene(context,latest.current,0,canvas.width,canvas.height);
+  if(canvas&&context)drawScene(context,latest.current,0,canvas.width,canvas.height,reduced);
  },[props.playing,reduced,props.screen.animationId,props.progress,props.speaking,props.male,props.mouthOpenness,props.viseme]);
- const fieldPhase=props.progress>=props.screen.fieldRuleStartRatio;
- return <section className="cartoon-scene" aria-label={`Scène ${props.screen.screenNumber} : ${props.screen.title}`}>
-  <figure className="cartoon-scene__art">
-   <div className="cartoon-scene__scene-label"><span className="cartoon-scene__dot"/>SCÈNE {String(props.screen.screenNumber).padStart(2,'0')}<span> / {String(props.sceneCount).padStart(2,'0')}</span></div>
-   <canvas ref={canvasRef} aria-hidden="true" className="cartoon-scene__canvas"/>
-   <figcaption className="cartoon-scene__caption"><span className="cartoon-scene__speaker">{props.male?'Prof. Henri':'Prof. Aïsha'}</span><span>{CARTOON_SCENE_LABELS[cartoonSceneKind(props.screen.animationId)]}</span></figcaption>
+ return <section className="cartoon-film" aria-label={`Scène ${props.screen.screenNumber} : ${props.screen.title}`}>
+  <figure className="cartoon-film__frame">
+   <canvas ref={canvasRef} aria-hidden="true" className="cartoon-film__canvas"/>
+   <figcaption className="sr-only">{props.male?'Prof. Henri':'Prof. Aïsha'} explique {props.screen.title}. {CARTOON_SCENE_LABELS[cartoonSceneKind(props.screen.animationId)]}.</figcaption>
   </figure>
-  <div className="cartoon-scene__story" key={props.screen.screenNumber+props.screen.title}>
-   <span className="cartoon-scene__eyebrow">{["Comprendre l’enjeu", "Découvrir la règle", "Passer à l’action", "Retenir l’essentiel", "Vérifier ses acquis"][Math.max(0,Math.min(4,props.screen.screenNumber-1))]}</span>
-   <h3>{props.screen.title}</h3>
-   <div className="cartoon-scene__divider"/>
-   <p className="cartoon-scene__explanation">{props.screen.explanation}</p>
-   <div className={`cartoon-scene__takeaway ${fieldPhase?'is-emphasized':''}`}>
-    <span className="cartoon-scene__takeaway-label"><span aria-hidden="true">✦</span> LE BON RÉFLEXE</span>
-    <p>{props.screen.fieldRule}</p>
-   </div>
-   <div className="cartoon-scene__legal"><span>REPÈRE JURIDIQUE</span><p>{props.screen.legalArticle || props.legalRef}</p></div>
-  </div>
+  <details className="cartoon-film__transcript">
+   <summary>Lire la transcription de cette scène</summary>
+   <h3>{props.screen.title}</h3><p>{props.screen.explanation}</p><h4>Le bon réflexe</h4><p>{props.screen.fieldRule}</p><small>{props.screen.legalArticle || props.legalRef}</small>
+  </details>
  </section>;
 };
