@@ -1,3 +1,4 @@
+import type { TutorMotion } from '../../shared/tutorPresentation';
 import React, { useEffect, useRef, useState } from 'react';
 import imgTutrice from '../assets/images/aisha_cutout_foreground.png';
 import imgStudioBg from '../assets/images/studio_static_background.jpg';
@@ -30,6 +31,9 @@ export interface AishaAvatarProps {
   showBadge?: boolean;
   showWaves?: boolean;
   showWave?: boolean;
+  motionMode?: TutorMotion;
+  facialExpressions?: boolean;
+  handGestures?: boolean;
   className?: string;
 }
 
@@ -65,12 +69,7 @@ function mapPropEmotion(
   return undefined;
 }
 
-/**
- * AishaAvatar — Real-Time 60 FPS Wav2Lip Video Synthesizer (WebGL 648-Triangle Full-Image Mesh Warp)
- * - Realistic Wav2Lip lip-sync (6 phonetic visemes, upper dental arch, oral cavity & 3D tongue)
- * - Genuine Duchenne smile ("Le sourire") lifting mouth corners, cheeks & lower eyelids
- * - Full-image animation: 3D head movement, eyebrows, eye blinks/winks, shoulders & both hands
- */
+/** Audio-driven WebGL portrait with phoneme lip sync, facial expressions and upper-body gestures. */
 export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   isSpeaking = false,
   isListening = false,
@@ -81,6 +80,9 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   size = 'md',
   variant = 'avatar',
   showBadge = true,
+  motionMode = 'subtle',
+  facialExpressions = true,
+  handGestures = true,
   className = '',
 }) => {
   const isVisio = variant === 'visio';
@@ -92,6 +94,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
 
   const [globalSpeaking, setGlobalSpeaking] = useState(false);
   const wav2lipCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const handCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const emotionBadgeRef = useRef<SVGTextElement | null>(null);
   const postureBadgeRef = useRef<SVGTextElement | HTMLSpanElement | null>(null);
   const visemeBadgeRef = useRef<SVGTextElement | null>(null);
@@ -114,18 +117,19 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   }, []);
 
   useEffect(() => {
-    // True Gros Plan (Close-Up) framing on Aïsha's expressive face, smile, eyes & mouth
+    // Portrait framing (Close-Up) framing on Aïsha's expressive face, smile, eyes & mouth
     // with static pedagogical studio background (flower pots, plants & warm shelves)
     // Visio framing keeps the full head inside the camera (crown y=149,
     // chin y≈590) with shoulders entering at the bottom edge.
     const viewport = isVisio
       ? { x: 158, y: 110, w: 584, h: 550, tutorPersona }
       : isStudio || dim.w >= 120
-      ? { x: 238, y: 200, w: 420, h: 395, tutorPersona }
+      ? { x: 120, y: 70, w: 656, h: 910, tutorPersona }
       : { x: 240, y: 205, w: 416, h: 390, tutorPersona };
 
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: wav2lipCanvasRef.current,
+      motionMode, facialExpressions, handCanvas: handCanvasRef.current,
       wav2lipViewport: viewport,
       emotionBadgeEl: emotionBadgeRef.current,
       postureBadgeEl: postureBadgeRef.current,
@@ -135,7 +139,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
       emotionOverride: () => emotionPropRef.current,
     });
     return unregister;
-  }, [isVisio, isStudio, dim.w, tutorPersona]);
+  }, [isVisio, isStudio, dim.w, tutorPersona, motionMode, facialExpressions, handGestures]);
 
   const activeSpeaking = isSpeaking || globalSpeaking;
   const accentBorder = TUTOR_ACCENT_BORDERS[tutorPersona] || TUTOR_ACCENT_BORDERS.denise;
@@ -181,6 +185,8 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
         }
       />
 
+
+      {(isStudio || isVisio) && handGestures && <canvas ref={handCanvasRef} width={600} height={300} aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 z-10 h-[36%] w-full" />}
 
       {showBadge && !isVisio && !isStudio && dim.w < 180 && (
         <span

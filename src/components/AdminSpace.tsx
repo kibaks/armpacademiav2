@@ -1,3 +1,4 @@
+import { TutorAdminSettings } from './TutorAdminSettings';
 import { AdminProfileHeader } from './AdminProfileHeader';
 import { AdminPagination } from './AdminPagination';
 import { downloadAdminCsv } from '../utils/adminExport';
@@ -137,7 +138,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
 }) => {
   const [view, setView] = useState<'espace' | 'dashboard'>('espace');
   const [section, setSection] = useState<
-    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules' | 'audit' | 'systeme'
+    'tableau' | 'formateurs' | 'apprenants' | 'utilisateurs' | 'permissions' | 'tests' | 'performances' | 'modules' | 'audit' | 'systeme' | 'tuteur'
   >('tableau');
 
   // ---------- Tous les comptes (backend) ----------
@@ -801,6 +802,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
             { id: 'tests', label: 'Tests de validation', icon: <Award className="w-4 h-4" /> },
             { id: 'performances', label: 'Performances', icon: <BarChart3 className="w-4 h-4" /> },
             { id: 'audit', label: 'Journal des actions', icon: <ShieldCheck className="w-4 h-4" /> },
+            ...(currentProfile.role === 'super_admin' ? [{ id: 'tuteur' as const, label: 'Tuteurs et voix', icon: <Sparkles className="w-4 h-4" /> }] : []),
             { id: 'systeme', label: 'État des services', icon: <Power className="w-4 h-4" /> },
             { id: 'modules', label: 'Modules de formation', icon: <BookOpen className="w-4 h-4" /> },
           ] as const
@@ -820,6 +822,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
           </button>
         ))}
       </div>
+
+      {section === 'tuteur' && currentProfile.role === 'super_admin' && <TutorAdminSettings />}
 
       {(section === 'audit' || section === 'systeme') && <section className="rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
         <h3 className="font-bold">{section === 'audit' ? 'Journal des actions administratives' : 'État des services'}</h3>

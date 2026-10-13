@@ -1,3 +1,4 @@
+import { readTutorPresentation } from './backend/tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './backend/cartesiaTutorSpeech.js';
 import { synthesizeElevenTutor } from './backend/elevenTutorSpeech.js';
 import { voiceBudgets } from './backend/voiceBudgets.js';
@@ -1614,6 +1615,8 @@ async function getOrSynthesizeTtsPayload(
 }
 
 // Health check endpoint
+app.get('/api/tutor/presentation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation()); });
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });

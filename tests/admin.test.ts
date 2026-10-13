@@ -24,6 +24,7 @@ mock.method(db, 'collection', (name: string) => ({
   add: async (data: any) => { writes.push(data); },
   orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
 }));
+mock.method(db, 'batch', () => { const batch = { set: (_ref: any, data: any) => { writes.push(data); return batch; }, commit: async () => [] }; return batch; });
 mock.method(db, 'runTransaction', async (fn: any) => fn({ get: async () => ({ data: () => fixture }), set: (_ref: any, data: any) => { writes.push(data); } }));
 const app = express();
 app.use(express.json()); app.use('/api/admin', adminRouter); app.use('/api', learningRouter);
@@ -86,4 +87,16 @@ test('protected administrators and the current account cannot be removed or demo
   assert.equal((await mutate('protected', 'DELETE')).status, 400);
   assert.equal((await mutate('admin', 'PATCH')).status, 400);
   assert.equal((await mutate('protected', 'PATCH')).status, 400);
+});
+
+test('tutor presentation is managed only by superadministrators, validates input and audits saves', async () => {
+  const valid = { motion: 'subtle', facialExpressions: true, handGestures: true, autoSpeak: true };
+  assert.equal((await request('/admin/tutor-presentation', 'learner')).status, 403);
+  assert.equal((await request('/admin/tutor-presentation', 'dfat')).status, 403);
+  assert.equal((await request('/admin/tutor-presentation', 'dfat', valid)).status, 403);
+  assert.equal((await request('/admin/tutor-presentation', 'admin', { ...valid, motion: 'invalid' })).status, 400);
+  const response = await request('/admin/tutor-presentation', 'admin', valid);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).settings, valid);
+  assert.ok(writes.some(w => w.action === 'tutor.presentation.updated' && w.actor === 'admin'));
 });

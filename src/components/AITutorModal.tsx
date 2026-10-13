@@ -1,3 +1,5 @@
+import { DEFAULT_TUTOR_PRESENTATION, normalizeTutorPresentation } from '../../shared/tutorPresentation';
+import './TutorStudio.css';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
@@ -34,7 +36,8 @@ import {
   ChevronUp,
   ChevronDown,
   Sliders,
-  Settings
+  Settings,
+  GraduationCap
 } from 'lucide-react';
 import { ChatMessage, UserProfile } from '../types';
 import { saveTutorHistoryToFirestore, fetchTutorHistoryFromFirestore } from '../firebase';
@@ -525,18 +528,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [activeEmotionLabel, setActiveEmotionLabel] = useState<string>(
     '😊 Sourire Chaleureux & Bienveillance'
   );
-  const [manualTutorEmotion, setManualTutorEmotion] = useState<AvatarEmotion | 'auto'>('smiling');
   const [detectedSpeechEmotion, setDetectedSpeechEmotion] = useState<AvatarEmotion>('smiling');
+  const [presentation, setPresentation] = useState(DEFAULT_TUTOR_PRESENTATION);
   const [isListening, setIsListening] = useState(false);
-  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
-  const [voiceSettings, setVoiceSettings] = useState<{
-    order: Array<{ id: 'cartesia' | 'elevenlabs' | 'neural' | 'gemini'; enabled: boolean }>;
-    neuralVoice: 'denise' | 'vivienne-multilingual' | 'vivienne';
-    browserFallback?: boolean;
-    availability?: { cartesia?: boolean; elevenlabs?: boolean; neural?: boolean; gemini?: boolean };
-    elevenlabsVoiceId?: string;
-  } | null>(null);
-  const [voiceSettingsMsg, setVoiceSettingsMsg] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCallActive, setIsCallActive] = useState(false);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
@@ -555,12 +549,44 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
   const [voiceMode, setVoiceMode] = useState(() => speechService.getVoiceMode());
-  const [playbackProvider, setPlaybackProvider] = useState('');
-  useEffect(() => { if (isOpen) { let active = true; speechService.loadVoiceModeDefault().then(mode => { if (active) setVoiceMode(mode); }); return () => { active = false; }; } }, [isOpen]);
+  const [isVoiceLoading, setIsVoiceLoading] = useState(false);
+  const userChangedAutoSpeak = useRef(false);
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    const controller = new AbortController();
+    speechService.loadVoiceModeDefault().then(mode => { if (active) setVoiceMode(mode); });
+    fetch('/api/tutor/presentation', { signal: controller.signal }).then(r => r.ok ? r.json() : null).then(data => {
+      if (!active || !data) return;
+      const settings = normalizeTutorPresentation(data);
+      setPresentation(settings);
+      if (!userChangedAutoSpeak.current) setAutoSpeak(settings.autoSpeak);
+    }).catch(() => {});
+    return () => { active = false; controller.abort(); };
+  }, [isOpen]);
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
   const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
   const [showStudioStage, setShowStudioStage] = useState<boolean>(true);
   const [toastNotice, setToastNotice] = useState<string | null>(null);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.focus();
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); speechService.stop(); onClose(); return; }
+      if (event.key !== 'Tab' || !dialog) return;
+      const nodes = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [tabindex="0"]')].filter(node => node.getClientRects().length > 0);
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => { document.removeEventListener('keydown', keyboard); previous?.focus(); };
+  }, [isOpen, onClose]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileImageRef = useRef<HTMLInputElement>(null);
@@ -646,7 +672,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   useEffect(() => {
     const unsub = speechService.subscribe((st) => {
-      setPlaybackProvider(st.source === 'web-speech' ? 'Voix de l’appareil' : st.voiceProvider === 'cartesia-sonic' ? 'Cartesia' : st.voiceProvider === 'gemini-tts' ? 'Gemini' : st.voiceProvider === 'elevenlabs-v2' ? 'ElevenLabs' : 'Voix studio');
+      setIsVoiceLoading(Boolean(st.isLoading && st.currentId?.startsWith('tutor-')));
       if (st.error) { setToastNotice(st.error); setTimeout(() => setToastNotice(null), 6500); }
       if (st.currentId && st.currentId.startsWith('tutor-')) {
         setIsSpeaking(Boolean(st.isPlaying && !st.isLoading));
@@ -764,20 +790,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     setSelectedVoice(v);
     speechService.setVoicePersona(v);
     const lastBotMsg = [...messages].reverse().find((m) => m.sender === 'tuteur');
-    if (isSpeaking && lastBotMsg) {
-      speak(lastBotMsg.text, lastBotMsg.id, v, tutorSpeed);
-    }
-  };
-
-  const handleCycleSpeed = () => {
-    const order = [0.95, 1.0, 0.88];
-    const idx = order.indexOf(tutorSpeed);
-    const next = order[(idx + 1) % order.length];
-    setTutorSpeed(next);
-    const lastBotMsg = [...messages].reverse().find((m) => m.sender === 'tuteur');
-    if (isSpeaking && lastBotMsg) {
-      speak(lastBotMsg.text, lastBotMsg.id, selectedVoice, next);
-    }
+    if ((isSpeaking || isVoiceLoading) && lastBotMsg) speak(lastBotMsg.text, lastBotMsg.id, v, tutorSpeed);
+    else stopSpeaking();
   };
 
   const startListening = (autoSendOnFinal = false) => {
@@ -1347,99 +1361,12 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const activeCategoryObj =
     QA_CATEGORIES.find((c) => c.id === activeCategory) || QA_CATEGORIES[0];
 
-  const effectiveTutorEmotion: AvatarEmotion =
-    manualTutorEmotion !== 'auto'
-      ? manualTutorEmotion
-      : isListening || isRecordingVoice
-      ? 'empathetic'
-      : isLoading
-      ? 'curious'
-      : isSpeaking
-      ? detectedSpeechEmotion
-      : 'smiling';
-
-  const TUTOR_EMOTION_PRESETS: Array<{ id: AvatarEmotion | 'auto'; icon: string; label: string }> = [
-    { id: 'smiling', icon: '😊', label: 'Sourire' },
-    { id: 'pedagogical', icon: '🎓', label: 'Éloquence' },
-    { id: 'empathetic', icon: '💛', label: 'Empathie' },
-    { id: 'curious', icon: '🤔', label: 'Réflexion' },
-    { id: 'enthusiastic', icon: '🌟', label: 'Joie' },
-    { id: 'astonished', icon: '😲', label: 'Alerte' },
-    { id: 'solemn', icon: '⚖️', label: 'Rigueur' },
-    { id: 'auto', icon: '✨', label: 'Auto Voix' },
-  ];
-
-  const handleSelectTutorEmotion = (emo: AvatarEmotion | 'auto') => {
-    setManualTutorEmotion(emo);
-    if (emo !== 'auto') {
-      avatarExpressionEngine.setEmotion(emo);
-    }
-  };
-
-  // ---- Paramétrage chaîne vocale (GET/POST /api/tts/settings) ----
-  const toggleVoiceSettings = async () => {
-    const next = !showVoiceSettings;
-    setShowVoiceSettings(next);
-    setVoiceSettingsMsg('');
-    if (next && !voiceSettings) {
-      try {
-        const res = await fetch('/api/tts/settings');
-        if (res.ok) setVoiceSettings(await res.json());
-        else setVoiceSettingsMsg('Impossible de charger les réglages');
-      } catch {
-        setVoiceSettingsMsg('Serveur injoignable');
-      }
-    }
-  };
-
-  const moveVoiceTier = (idx: number, dir: -1 | 1) => {
-    setVoiceSettings((s) => {
-      if (!s) return s;
-      const order = [...s.order];
-      const j = idx + dir;
-      if (j < 0 || j >= order.length) return s;
-      const tmp = order[idx];
-      order[idx] = order[j];
-      order[j] = tmp;
-      return { ...s, order };
-    });
-  };
-
-  const toggleVoiceTier = (idx: number) => {
-    setVoiceSettings((s) => {
-      if (!s) return s;
-      return { ...s, order: s.order.map((t, i) => (i === idx ? { ...t, enabled: !t.enabled } : t)) };
-    });
-  };
-
-  const saveVoiceSettings = async () => {
-    if (!voiceSettings) return;
-    setVoiceSettingsMsg('Enregistrement…');
-    try {
-      const res = await authenticatedFetch('/api/tts/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order: voiceSettings.order,
-          neuralVoice: voiceSettings.neuralVoice,
-          browserFallback: !!voiceSettings.browserFallback,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setVoiceSettings((s) => (s ? { ...s, ...data } : s));
-        setVoiceSettingsMsg('✓ Enregistré — appliqué à la prochaine synthèse');
-      } else {
-        setVoiceSettingsMsg(`✗ ${data.error || 'erreur'}`);
-      }
-    } catch {
-      setVoiceSettingsMsg('✗ Serveur injoignable');
-    }
-  };
+  const effectiveTutorEmotion: AvatarEmotion = !presentation.facialExpressions ? 'pedagogical'
+    : isListening || isRecordingVoice ? 'empathetic' : isLoading ? 'curious' : isSpeaking ? detectedSpeechEmotion : 'smiling';
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 lg:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-6xl h-[100dvh] sm:h-[92vh] sm:max-h-[840px] rounded-none sm:rounded-3xl shadow-2xl flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 overflow-hidden relative">
+    <div className="tutor-overlay fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 lg:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="tutor-dialog-title" className="tutor-dialog bg-white dark:bg-slate-900 w-full max-w-6xl h-[100dvh] sm:h-[92vh] sm:max-h-[840px] rounded-none sm:rounded-3xl shadow-2xl flex flex-col border-0 sm:border border-slate-200 dark:border-slate-800 overflow-hidden relative">
         {/* Toast Notice interne */}
         {toastNotice && (
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-xl border border-white/15">
@@ -1447,586 +1374,62 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           </div>
         )}
 
-        {/* =================================================================== */}
-        {/* HEADER — STUDIO TUTEUR VIRTUEL QUESTIONS / RÉPONSES                 */}
-        {/* =================================================================== */}
-        <div className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-950 text-white px-4 py-3 sm:px-6 flex items-center justify-between border-b border-white/10 shrink-0 relative overflow-hidden">
-          <div className="flex items-center gap-3 relative min-w-0">
-            <div className="relative shrink-0">
-              <AishaAvatar
-                isSpeaking={isSpeaking}
-                isListening={isListening}
-                isLoading={isLoading}
-                emotion={effectiveTutorEmotion}
-                tutorPersona={selectedVoice}
-                size={48}
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-black text-sm sm:text-base tracking-tight truncate">
-                  {activeTutor.name} • {activeTutor.title}
-                </h3>
-                <span className="hidden md:inline-flex items-center gap-1 text-[10px] uppercase font-black tracking-wider px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                  <Sparkles className="w-3 h-3" /> {activeTutor.badge}
-                </span>
+        <header className="tutor-header">
+          <div className="min-w-0">
+            <p className="tutor-eyebrow">Votre espace d’apprentissage</p>
+            <h2 id="tutor-dialog-title">{activeTutor.name}</h2>
+            <p className="tutor-course">{learningContext?.lastCourseTitle || 'Un accompagnement, à votre rythme'}</p>
+          </div>
+          <div className="tutor-header-actions">
+            <button type="button" onClick={() => startCall()} className="tutor-icon-button" aria-label={`Appeler ${activeTutor.name}`} title="Appel audio"><Phone size={18} /></button>
+            <button type="button" onClick={() => startVideoCall()} className="tutor-icon-button" aria-label={`Voir ${activeTutor.name} en visio`} title="Visio"><Video size={18} /></button>
+            <details className="tutor-options">
+              <summary className="tutor-icon-button" aria-label="Préférences de lecture" title="Préférences"><Sliders size={18} /></summary>
+              <div className="tutor-options-panel">
+                <h3>Votre confort de lecture</h3>
+                <label>Voix<select value={voiceMode} onChange={event => { const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode); }}><option value="studio">Voix naturelle</option><option value="device">Voix de cet appareil</option></select></label>
+                <label>Vitesse<select value={tutorSpeed} onChange={e => setTutorSpeed(Number(e.target.value))}><option value={0.88}>Posée</option><option value={0.95}>Équilibrée</option><option value={1.1}>Rapide</option></select></label>
+                <label className="tutor-option-check"><input type="checkbox" checked={autoSpeak} onChange={e => { userChangedAutoSpeak.current = true; if (!e.target.checked) stopSpeaking(); setAutoSpeak(e.target.checked); }} />Lire les réponses à voix haute</label>
+                <label className="tutor-option-check"><input type="checkbox" checked={showStudioStage} onChange={e => setShowStudioStage(e.target.checked)} />Afficher le portrait</label>
+                <button type="button" onClick={() => speak(activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed)}>Écouter cette voix</button>
+                <button type="button" onClick={handleResetConversation}>Nouvelle conversation</button>
+                <button type="button" onClick={() => setShowAssistedVoiceBox(v => !v)}>Préparer une note vocale</button>
               </div>
-              <p className="text-[11px] text-blue-200/90 flex items-center gap-1.5 truncate">
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${
-                    isSpeaking
-                      ? 'bg-cyan-400 animate-ping'
-                      : isListening || isRecordingVoice
-                      ? 'bg-rose-400 animate-ping'
-                      : isLoading
-                      ? 'bg-amber-400 animate-bounce'
-                      : 'bg-emerald-400'
-                  }`}
-                />
-                {isSpeaking
-                  ? `${activeTutor.name} vous répond de vive voix…`
-                  : isRecordingVoice
-                  ? `Enregistrement de votre Voice en cours (${recordingSeconds}s)…`
-                  : isListening
-                  ? `Micro ouvert : posez votre question, ${activeTutor.name} vous écoute…`
-                  : isLoading
-                  ? `${activeTutor.name} prépare votre réponse juridique sur mesure…`
-                  : learningContext
-                  ? `Connectée à votre cours : ${learningContext.lastCourseCode} • ${learningContext.lastCourseTitle}`
-                  : 'Appels vocaux, Visio & Notes vocales (Voices) • Tuteurs & tutrices virtuels'}
-              </p>
-            </div>
+            </details>
+            <button type="button" onClick={() => { stopSpeaking(); onClose(); }} className="tutor-icon-button" aria-label="Fermer le tuteur"><X size={20} /></button>
           </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setShowStudioStage((v) => !v)}
-              className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-                showStudioStage
-                  ? 'bg-blue-600/30 border-blue-400/50 text-cyan-200'
-                  : 'bg-white/10 border-white/15 text-white/80 hover:bg-white/15'
-              }`}
-              title="Afficher ou masquer le portrait Studio"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>{showStudioStage ? 'Studio Visible' : 'Afficher Studio'}</span>
-            </button>
-
-            <button
-              onClick={toggleVoiceSettings}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                showVoiceSettings
-                  ? 'bg-amber-400/90 border-amber-300/60 text-slate-950'
-                  : 'bg-white/10 border-white/15 text-white/80 hover:bg-white/15'
-              }`}
-              title="Paramètres Voix — ordre et fournisseurs de synthèse (ElevenLabs / Neural / Gemini)"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span className="hidden xl:inline">Voix</span>
-            </button>
-
-            <button
-              onClick={() => startCall()}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-black text-xs border transition shadow-sm ${
-                isCallActive
-                  ? 'bg-emerald-500 border-emerald-300 text-white animate-pulse'
-                  : 'bg-emerald-500/90 hover:bg-emerald-500 border-emerald-400/50 text-white'
-              }`}
-              title={`Appeler ${activeTutor.name} en direct`}
-            >
-              <Phone className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Appeler</span>
-            </button>
-
-            <button
-              onClick={() => startVideoCall()}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-black text-xs border transition shadow-sm ${
-                isVideoCallActive
-                  ? 'bg-blue-600 border-blue-300 text-white animate-pulse'
-                  : 'bg-blue-600/90 hover:bg-blue-500 border-blue-400/50 text-white'
-              }`}
-              title={`Lancer un appel Visio avec ${activeTutor.name}`}
-            >
-              <Video className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Visio</span>
-            </button>
-
-            <button
-              onClick={() => handleSendMessage('Lance-moi un Quiz interactif Q/R sur mon cours')}
-              className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition shadow-sm"
-              title="Lancer une question de Quiz interactive"
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>Quiz Q/R</span>
-            </button>
-
-            <button
-              onClick={handleResetConversation}
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 transition"
-              title="Nouvelle session Questions / Réponses"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                stopSpeaking();
-                onClose();
-              }}
-              className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition"
-              title="Fermer le Tuteur Virtuel"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+        </header>
+        <div className="tutor-selection">
+          <label htmlFor="tutor-persona">Votre tuteur</label>
+          <select id="tutor-persona" value={selectedVoice} onChange={e => handleChangeVoice(e.target.value as VoicePersona)}>{VIRTUAL_TUTORS.map(tutor => <option key={tutor.id} value={tutor.id}>{tutor.name} · {tutor.specialty}</option>)}</select>
+          <span role="status" className="tutor-status"><i className={isSpeaking ? 'speaking' : ''} />{isVoiceLoading ? 'Préparation de la voix…' : isSpeaking ? 'Lecture en cours' : isLoading ? 'Préparation de la réponse…' : isListening ? 'À votre écoute' : 'Disponible'}</span>
         </div>
 
-        {/* PANNEAU — PARAMÉTRAGE CHAÎNE VOCALE (ElevenLabs / Neural / Gemini) */}
-        {showVoiceSettings && (
-          <div className="px-4 sm:px-6 py-3 bg-gradient-to-r from-slate-950 via-blue-950/95 to-indigo-950 border-b border-white/10 text-white shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-300">
-                <Settings className="w-4 h-4" />
-                Paramètres Voix — chaîne de synthèse
-              </div>
-              <button
-                onClick={() => setShowVoiceSettings(false)}
-                className="p-1 rounded-lg hover:bg-white/10 text-white/70"
-                title="Fermer les paramètres"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {!voiceSettings ? (
-              <p className="text-white/60 text-xs py-2">{voiceSettingsMsg || 'Chargement des réglages…'}</p>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  {voiceSettings.order.map((tier, idx) => {
-                    const meta =
-                      tier.id === 'cartesia'
-                        ? { label: 'Cartesia Sonic', hint: 'Voix françaises • lecture des cours et tuteur', ok: !!voiceSettings.availability?.cartesia, okText: 'clé ✓', koText: 'clé manquante' }
-                        : tier.id === 'elevenlabs'
-                        ? {
-                            label: 'ElevenLabs — Rachel (voix humaine)',
-                            hint: 'Souffles, émotion, exclamations • garde-mensuel protégé (10k car.)',
-                            ok: !!voiceSettings.availability?.elevenlabs,
-                            okText: 'clé API ✓',
-                            koText: 'clé manquante',
-                          }
-                        : tier.id === 'neural'
-                          ? {
-                              label: `Voix Neural Studio (${
-                                voiceSettings.neuralVoice === 'denise'
-                                  ? 'Denise'
-                                  : voiceSettings.neuralVoice === 'vivienne-multilingual'
-                                    ? 'Vivienne Multilingue'
-                                    : 'Vivienne'
-                              })`,
-                              hint: 'edge-tts HD — sans clé, repli illimité',
-                              ok: true,
-                              okText: 'prêt',
-                              koText: '',
-                            }
-                          : {
-                              label: 'Gemini TTS (Google)',
-                              hint: 'Optionnel — nécessite une clé API Google',
-                              ok: !!voiceSettings.availability?.gemini,
-                              okText: 'clé ✓',
-                              koText: 'aucune clé',
-                            };
-                    return (
-                      <div
-                        key={tier.id}
-                        className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs ${
-                          tier.enabled ? 'bg-white/10 border-white/20' : 'bg-black/25 border-white/10 opacity-60'
-                        }`}
-                      >
-                        <span className="w-5 h-5 shrink-0 rounded-md bg-amber-400/90 text-slate-950 font-black flex items-center justify-center text-[10px]">
-                          {idx + 1}
-                        </span>
-                        <label className="flex items-center gap-1.5 shrink-0 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={tier.enabled}
-                            onChange={() => toggleVoiceTier(idx)}
-                            className="accent-amber-400"
-                          />
-                          <span className="font-bold text-white/90">Actif</span>
-                        </label>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-bold text-white truncate">{meta.label}</div>
-                          <div className="text-white/55 text-[10px] truncate">{meta.hint}</div>
-                        </div>
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
-                            meta.ok ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
-                          }`}
-                        >
-                          {meta.ok ? meta.okText : meta.koText}
-                        </span>
-                        <div className="flex flex-col shrink-0 gap-0.5">
-                          <button
-                            onClick={() => moveVoiceTier(idx, -1)}
-                            disabled={idx === 0}
-                            className="p-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30"
-                            title="Monter dans la chaîne"
-                          >
-                            <ChevronUp className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => moveVoiceTier(idx, 1)}
-                            disabled={idx === voiceSettings.order.length - 1}
-                            className="p-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30"
-                            title="Descendre dans la chaîne"
-                          >
-                            <ChevronDown className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <label className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/85 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={!!voiceSettings.browserFallback}
-                    onChange={(e) => setVoiceSettings({ ...voiceSettings, browserFallback: e.target.checked })}
-                    className="accent-amber-400"
-                  />
-                  <span className="font-bold text-amber-200">Voix machine de secours (navigateur)</span>
-                  <span className="text-white/50">
-                    synthèse robotisée si la voix neurale tombe — <strong>désactivée par défaut</strong>
-                  </span>
-                </label>
-
-                <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px]">
-                  <label className="flex items-center gap-1.5 text-white/80">
-                    <span className="font-bold">Voix Neural préférée :</span>
-                    <select
-                      value={voiceSettings.neuralVoice}
-                      onChange={(e) =>
-                        setVoiceSettings({ ...voiceSettings, neuralVoice: e.target.value as typeof voiceSettings.neuralVoice })
-                      }
-                      className="bg-slate-800 border border-white/15 rounded-lg px-2 py-1 text-white text-[11px]"
-                    >
-                      <option value="denise">Denise (recommandée)</option>
-                      <option value="vivienne-multilingual">Vivienne Multilingue</option>
-                      <option value="vivienne">Vivienne</option>
-                    </select>
-                  </label>
-                  <span className="text-white/50">ElevenLabs : {voiceSettings.elevenlabsVoiceId}</span>
-                  <button
-                    onClick={saveVoiceSettings}
-                    className="ml-auto px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition"
-                  >
-                    Enregistrer
-                  </button>
-                  {voiceSettingsMsg && <span className="text-cyan-200 font-bold">{voiceSettingsMsg}</span>}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2 text-xs bg-white dark:bg-slate-900">
-          <label htmlFor="tutor-voice-mode" className="font-semibold">Lecture vocale</label>
-          <select id="tutor-voice-mode" value={voiceMode} onChange={event => {
-            const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode);
-          }} className="rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-2">
-            <option value="studio">Voix studio · Cartesia / Gemini / ElevenLabs</option><option value="device">Voix gratuites de cet appareil</option>
-          </select>
-          <button type="button" onClick={() => speak(activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed)} className="rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 font-semibold">Écouter un exemple</button>
-          {isSpeaking && <span role="status" className="text-blue-700 dark:text-blue-200 font-semibold">Lecture : {playbackProvider}</span>}
-          {voiceMode === 'device' && <span className="text-slate-500">La voix dépend des voix françaises installées sur votre appareil.</span>}
-        </div>
-
-        {/* =================================================================== */}
-        {/* MAIN BODY — SPLIT STUDIO (LEFT: AÏSHA LIVE STAGE | RIGHT: Q&A CHAT) */}
-        {/* =================================================================== */}
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-          {/* LEFT PANEL: PROF. AÏSHA INTERACTIVE WAV2LIP VIDEO STUDIO STAGE */}
           {showStudioStage && (
-            <aside className="lg:w-[330px] xl:w-[360px] bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950/95 text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 shrink-0 overflow-y-auto no-scrollbar">
-              {/* Scène Vidéo Wav2Lip 60 FPS (Image complète : Tête, Sourire, Émotions, Buste & Mains) */}
-              <div className="w-full flex flex-row lg:flex-col items-center gap-3">
-                <div className="hidden lg:block w-full h-[235px] xl:h-[250px] relative">
-                  <AishaAvatar
-                    isSpeaking={isSpeaking}
-                    isListening={isListening || isRecordingVoice}
-                    isLoading={isLoading}
-                    emotion={effectiveTutorEmotion}
-                    tutorPersona={selectedVoice}
-                    variant="studio"
-                    className="shadow-2xl"
-                  />
-                </div>
-                <div className="lg:hidden shrink-0">
-                  <AishaAvatar
-                    isSpeaking={isSpeaking}
-                    isListening={isListening || isRecordingVoice}
-                    isLoading={isLoading}
-                    emotion={effectiveTutorEmotion}
-                    tutorPersona={selectedVoice}
-                    size={86}
-                    className="rounded-2xl shadow-xl"
-                  />
-                </div>
-
-                {/* Sélecteur d'Émotions, Sourire & Expressions Faciales en Direct (Wav2Lip) */}
-                <div className="flex-1 lg:w-full space-y-1.5 min-w-0">
-                  <div className="flex items-center justify-between gap-1.5 px-0.5">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1 truncate">
-                      <span>🌸</span>
-                      <span>Expressions du tuteur</span>
-                    </span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
-                      60 FPS
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    {TUTOR_EMOTION_PRESETS.map((preset) => {
-                      const active = manualTutorEmotion === preset.id;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => handleSelectTutorEmotion(preset.id)}
-                          className={`px-1.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1 truncate cursor-pointer ${
-                            active
-                              ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm font-black'
-                              : 'bg-white/5 hover:bg-white/15 text-slate-200 border-white/10'
-                          }`}
-                          title={`Activer l'expression : ${preset.label}`}
-                        >
-                          <span>{preset.icon}</span>
-                          <span className="truncate">{preset.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+            <aside className="tutor-portrait-panel">
+              <div className="tutor-portrait">
+                <AishaAvatar isSpeaking={isSpeaking} isListening={isListening || isRecordingVoice} isLoading={isLoading} emotion={effectiveTutorEmotion} tutorPersona={selectedVoice} variant="studio" motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} showBadge={false} />
+                <div className="tutor-portrait-caption"><span>{activeTutor.name}</span><p>{activeTutor.specialty}</p></div>
               </div>
-
-              {/* Téléprompteur & Contrôles Vocaux Studio */}
-              <div className="flex-1 w-full flex flex-col justify-between space-y-2.5 min-w-0">
-                {/* Téléprompteur en direct */}
-                <div className="p-2.5 sm:p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 flex items-center gap-1">
-                      <Volume2 className="w-3 h-3" /> Réponse en cours
-                    </span>
-                    {isSpeaking ? (
-                      <button
-                        onClick={stopSpeaking}
-                        className="px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 text-[10px] font-bold flex items-center gap-1 transition"
-                      >
-                        <Pause className="w-2.5 h-2.5" /> Stop
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          const lastBot = [...messages].reverse().find((m) => m.sender === 'tuteur');
-                          if (lastBot) speak(lastBot.text, lastBot.id);
-                        }}
-                        className="px-2 py-0.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-400/30 text-[10px] font-bold flex items-center gap-1 transition"
-                      >
-                        <Play className="w-2.5 h-2.5" /> Réécouter
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-slate-200 line-clamp-2 lg:line-clamp-3 leading-relaxed italic">
-                    {isSpeaking && spokenSubtitle
-                      ? `« ${spokenSubtitle} »`
-                      : 'Cliquez sur une question ou posez la vôtre au micro : Votre tuteur vous répond de vive voix.'}
-                  </p>
-                </div>
-
-                {/* Sélecteur des Tuteurs & tutrices virtuels & Appel Direct (Desktop) */}
-                <div className="hidden lg:block space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">
-                    <span>Choisissez votre tuteur</span>
-                    <button
-                      onClick={handleCycleSpeed}
-                      className="text-amber-300 hover:underline font-mono"
-                      title="Changer la cadence de diction"
-                    >
-                      {tutorSpeed >= 1.0
-                        ? '1.0x • Dynamique'
-                        : tutorSpeed <= 0.90
-                        ? '0.88x • Posé'
-                        : '0.95x • Équilibré'}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {VIRTUAL_TUTORS.map((tutor) => {
-                      const active = selectedVoice === tutor.id;
-                      return (
-                        <div
-                          key={tutor.id}
-                          className={`w-full rounded-xl border p-2 transition flex items-center justify-between gap-2 ${
-                            active
-                              ? 'bg-blue-600/30 border-cyan-400/60 text-white'
-                              : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleChangeVoice(tutor.id)}
-                            className="flex-1 text-left min-w-0"
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[11px] font-black truncate">{tutor.name}</span>
-                              {active && (
-                                <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0" />
-                              )}
-                            </div>
-                            <p className="text-[10px] text-slate-300/80 truncate">
-                              {tutor.voiceLabel} · {tutor.specialty}
-                            </p>
-                          </button>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => startCall(tutor.id)}
-                              className="p-1.5 rounded-lg bg-emerald-500/25 hover:bg-emerald-500 text-emerald-200 hover:text-white border border-emerald-400/30 transition"
-                              title={`Appeler ${tutor.name} en audio`}
-                            >
-                              <Phone className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => startVideoCall(tutor.id)}
-                              className="p-1.5 rounded-lg bg-blue-500/25 hover:bg-blue-500 text-blue-200 hover:text-white border border-blue-400/30 transition"
-                              title={`Appeler ${tutor.name} en visio`}
-                            >
-                              <Video className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Boutons d'Action Rapide Q/R (Desktop) */}
-                <div className="hidden lg:grid grid-cols-3 gap-1.5 pt-1">
-                  <button
-                    onClick={() => (isRecordingVoice ? stopVoiceRecord('send') : startVoiceRecord())}
-                    className={`p-2 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 transition ${
-                      isRecordingVoice
-                        ? 'bg-rose-600 border-rose-400 text-white animate-pulse'
-                        : 'bg-emerald-600/25 hover:bg-emerald-600/35 border-emerald-400/40 text-emerald-200'
-                    }`}
-                  >
-                    <Waves className="w-3.5 h-3.5" />
-                    <span>{isRecordingVoice ? 'Envoyer' : 'Voice'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => startCall()}
-                    className="p-2 rounded-xl bg-blue-600/25 hover:bg-blue-600/40 border border-blue-400/40 text-blue-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span>Appeler</span>
-                  </button>
-
-                  <button
-                    onClick={() => startVideoCall()}
-                    className="p-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
-                  >
-                    <Video className="w-3.5 h-3.5" />
-                    <span>Visio</span>
-                  </button>
-                </div>
+              <div className="tutor-listening-card">
+                <span className="tutor-eyebrow">{isSpeaking ? 'À l’écoute' : 'À vos côtés'}</span>
+                <p>{isSpeaking && spokenSubtitle ? spokenSubtitle : 'Une question, un doute, un exercice : avançons ensemble.'}</p>
+                {(isSpeaking || isVoiceLoading) && <button type="button" onClick={stopSpeaking} className="tutor-stop"><Pause size={14} />Arrêter la lecture</button>}
               </div>
             </aside>
           )}
 
           {/* RIGHT PANEL: CATEGORIZED Q&A MATRIX + CONVERSATION STREAM + INPUT */}
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            {/* 1. Barre de sélection rapide des Tutrices Virtuelles (Mobile & Tablette) + Onglets Thématiques */}
-            <div className="bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2 shrink-0 space-y-2">
-              {/* Sélecteur des Tuteurs & tutrices virtuels & Appel direct */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 mr-1">
-                  Profils :
-                </span>
-                {VIRTUAL_TUTORS.map((tutor) => {
-                  const active = selectedVoice === tutor.id;
-                  return (
-                    <div
-                      key={tutor.id}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-xl border text-[11px] shrink-0 transition ${
-                        active
-                          ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-2xs'
-                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleChangeVoice(tutor.id)}
-                        className="flex items-center gap-1"
-                      >
-                        <span>{tutor.name}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => startCall(tutor.id)}
-                        className={`p-1 rounded-lg transition ${
-                          active
-                            ? 'bg-white/20 hover:bg-white/30 text-white'
-                            : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100'
-                        }`}
-                        title={`Appeler ${tutor.name}`}
-                      >
-                        <Phone className="w-3 h-3" />
-                      </button>
-                    </div>
-                  );
-                })}
+            <details className="tutor-question-explorer">
+              <summary><BookOpen size={16} />Explorer des questions<ChevronDown size={15} /></summary>
+              <div className="tutor-question-content">
+                <label htmlFor="tutor-topic">Thème<select id="tutor-topic" value={activeCategory} onChange={e => setActiveCategory(e.target.value as QACategoryId)}>{QA_CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}</select></label>
+                <div>{activeCategoryObj.questions.slice(0, 3).map(question => <button type="button" key={question} disabled={isLoading} onClick={() => handleSendMessage(question)}>{question}<ChevronRight size={14} /></button>)}</div>
+                <button type="button" className="tutor-quiz-link" disabled={isLoading} onClick={() => handleSendMessage('Lance-moi un Quiz interactif Q/R sur mon cours')}><Award size={15} />M’entraîner avec un quiz</button>
               </div>
-
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 shrink-0 mr-1">
-                  <HelpCircle className="w-3.5 h-3.5 text-blue-500" /> Thèmes Q/R :
-                </span>
-                {QA_CATEGORIES.map((cat) => {
-                  const isActive = cat.id === activeCategory;
-                  return (
-                    <button
-                      key={cat.id}
-                      onClick={() => setActiveCategory(cat.id)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1 shrink-0 border ${
-                        isActive
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400'
-                      }`}
-                    >
-                      <span>{cat.badge}</span>
-                      <span>{cat.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Questions rapides de la catégorie active */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-                {activeCategoryObj.questions.map((qText, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSendMessage(qText)}
-                    disabled={isLoading}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 text-[11px] font-medium transition flex items-center gap-1 shadow-2xs"
-                  >
-                    <span>{qText}</span>
-                    <ChevronRight className="w-3 h-3 opacity-60" />
-                  </button>
-                ))}
-              </div>
-            </div>
+            </details>
 
             {/* 2. Fil de Discussion Questions / Réponses */}
             <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/70 dark:from-slate-900 dark:to-slate-950">
@@ -2047,13 +1450,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                           <User className="w-4 h-4" />
                         </div>
                       ) : (
-                        <AishaAvatar
-                          isSpeaking={isThisMsgSpeaking || (isSpeaking && isLastBotMsg)}
-                          isLoading={false}
-                          emotion={effectiveTutorEmotion}
-                          tutorPersona={selectedVoice}
-                          size={38}
-                        />
+                        <div className="tutor-message-avatar" aria-hidden="true"><GraduationCap size={17} /></div>
                       )}
 
                       <div
@@ -2251,9 +1648,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                       msg.suggestedFollowUps.length > 0 && (
                         <div className="pl-11 flex flex-wrap items-center gap-1.5 pt-1">
                           <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mr-1">
-                            <MessageSquarePlus className="w-3 h-3 text-blue-500" /> Relances Q/R :
+                            <MessageSquarePlus className="w-3 h-3 text-blue-500" /> Pour continuer
                           </span>
-                          {msg.suggestedFollowUps.map((followUp, fIdx) => (
+                          {msg.suggestedFollowUps.slice(0, 2).map((followUp, fIdx) => (
                             <button
                               key={fIdx}
                               onClick={() => handleSendMessage(followUp)}
@@ -2275,7 +1672,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none p-3.5 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2.5 border border-slate-200 dark:border-slate-700 shadow-xs">
                     <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
                     <span>
-                      Aïsha consulte la Loi n° 10/010 et prépare votre explication…
+                      {activeTutor.name} prépare votre explication…
                     </span>
                   </div>
                 </div>
@@ -2447,7 +1844,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     placeholder={
                       isListening
                         ? `Parlez maintenant, ${activeTutor.name} transcrit votre question…`
-                        : `Posez votre question ou envoyez un Voice à ${activeTutor.name}…`
+                        : `Posez votre question à ${activeTutor.name}…`
                     }
                     className={`w-full bg-white dark:bg-slate-800 border rounded-xl px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       isListening
@@ -2470,35 +1867,6 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
 
-                {!isRecordingVoice ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (inputText.trim()) {
-                        handleSendAssistedVoice(inputText.trim());
-                        setInputText('');
-                      } else {
-                        startVoiceRecord();
-                      }
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
-                    title="Enregistrer et envoyer une note vocale (Voice)"
-                  >
-                    <Waves className="w-4 h-4" />
-                    <span className="hidden md:inline">Voice</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => stopVoiceRecord('send')}
-                    className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-rose-600 text-white font-black text-xs animate-pulse"
-                    title="Envoyer le Voice maintenant"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>Envoyer</span>
-                  </button>
-                )}
-
                 <button
                   type="submit"
                   disabled={(!inputText.trim() && !previewMedia) || isLoading}
@@ -2509,58 +1877,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 </button>
               </form>
 
-              {/* Barre inférieure d'options rapides */}
-              <div className="flex flex-wrap items-center justify-between gap-2 mt-2.5 text-[11px]">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (autoSpeak) stopSpeaking();
-                      setAutoSpeak((v) => !v);
-                    }}
-                    className={`px-2.5 py-1 rounded-full border font-bold flex items-center gap-1 transition ${
-                      autoSpeak
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
-                    }`}
-                  >
-                    {autoSpeak ? (
-                      <Volume2 className="w-3.5 h-3.5" />
-                    ) : (
-                      <VolumeX className="w-3.5 h-3.5" />
-                    )}
-                    <span>{autoSpeak ? 'Voix auto : ON' : 'Voix : OFF'}</span>
-                  </button>
 
-                  <button
-                    type="button"
-                    onClick={() => startCall()}
-                    className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1 hover:bg-emerald-100 transition"
-                  >
-                    <Phone className="w-3.5 h-3.5" /> Appeler {activeTutor.name}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => startVideoCall()}
-                    className="px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1 hover:bg-blue-100 transition"
-                  >
-                    <Video className="w-3.5 h-3.5" /> Visio
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAssistedVoiceBox((v) => !v)}
-                    className="px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold flex items-center gap-1 hover:bg-indigo-100 transition"
-                  >
-                    <Waves className="w-3.5 h-3.5" /> Voice Assisté
-                  </button>
-                </div>
-
-                <span className="text-[10px] text-slate-400 hidden sm:inline">
-                  Tuteur : {activeTutor.name} ({tutorSpeed}x)
-                </span>
-              </div>
             </div>
           </div>
         </div>

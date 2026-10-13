@@ -1,3 +1,4 @@
+import { readTutorPresentation } from './tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './cartesiaTutorSpeech.js';
 import { synthesizeElevenTutor } from './elevenTutorSpeech.js';
 import { voiceBudgets } from './voiceBudgets.js';
@@ -600,6 +601,8 @@ Pour t'y retrouver simplement : la cellule qui gère les marchés prépare, la d
     sources: ["Direct RAG"]
   };
 }
+
+app.get('/api/tutor/presentation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation()); });
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), model: 'Claude via Arena + Gemini fallback' });

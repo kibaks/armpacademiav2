@@ -1,3 +1,4 @@
+import { readTutorPresentation, saveTutorPresentation } from './tutorPresentation.js';
 import { resetLink } from './nativeSession.js';
 import { Router, type Request, type RequestHandler } from 'express';
 import type { DecodedIdToken } from 'firebase-admin/auth';
@@ -65,6 +66,14 @@ const audit = async (req: AuthRequest, action: string, target: string) => {
 };
 export const adminRouter = Router();
 adminRouter.use(authenticate, requireAdmin);
+adminRouter.get('/tutor-presentation', superOnly, wrap(async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation(true)); }));
+adminRouter.post('/tutor-presentation', superOnly, wrap(async (req, res) => {
+  const b = req.body;
+  if (!b || !['subtle', 'expressive', 'off'].includes(b.motion) || typeof b.facialExpressions !== 'boolean' || typeof b.handGestures !== 'boolean' || typeof b.autoSpeak !== 'boolean') return res.status(400).json({ error: 'Réglages du tuteur invalides.' });
+  const settings = await saveTutorPresentation(b, req.identity!.uid);
+  res.json({ ok: true, settings });
+}));
+
 adminRouter.get('/users', wrap(async (_req, res) => {
   const snap = await services().db.collection('users').limit(500).get();
   res.json({ users: snap.docs.map(d => ({ ...d.data(), id: d.id })), limited: snap.size === 500 });

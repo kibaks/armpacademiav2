@@ -1947,11 +1947,13 @@ export function stepAvatarExpressionFrame(
   pose.collarY = avatarKalmanSmoother.collarLift.update(targetCollarLift, dtSec);
   pose.shoulderY = (pose.leftShoulderY + pose.rightShoulderY) * 0.5;
 
-  // Natural posture without hands ("sans main"): zero hand offsets
-  pose.leftHandDx = 0;
-  pose.leftHandDy = 0;
-  pose.rightHandDx = 0;
-  pose.rightHandDy = 0;
+  // Restrained explanatory palms: independently eased beats, then settle at rest.
+  const handEnergy = isSpeaking ? (isPauseHint ? 0.45 : 0.75) : 0;
+  const handEase = Math.min(1, 0.07 * dtScale);
+  pose.leftHandDx += (handEnergy * syllableBeat * 5 - pose.leftHandDx) * handEase;
+  pose.rightHandDx += (handEnergy * counterBeat * -5 - pose.rightHandDx) * handEase;
+  pose.leftHandDy += (handEnergy * (-18 - syllableBeat * 7) - pose.leftHandDy) * handEase;
+  pose.rightHandDy += (handEnergy * (-14 - counterBeat * 7) - pose.rightHandDy) * handEase;
 
   const activeBadgeLabel =
     microGesture.activeLabel
@@ -2145,10 +2147,10 @@ export function stepAvatarExpressionFrame(
     torsoSwayX: pose.shoulderX,
     activeMicroGestureTag: microGesture.activeTag,
     activeMicroGestureLabel: microGesture.activeLabel,
-    leftHandDx: 0,
-    leftHandDy: 0,
-    rightHandDx: 0,
-    rightHandDy: 0,
+    leftHandDx: pose.leftHandDx,
+    leftHandDy: pose.leftHandDy,
+    rightHandDx: pose.rightHandDx,
+    rightHandDy: pose.rightHandDy,
     cavTopYs,
     cavBotYs,
     activeVisemeNumber,

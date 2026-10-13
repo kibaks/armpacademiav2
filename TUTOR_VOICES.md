@@ -41,3 +41,13 @@ Les pauses entre fragments passent à 80 ms. Le premier fragment et le suivant s
 Le moteur de portrait WebGL existant utilise désormais ces phonèmes. Son nom de fichier historique `wav2lipVideoRenderer.ts` ne désigne pas le modèle neuronal Wav2Lip. Les avatars hors écran ne sont plus rendus et les avatars au repos sont limités à 15 images par seconde. Higgsfield génère des vidéos par requêtes asynchrones : il n’est pas ajouté au chemin interactif pour éviter une attente supplémentaire. Aucune clé Higgsfield n’est incluse dans le dépôt.
 
 Références : https://docs.cartesia.ai/api-reference/tts/sse et https://open.higgsfield.ai/quick-start.
+
+## Interface et superadministration
+
+Le tuteur présente un seul sélecteur de profil, un portrait en buste, la conversation et la saisie. Les questions guidées se déplient à la demande. Les préférences personnelles (voix, cadence, lecture automatique et affichage du portrait) restent accessibles dans le menu de lecture. Les fournisseurs et diagnostics de quota figurent uniquement dans l’onglet « Tuteurs et voix » de l’espace superadministrateur.
+
+`/api/admin/tutor-presentation` réserve la lecture et l’écriture au rôle `super_admin`. Les réglages de gestuelle, d’expressions, de mains et de lecture initiale sont sauvegardés dans Firestore avec une entrée de journal, dans le même batch. Le lecteur public expose uniquement ces préférences de présentation, jamais les clés. Les autres instances les rechargent au maximum après une minute.
+
+Les gestes de mains sont des translations et rotations de deux éléments photographiques générés sur fond transparent. Ils accompagnent la parole et se posent au repos ; ils ne constituent ni une animation des doigts ni une vidéo neuronale. Les yeux, sourcils, sourire, posture et lèvres utilisent le moteur WebGL. La préférence `prefers-reduced-motion` conserve les lèvres et désactive la gestuelle.
+
+Asset : `src/assets/images/tutor_teaching_hands.png`. Généré avec l’outil image_gen intégré, fond transparent. Prompt : deux mains adultes à peau brune, paumes ouvertes en geste explicatif, poignets visibles, vues de face en lumière de studio douce, séparées par une zone transparente pour une animation indépendante ; sans visage, objets, bijoux ni texte.
