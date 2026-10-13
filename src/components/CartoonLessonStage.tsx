@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { cartoonSceneKind, cartoonSpeechMouth, CARTOON_SCENE_LABELS } from '../utils/cartoonLessonScene';
 import { sampleLessonStoryboard, motionWindow, typewriterCount } from '../utils/motionLessonStoryboard';
-import { WHITEBOARD_STROKES, sampleDrawing } from '../utils/whiteboardAnimation';
 import './CartoonLesson.css';
 
 type StageProps = { screen: SingleScreenCardData; progress: number; playing: boolean; speaking: boolean; mouthOpenness: number; viseme: string; male?: boolean; legalRef: string; sceneCount: number; reducedMotion?: boolean };
@@ -53,7 +52,7 @@ function sceneProps(c:Pen,kind:ReturnType<typeof cartoonSceneKind>,t:number,p:nu
  }
  c.restore();
 }
-function character(c:Pen,t:number,speaking:boolean,openness:number,viseme:string,male:boolean){
+function character(c:Pen,t:number,speaking:boolean,openness:number,viseme:string,male:boolean,progress=1){
  c.save();c.translate(198+Math.sin(t*.9)*5,345);
  c.rotate(Math.sin(t*.9)*.018);
  const pulse=Math.sin(t*1.6)*(speaking?1:.65);
@@ -67,9 +66,11 @@ function character(c:Pen,t:number,speaking:boolean,openness:number,viseme:string
  c.beginPath();c.moveTo(-20,-76);c.lineTo(0,15);c.lineTo(23,-76);c.closePath();c.fillStyle='#FFF8EA';c.fill();line(c,[0,17,0,78],ink,2);ellipse(c,11,43,3,3,gold);
  // Continuous shoulder → elbow → wrist paths: no detached hand sprites.
  line(c,[-44,-58,-73,-6,-50,34],ink,28);line(c,[-44,-58,-73,-6,-50,34],sleeve,22);ellipse(c,-48,40,12,17,skin);
- const palmX=78+gesture*36,palmY=-35-gesture*57-pulse*12;
- line(c,[44,-58,65,-3,palmX,palmY+13],ink,29);line(c,[44,-58,65,-3,palmX,palmY+13],sleeve,23);line(c,[91,palmY+21,104,palmY+5],skin,17);
- c.save();c.translate(palmX+6,palmY);c.rotate(-.38);ellipse(c,0,0,20,9,skin);line(c,[-2,0,14,-12],skin,7);for(let i=0;i<3;i++)line(c,[6+i*4,-3,18+i*4,-5+i*3],darkSkin,1.3);c.restore();
+ const greeting=progress<.15;
+ const palmX=greeting?62+Math.sin(t*4)*12:78+gesture*36,palmY=greeting?-135+Math.cos(t*4)*8:-35-gesture*57-pulse*12;
+ const elbowY=greeting?-96:-3;
+ line(c,[44,-58,65,elbowY,palmX,palmY+13],ink,29);line(c,[44,-58,65,elbowY,palmX,palmY+13],sleeve,23);line(c,[palmX,palmY+13,palmX+6,palmY],skin,17);
+ c.save();c.translate(palmX+6,palmY);c.rotate(greeting?-1.1+Math.sin(t*4)*.18:-.38);ellipse(c,0,0,20,9,skin);line(c,[-2,0,14,-12],skin,7);for(let i=0;i<3;i++)line(c,[6+i*4,-3,18+i*4,-5+i*3],darkSkin,1.3);c.restore();
  box(c,-15,-110,31,39,skin,9);ellipse(c,0,-145,58,65,'#192C31');
  c.save();c.translate(0,-143);c.rotate(pulse*.055);
  ellipse(c,-42,0,11,16,skin);ellipse(c,43,0,11,16,skin);ellipse(c,0,-4,46,55,skin);
@@ -114,10 +115,11 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  const reveal=reduced?1:shot.titleReveal;
  c.save();c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,w,h);c.scale(w/W,h/H);
  const kind=cartoonSceneKind(props.screen.animationId);
- c.fillStyle='#FFF9ED';c.fillRect(0,0,W,H);
- c.fillStyle='#E2EFE7';c.beginPath();c.ellipse(portrait?70:160,portrait?450:470,portrait?580:675,portrait?360:335,0,0,Math.PI*2);c.fill();
- // Subtle background texture and visual depth, kept away from the captions.
- for(let x=24;x<W;x+=28)for(let y=24;y<H;y+=28){ellipse(c,x,y,.8,.8,'#D3DECE');}
+ c.fillStyle='#FFFDF9';c.fillRect(0,0,W,H);
+ // Pastel geometric scene framing, based on the Teacher Video Resume reference.
+ c.fillStyle='#DEEEEE';c.beginPath();c.moveTo(0,0);c.lineTo(W*.62,0);c.lineTo(0,H*.72);c.closePath();c.fill();
+ c.fillStyle='#F0B9A4';c.beginPath();c.moveTo(0,H*.2);c.lineTo(W*.57,H);c.lineTo(0,H);c.closePath();c.fill();
+ c.fillStyle='#F4E4BA';c.beginPath();c.moveTo(W,H*.72);c.lineTo(W,H);c.lineTo(W*.78,H);c.closePath();c.fill();
  const margin=portrait?38:48;
  box(c,margin,24,portrait?210:140,portrait?36:28,ink,8);label(c,'ACADEMIA • ANIMÉ',margin+(portrait?105:70),portrait?48:43,portrait?19:10,'#FFF5DA');
  c.textAlign='right';c.fillStyle='#58766C';c.font=`700 ${portrait?20:12}px system-ui, sans-serif`;c.fillText(`SÉQUENCE ${String(props.screen.screenNumber).padStart(2,'0')} / ${String(props.sceneCount).padStart(2,'0')}`,W-margin,43);
@@ -126,20 +128,17 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  c.restore();trace(c,[margin,portrait?202:163,margin+105,portrait?202:163],reveal,coral,5);
  const artY=portrait?150:40,artScale=portrait?.84:1;
  c.save();c.translate(portrait?0:-18,artY);c.scale(artScale,artScale);
- // Illustrations build progressively without an overlay hand.
- box(c,323,169,454,330,'#FFFDF7',22,true);
- const drawingProgress=reduced?1:Math.max(0,Math.min(1,(props.progress-.035)/.27));
- const drawing=sampleDrawing(WHITEBOARD_STROKES[kind],drawingProgress);
- {
-  c.save();c.translate(350,225);
-  WHITEBOARD_STROKES[kind].forEach((points,index)=>trace(c,points,drawing.visible[index],ink,4));
-  if(drawing.complete)label(c,CARTOON_SCENE_LABELS[kind],195,244,16,teal);
-  c.restore();
- }
+ // Color illustrations enter as a scene rather than a hand-drawn whiteboard.
+ const objectReveal=reduced?1:motionWindow(props.progress,.035,.19);
+ c.save();c.translate(550,365+(1-objectReveal)*35);
+ c.scale(.86+.14*objectReveal,.86+.14*objectReveal);c.translate(-550,-365);
+ c.globalAlpha=objectReveal;
+ sceneProps(c,kind,reduced?0:time,reduced?1:props.progress);
+ c.restore();
  const arrow=motionWindow(props.progress,.12,.36);
  trace(c,[285,282,320,282,320,223,350,223],reduced?1:arrow,coral,4);
  if(arrow>.95||reduced)line(c,[340,214,350,223,340,232],coral,3);
- character(c,time,props.speaking,props.mouthOpenness,props.viseme,Boolean(props.male));
+ character(c,time,props.speaking,props.mouthOpenness,props.viseme,Boolean(props.male),reduced?1:props.progress);
  c.restore();
  const x=portrait?38:824,y=portrait?650:208,bw=portrait?644:408,bh=portrait?355:366;
  c.save();c.translate(0,reduced?0:(1-motionWindow(shot.pageProgress,0,.13))*10);
