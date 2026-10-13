@@ -488,16 +488,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     return {
       id: 'init-1',
       sender: 'tuteur',
-      text: learningContext
-        ? `**Bonjour ${firstName} 🌸 Quelle joie de te retrouver dans notre Studio Questions / Réponses !**\n\nJe vois que tu avances avec cœur sur **${learningContext.lastCourseTitle}** (${learningContext.lastCourseProgress}% complété, progression globale à **${learningContext.overallProgress}%**). Ici, tu peux me poser toutes tes questions par écrit ou à voix haute.\n\nQue ce soit un doute sur ton dossier en cours, une préparation d'examen, une vérification de délai légal ou un **Quiz interactif Q/R**, je te réponds de vive voix et pas à pas.\n\n**Question :** Par quelle question ou mise en situation souhaites-tu commencer aujourd'hui, ${firstName} ?`
-        : `**Bonjour ${firstName} 🌸 Bienvenue dans ton Studio Tuteur Virtuel Questions / Réponses !**\n\nJe suis **${VIRTUAL_TUTORS.find(t => t.id === speechService.getVoicePersona())?.name || 'Prof. Aïsha'}**, votre guide dédié à la commande publique en RDC. Pose-moi librement toutes tes questions sur la Loi n° 10/010, le Plan de Passation (PPM), les Dossiers d'Appel d'Offres (DAO), l'Avis de Non-Objection (DGCMP) ou les recours devant l'ARMP.\n\nJe t'explique chaque règle de vive voix avec des exemples concrets de terrain et des quiz interactifs.\n\n**Question :** Dis-moi tout, ${firstName}, quelle question te préoccupe en ce moment ?`,
+      text: `**Bonjour ${firstName}.**\n\nJe peux clarifier votre cours, expliquer une règle ou vous proposer un exercice. Que souhaitez-vous travailler ?`,
       timestamp: 'À l’instant',
-      sources: learningContext
-        ? [
-            `Ton parcours : ${learningContext.lastCourseTitle} (${learningContext.lastCourseProgress}%)`,
-            'Aïsha • Tuteur Virtuel Q/R & Loi du 27 avril 2010'
-          ]
-        : ['Aïsha • Tuteur Virtuel Q/R', 'Loi n° 10/010 du 27 avril 2010'],
+      sources: [],
       suggestedFollowUps: [
         'Quand dois-je demander une autorisation avant de signer un grand marché ?',
         "Comment contester une décision si je m'estime lésé ?",
@@ -513,7 +506,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(message => message.id === 'init-1' ? buildWelcomeMessage() : message);
       }
     } catch {}
     return [buildWelcomeMessage()];
@@ -525,9 +518,6 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [spokenSubtitle, setSpokenSubtitle] = useState<string>('');
   const [activeSpeakingMsgId, setActiveSpeakingMsgId] = useState<string | null>(null);
-  const [activeEmotionLabel, setActiveEmotionLabel] = useState<string>(
-    '😊 Sourire Chaleureux & Bienveillance'
-  );
   const [detectedSpeechEmotion, setDetectedSpeechEmotion] = useState<AvatarEmotion>('smiling');
   const [presentation, setPresentation] = useState(DEFAULT_TUTOR_PRESENTATION);
   const [isListening, setIsListening] = useState(false);
@@ -626,9 +616,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       fetchTutorHistoryFromFirestore(currentProfile.id)
         .then((remoteMsgs) => {
           if (mounted && Array.isArray(remoteMsgs) && remoteMsgs.length > 0) {
-            setMessages(remoteMsgs);
+            setMessages(remoteMsgs.map(message => message.id === 'init-1' ? buildWelcomeMessage() : message));
             try {
-              localStorage.setItem(storageKey, JSON.stringify(remoteMsgs));
+              localStorage.setItem(storageKey, JSON.stringify(remoteMsgs.map(message => message.id === 'init-1' ? buildWelcomeMessage() : message)));
             } catch {}
           }
         })
@@ -678,9 +668,6 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         setIsSpeaking(Boolean(st.isPlaying && !st.isLoading));
         if (st.currentSentenceText) {
           setSpokenSubtitle(st.currentSentenceText);
-        }
-        if (st.emotionLabel) {
-          setActiveEmotionLabel(st.emotionLabel);
         }
         if (st.emotion) {
           setDetectedSpeechEmotion(st.emotion as AvatarEmotion);
@@ -1402,6 +1389,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         <div className="tutor-selection">
           <label htmlFor="tutor-persona">Votre tuteur</label>
           <select id="tutor-persona" value={selectedVoice} onChange={e => handleChangeVoice(e.target.value as VoicePersona)}>{VIRTUAL_TUTORS.map(tutor => <option key={tutor.id} value={tutor.id}>{tutor.name} · {tutor.specialty}</option>)}</select>
+          {!showStudioStage && (isSpeaking || isVoiceLoading) && <button type="button" onClick={stopSpeaking} className="tutor-stop"><Pause size={14} />Arrêter la lecture</button>}
           <span role="status" className="tutor-status"><i className={isSpeaking ? 'speaking' : ''} />{isVoiceLoading ? 'Préparation de la voix…' : isSpeaking ? 'Lecture en cours' : isLoading ? 'Préparation de la réponse…' : isListening ? 'À votre écoute' : 'Disponible'}</span>
         </div>
 
