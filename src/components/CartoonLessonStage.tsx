@@ -126,24 +126,13 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  c.restore();trace(c,[margin,portrait?202:163,margin+105,portrait?202:163],reveal,coral,5);
  const artY=portrait?150:40,artScale=portrait?.84:1;
  c.save();c.translate(portrait?0:-18,artY);c.scale(artScale,artScale);
- // Real vector strokes and the marker share the same path and progress.
+ // Illustrations build progressively without an overlay hand.
  box(c,323,169,454,330,'#FFFDF7',22,true);
  const drawingProgress=reduced?1:Math.max(0,Math.min(1,(props.progress-.035)/.27));
  const drawing=sampleDrawing(WHITEBOARD_STROKES[kind],drawingProgress);
  {
   c.save();c.translate(350,225);
   WHITEBOARD_STROKES[kind].forEach((points,index)=>trace(c,points,drawing.visible[index],ink,4));
-  if(!drawing.complete && props.progress>=.035){
-   const {x:dx,y:dy}=drawing.cursor;
-   c.save();c.translate(dx,dy);c.rotate(-.3);
-   // Marker tip stays exactly on the freshly drawn line.
-   line(c,[0,0,30,-44],ink,13);line(c,[5,-7,27,-40],'#FFF9ED',7);
-   ellipse(c,44,-19,22,15,'#A96B49');
-   box(c,38,-10,34,70,'#A96B49',15);box(c,34,47,43,22,teal,6);
-   line(c,[24,-30,42,-32,50,-16],'#A96B49',12);
-   for(let finger=0;finger<3;finger++)line(c,[32+finger*7,-25,40+finger*7,-13],'#75452F',1.4);
-   c.restore();
-  }
   if(drawing.complete)label(c,CARTOON_SCENE_LABELS[kind],195,244,16,teal);
   c.restore();
  }
