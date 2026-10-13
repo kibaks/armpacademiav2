@@ -1726,7 +1726,7 @@ class SpeechService {
     return fetchPromise;
   }
 
-  // Pre-warm lesson sentences sequentially: Sentence 1 gets 100% priority first, then Sentences 2..5
+  // Pre-warm only the opening and its next fragment; in-flight requests are shared.
   public prewarmSentences(rawSentences: string[], voice?: string) {
     if (this.getVoiceMode() === 'device' || typeof window === 'undefined' || !Array.isArray(rawSentences) || rawSentences.length === 0) {
       return;
@@ -1739,7 +1739,7 @@ class SpeechService {
       // 1. Fetch & decode Sentence 1 FIRST with zero competition so the opening of the lesson is instant & pure Vivienne HD
       await this.fetchNeuralAudioBuffer(normalized[0], targetVoice, 35000);
 
-      // 2. Then prewarm remaining sentences sequentially on server and client
+      // 2. Prepare only the next fragment in the same client cache.
       if (normalized.length > 1) {
         await this.fetchNeuralAudioBuffer(normalized[1], targetVoice, 35000);
       }
@@ -1976,6 +1976,8 @@ class SpeechService {
             }
           } catch {}
         }
+        // AudioContext resume/decode can yield while the user stops or changes the voice.
+        if (this.isCancelled || generation !== this.playbackGeneration || this.currentSentenceIndex !== sentenceIdx) return;
         this.currentEnvelope5ms = neuralEntry.envelope5ms || null;
         if (!wordBoundaries || wordBoundaries.length === 0) {
           wordBoundaries = calibrateWordBoundariesToEnvelope(
