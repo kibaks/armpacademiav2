@@ -1059,7 +1059,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     }
 
     const cleanSentence = rawText.slice(0, 950);
-    const cacheKey = `v32:${voiceChoice}:${cleanSentence}`;
+    const cacheKey = `v33:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1114,7 +1114,7 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     for (const s of sentences) {
       const cleanSentence = (s || '').toString().trim().slice(0, 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v32:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v33:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
 
       synthesizeSpeech(cleanSentence, voiceChoice)

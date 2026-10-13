@@ -10,7 +10,7 @@ test('Cartesia sends French narration with distinct masculine and feminine prese
     const audio = await synthesizeCartesiaTutor('Bonjour.', persona, { env: { CARTESIA_API_KEY: 'test' }, fetcher, budgets: new VoiceBudgets() });
     assert.equal(audio?.provider, 'cartesia-sonic'); assert.equal(audio?.mimeType, 'audio/wav');
   }
-  assert.equal(requests[0].language, 'fr'); assert.equal(requests[0].voice, CARTESIA_TUTOR_VOICES.henri);
+  assert.equal(requests[0].language, undefined); assert.equal(requests[1].language, 'fr'); assert.equal(requests[0].locale, 'fr-FR'); assert.equal(requests[0].accent, 'parisian'); assert.equal(requests[0].voice, CARTESIA_TUTOR_VOICES.henri);
   assert.equal(requests[1].voice, CARTESIA_TUTOR_VOICES.vivienne); assert.notEqual(requests[0].voice, requests[1].voice);
   assert.equal(requests[0].transcript, 'Bonjour.');
 });
