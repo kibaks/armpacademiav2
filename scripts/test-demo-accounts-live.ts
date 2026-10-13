@@ -13,7 +13,9 @@ const input = process.argv[2], output = process.argv[3];
 if (!input || !output) throw new Error('Usage : test-demo-accounts-live.ts <identifiants privés.json> <rapport.json>');
 const manifest = JSON.parse(await readFile(input, 'utf8'));
 assert.equal(manifest.project, config.projectId);
-assert.equal(manifest.accounts.length, 12);
+assert.ok(manifest.accounts.length >= 12);
+assert.equal(new Set(manifest.accounts.map((account: any) => account.email)).size, manifest.accounts.length);
+for (const role of demoRoles) assert.ok(manifest.accounts.some((account: any) => account.role === role));
 process.env.JWT_SECRET = randomBytes(32).toString('hex');
 process.env.FIREBASE_SERVICE_ACCOUNT_ID ||= 'firebase-adminsdk-fbsvc@gen-lang-client-0775786837.iam.gserviceaccount.com';
 const { authRouter } = await import('../backend/auth');
@@ -26,17 +28,17 @@ process.env.APP_ORIGIN = base;
 const results: any[] = [];
 let failed = false;
 try {
-  for (const role of demoRoles) {
-    const account = manifest.accounts.find((record: any) => record.role === role);
+  for (const account of manifest.accounts) {
+    const role = account.role;
     let cookie = '', clientApp: any;
     try {
       const user = await auth.getUser(account.uid);
-      assert.equal(user.email, account.email); assert.equal(user.customClaims?.role, role); assert.equal(user.customClaims?.demoFixture, true);
+      assert.equal(user.email, account.email); assert.equal(user.displayName, account.name); assert.equal(user.customClaims?.role, role); assert.equal(user.customClaims?.demoFixture, true);
       const [profile, credentials] = await Promise.all([db.collection('users').doc(user.uid).get(), db.collection('authAccounts').doc(user.uid).get()]);
-      assert.equal(profile.data()?.role, role); assert.ok(credentials.data()?.demoExpiresAt > Date.now());
+      assert.equal(profile.data()?.role, role); assert.equal(profile.data()?.name, account.name); assert.ok(credentials.data()?.demoExpiresAt > Date.now());
       assert.equal(await passwordMatches(account.password, credentials.data()!.passwordHash), true);
       if (process.argv.includes('--credentials-only')) {
-        results.push({ role, uid: user.uid, email: user.email, status: 'réussi', checks: ['identité réelle', 'rôle Firebase', 'profil Firestore', 'mot de passe haché', 'expiration enregistrée'], expiresAt: new Date(credentials.data()!.demoExpiresAt).toISOString() });
+        results.push({ role, uid: user.uid, email: user.email, status: 'réussi', checks: ['compte enregistré', 'rôle Firebase', 'profil Firestore', 'mot de passe haché', 'expiration enregistrée'], expiresAt: new Date(credentials.data()!.demoExpiresAt).toISOString() });
         continue;
       }
       const response = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: account.email, password: account.password }), signal: AbortSignal.timeout(30000) });
@@ -61,7 +63,7 @@ try {
       cookie = '';
       await signOut(clientAuth);
       await auth.revokeRefreshTokens(user.uid);
-      results.push({ role, uid: user.uid, email: account.email, status: 'réussi', checks: ['identité réelle','rôle serveur','mot de passe haché','JWT signé','connexion Firebase personnalisée','permissions administratives','déconnexion révoquée'] });
+      results.push({ role, uid: user.uid, email: account.email, status: 'réussi', checks: ['compte enregistré','rôle serveur','mot de passe haché','JWT signé','connexion Firebase personnalisée','permissions administratives','déconnexion révoquée'] });
     } catch (error) {
       failed = true; results.push({ role, uid: account.uid, email: account.email, status: 'échec', error: error instanceof Error ? error.message : 'Erreur inconnue' });
     } finally {
@@ -69,7 +71,7 @@ try {
       if (clientApp) await deleteApp(clientApp);
       await writeFile(output, JSON.stringify({ project: config.projectId, checkedAt: new Date().toISOString(), mode: process.argv.includes('--credentials-only') ? 'vérification des comptes, sans test JWT' : 'connexion complète', results }, null, 2), { mode: 0o600 });
     }
-    console.log(`${role}: ${results.at(-1).status}`);
+    console.log(`${account.name} (${role}): ${results.at(-1).status}`);
     // Stop on infrastructure failures; never repeat twelve identical failing signers.
     if (failed) break;
   }
