@@ -289,7 +289,12 @@ export default function App() {
         if (!active() || session.uid !== user.uid) return;
         lastSessionUid = user.uid;
         setCurrentRole(profile.role);
-        setProfiles({ ...DEMO_PROFILES, [profile.role]: profile });
+        setProfiles(previous => {
+          const existing = previous[profile.role];
+          let restored = existing?.id === profile.id && (existing.mediaRevision || 0) > (profile.mediaRevision || 0) ? applyProfileMedia(profile, existing) : profile;
+          if (pendingMedia.current?.uid === user.uid) restored = { ...restored, ...pendingMedia.current.patch };
+          return { ...DEMO_PROFILES, [profile.role]: restored };
+        });
         setIsAuthenticated(true);
         localStorage.setItem('armp_session_profile', JSON.stringify(profile));
         const [requests, courses, profiles, accounts] = await Promise.all([
@@ -485,20 +490,33 @@ export default function App() {
     if (!uid || uid !== updated.id) throw new Error('La session a changé.');
     if (hasMedia && pendingMedia.current?.uid === uid) throw new Error('Une photo est déjà en cours d’enregistrement.');
     const pending = { uid, patch: optimistic };
+    let mediaSaved = false;
     if (hasMedia) {
       pendingMedia.current = pending;
       setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...optimistic } }));
       setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? { ...profile, ...optimistic } : profile));
     }
     try {
-      await syncUserProfileToFirestore(updated, patch);
+      if (hasMedia) {
+        const response = await authenticatedFetch('/api/profile/media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(optimistic) });
+        const data = await response.json();
+        if (!response.ok || !data.media || !Number.isSafeInteger(data.media.mediaRevision)) throw new Error(data.error || 'Confirmation de la photo indisponible.');
+        mediaSaved = true;
+        if (auth.currentUser?.uid === uid) {
+          Object.assign(patch, data.media);
+          setProfiles(prev => ({ ...prev, [updated.role]: applyProfileMedia(prev[updated.role], data.media) }));
+          setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? applyProfileMedia(profile, data.media) : profile));
+        }
+        const otherFields = Object.fromEntries(Object.entries(patch).filter(([key]) => !['avatarUrl', 'coverUrl', 'mediaRevision'].includes(key)));
+        if (Object.keys(otherFields).length) await syncUserProfileToFirestore(updated, otherFields);
+      } else await syncUserProfileToFirestore(updated, patch);
       if (auth.currentUser?.uid !== uid) throw new Error('La session a changé.');
       // A verified session refresh will read the saved profile itself.
       if (generation !== sessionGeneration.current) return;
       setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...patch } }));
       setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? { ...profile, ...patch } : profile));
     } catch (error) {
-      if (hasMedia && auth.currentUser?.uid === uid && generation === sessionGeneration.current) {
+      if (hasMedia && !mediaSaved && auth.currentUser?.uid === uid && generation === sessionGeneration.current) {
         setProfiles(prev => ({ ...prev, [updated.role]: rollbackProfileMedia(prev[updated.role], currentProfile, optimistic) }));
         setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? rollbackProfileMedia(profile, currentProfile, optimistic) : profile));
       }

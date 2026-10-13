@@ -1,3 +1,4 @@
+import { profileMediaRouter } from './profileMedia.js';
 import { readTutorPresentation } from './tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './cartesiaTutorSpeech.js';
 import { synthesizeElevenTutor } from './elevenTutorSpeech.js';
@@ -49,6 +50,7 @@ app.disable('x-powered-by');
 app.use('/api', authRouter);
 app.use('/api/cgpmp', cgpmpRouter);
 app.use('/api/storage', storageRouter);
+app.use('/api/profile', profileMediaRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
 app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {

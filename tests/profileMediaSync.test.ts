@@ -38,3 +38,12 @@ test('a failed optimistic photo save restores the previous image without losing 
   assert.deepEqual(restored.courseProgress, { c1: 90 });
   assert.equal(rollbackProfileMedia({ ...current, avatarUrl: 'newer-avatar' }, profile, attempted).avatarUrl, 'newer-avatar');
 });
+
+test('a delayed snapshot cannot reset an already confirmed photo', () => {
+ const confirmed = { ...profile, avatarUrl: 'saved-avatar', coverUrl: 'saved-cover', mediaRevision: 4 };
+ const stale = applyProfileMedia(confirmed, { avatarUrl: 'old-avatar', coverUrl: 'old-cover', mediaRevision: 3 });
+ assert.equal(stale, confirmed);
+ const latest = applyProfileMedia(confirmed, { avatarUrl: 'new-avatar', coverUrl: 'new-cover', mediaRevision: 5 });
+ assert.equal(latest.avatarUrl, 'new-avatar');
+ assert.equal(latest.mediaRevision, 5);
+});

@@ -46,6 +46,7 @@ export interface UserProfile {
   institution: string;
   avatarUrl: string;
   coverUrl?: string;
+  mediaRevision?: number;
   /**
    * Niveau d'apprenant — libellés PARAMÉTRABLES depuis l'espace admin
    * (GET/POST /api/level-settings). Valeurs par défaut : Débutant /

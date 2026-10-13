@@ -518,7 +518,7 @@ export function subscribeProfileMedia(uid: string, receive: (media: Partial<User
   return onSnapshot(doc(db, 'users', uid), { includeMetadataChanges: true }, snapshot => {
     if (auth.currentUser?.uid !== uid || !snapshot.exists() || snapshot.metadata.hasPendingWrites || snapshot.metadata.fromCache) return;
     const data = snapshot.data();
-    receive({ avatarUrl: data.avatarUrl, coverUrl: data.coverUrl });
+    receive({ avatarUrl: data.avatarUrl, coverUrl: data.coverUrl, mediaRevision: data.mediaRevision || 0 });
   }, onError);
 }
 

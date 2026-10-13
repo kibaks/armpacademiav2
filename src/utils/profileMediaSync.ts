@@ -8,6 +8,7 @@ export function profileWriteData(profile: UserProfile, patch?: Partial<UserProfi
     delete editable.avatarUrl;
     delete editable.coverUrl;
   }
+  delete editable.mediaRevision;
   return JSON.parse(JSON.stringify(editable)) as Partial<UserProfile>;
 }
 
@@ -18,7 +19,8 @@ export function changedProfileFields(before: UserProfile, after: UserProfile): P
 }
 
 export function applyProfileMedia(profile: UserProfile, media: Partial<UserProfile>): UserProfile {
-  return { ...profile, avatarUrl: media.avatarUrl ?? profile.avatarUrl, coverUrl: media.coverUrl };
+  if ((media.mediaRevision || 0) < (profile.mediaRevision || 0)) return profile;
+  return { ...profile, avatarUrl: media.avatarUrl ?? profile.avatarUrl, coverUrl: media.coverUrl, mediaRevision: media.mediaRevision ?? profile.mediaRevision };
 }
 
 export function mediaPatch(patch: Partial<UserProfile>): Partial<UserProfile> {
