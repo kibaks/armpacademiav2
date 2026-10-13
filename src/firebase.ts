@@ -20,9 +20,11 @@ import {
   query, 
   where,
   deleteDoc,
-  getDocFromServer 
+  getDocFromServer,
+  onSnapshot
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+import { profileWriteData } from './utils/profileMediaSync';
 import {
   UserProfile,
   TrainingRequest,
@@ -497,19 +499,27 @@ export async function checkExistingRegisteredUser(params: {
 }
 
 // Update user profile in Firestore
-export async function syncUserProfileToFirestore(profile: UserProfile): Promise<void> {
+export async function syncUserProfileToFirestore(profile: UserProfile, patch?: Partial<UserProfile>): Promise<void> {
   if (!auth.currentUser || auth.currentUser.uid !== profile.id) {
     throw new Error('Une session Firebase correspondant au profil est requise.');
   }
   const path = `users/${profile.id}`;
   try {
     const userDocRef = doc(db, 'users', profile.id);
-    const { id, email, role, twoFactorEnabled, disabled, ...editable } = profile as UserProfile & { disabled?: boolean };
-    await updateDoc(userDocRef, JSON.parse(JSON.stringify(editable)));
-    saveProfileToLocalRegistry(profile);
+    const editable = profileWriteData(profile, patch);
+    if (Object.keys(editable).length) await updateDoc(userDocRef, editable);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
+}
+
+// Only confirmed server snapshots replace media; pending writes remain local to their save.
+export function subscribeProfileMedia(uid: string, receive: (media: Partial<UserProfile>) => void, onError: () => void) {
+  return onSnapshot(doc(db, 'users', uid), { includeMetadataChanges: true }, snapshot => {
+    if (auth.currentUser?.uid !== uid || !snapshot.exists() || snapshot.metadata.hasPendingWrites || snapshot.metadata.fromCache) return;
+    const data = snapshot.data();
+    receive({ avatarUrl: data.avatarUrl, coverUrl: data.coverUrl });
+  }, onError);
 }
 
 // Save training request to Firestore

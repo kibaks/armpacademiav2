@@ -62,13 +62,16 @@ import {
 } from './types';
 import { DEMO_PROFILES, INITIAL_TRAINING_REQUESTS } from './data/initialData';
 import { COURSES_DATA } from './data/coursesData';
+import { applyProfileMedia, changedProfileFields } from './utils/profileMediaSync';
 import { computeUserLearningStats, recordCourseReadingInProfile } from './utils/learningStats';
 import { readModuleAuthors, recordModuleAuthor } from './utils/moduleAuthors';
 import { getLevelSettings, levelKeyFromLabel } from './utils/levelSettings';
 import { 
   auth, 
   getOrInitUserProfile, 
-  syncUserProfileToFirestore, 
+  syncUserProfileToFirestore,
+  subscribeProfileMedia,
+  saveProfileToLocalRegistry, 
   saveTrainingRequestToFirestore, 
   fetchTrainingRequestsFromFirestore, 
   getLocalCgpmpAccountRequests,
@@ -328,6 +331,28 @@ export default function App() {
 
   const currentProfile = profiles[currentRole] || profiles['cgpmp_member'];
 
+  useEffect(() => {
+    const uid = currentProfile.id;
+    if (!isAuthenticated || auth.currentUser?.uid !== uid) return;
+    let active = true;
+    const unsubscribe = subscribeProfileMedia(uid, media => {
+      if (!active || auth.currentUser?.uid !== uid) return;
+      setProfiles(previous => Object.fromEntries(Object.entries(previous).map(([role, profile]) =>
+        [role, profile.id === uid ? applyProfileMedia(profile, media) : profile]
+      )));
+      setFirestoreProfiles(previous => previous.map(profile => profile.id === uid ? applyProfileMedia(profile, media) : profile));
+    }, () => { if (active) showToast('Synchronisation des photos interrompue. Rechargez la page pour réessayer.'); });
+    return () => { active = false; unsubscribe(); };
+  }, [isAuthenticated, currentProfile.id]);
+
+  useEffect(() => {
+    if (!isAuthenticated || auth.currentUser?.uid !== currentProfile.id) return;
+    localStorage.setItem('armp_session_profile', JSON.stringify(currentProfile));
+    saveProfileToLocalRegistry(currentProfile);
+  }, [isAuthenticated, currentProfile]);
+
+
+
   // Tutor learning context — utilise la progression réelle persistée du profil
   const tutorLearningContext = React.useMemo(() => {
     const stats = computeUserLearningStats(currentProfile, courses);
@@ -449,9 +474,12 @@ export default function App() {
 
   // Profile Update (saves to Firestore & local state)
   const handleUpdateProfile = async (updated: UserProfile) => {
-    await syncUserProfileToFirestore(updated);
-    setProfiles(prev => ({ ...prev, [updated.role]: updated }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
+    const patch = changedProfileFields(currentProfile, updated);
+    const uid = auth.currentUser?.uid;
+    await syncUserProfileToFirestore(updated, patch);
+    if (auth.currentUser?.uid !== uid) throw new Error('La session a changé.');
+    setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...patch } }));
+    setFirestoreProfiles(prev => prev.map(profile => profile.id === updated.id ? { ...profile, ...patch } : profile));
   };
 
   // Two-Factor Authentication (2FA) Toggle in Profile
@@ -504,10 +532,9 @@ export default function App() {
       const updated = recordCourseReadingInProfile(currentProfile, course, 0);
       setProfiles((prev) => ({
         ...prev,
-        [currentRole]: updated
+        [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
       }));
-      localStorage.setItem('armp_session_profile', JSON.stringify(updated));
-      syncUserProfileToFirestore(updated).catch(() => {});
+        syncUserProfileToFirestore(updated).catch(() => {});
     }
   };
 
@@ -559,9 +586,8 @@ export default function App() {
     };
     setProfiles((prev) => ({
       ...prev,
-      [currentRole]: updated
+      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
     showToast(
       validation
         ? `🎓 Niveau validé : ${validation.niveau}${validation.moduleCode ? ` (${validation.moduleCode})` : ''} — score ${score}%`
@@ -634,9 +660,8 @@ export default function App() {
     };
     setProfiles((prev) => ({
       ...prev,
-      [currentRole]: updated
+      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
     showToast(`Félicitations ! Votre attestation officielle ARMP a été générée et sauvegardée.`);
     try {
       await syncUserProfileToFirestore(updated);
@@ -688,9 +713,8 @@ export default function App() {
     };
     setProfiles((prev) => ({
       ...prev,
-      [currentRole]: updated
+      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
     try {
       await syncUserProfileToFirestore(updated);
     } catch (e) {
@@ -710,9 +734,8 @@ export default function App() {
     };
     setProfiles((prev) => ({
       ...prev,
-      [currentRole]: updated
+      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
     try {
       await syncUserProfileToFirestore(updated);
     } catch (e) {
@@ -734,9 +757,8 @@ export default function App() {
 
     setProfiles((prev) => ({
       ...prev,
-      [currentRole]: updated
+      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
     }));
-    localStorage.setItem('armp_session_profile', JSON.stringify(updated));
 
     const isNowDownloaded = !exists;
     showToast(
