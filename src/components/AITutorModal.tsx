@@ -1398,7 +1398,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             <aside className="tutor-portrait-panel">
               <div className="tutor-portrait">
                 <AishaAvatar isSpeaking={isSpeaking} isListening={isListening || isRecordingVoice} isLoading={isLoading} emotion={effectiveTutorEmotion} tutorPersona={selectedVoice} variant="studio" motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} showBadge={false} />
-                <div className="tutor-portrait-caption"><span>{activeTutor.name}</span><p>{activeTutor.specialty}</p></div>
+
               </div>
               <div className="tutor-listening-card">
                 <span className="tutor-eyebrow">{isSpeaking ? 'À l’écoute' : 'À vos côtés'}</span>

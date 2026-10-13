@@ -1,4 +1,4 @@
-import { renderTutorHands } from './tutorHandRenderer';
+import { renderTutorReference } from './tutorReferenceRenderer';
 import { applyTutorMotion } from './tutorMotion';
 import type { TutorMotion } from '../../shared/tutorPresentation';
 // Avatar Expression Engine — 60 FPS Zero-Latency requestAnimationFrame Bridge
@@ -19,7 +19,8 @@ import { speechService } from './speechService';
 import { getTutorVideoRenderer, type Wav2LipViewport } from './wav2lipVideoRenderer';
 
 export interface AvatarSvgDomRefs {
-  handCanvas?: HTMLCanvasElement | null;
+  referencePostures?: boolean;
+  handGestures?: boolean;
   motionMode?: TutorMotion;
   facialExpressions?: boolean;
   wav2lipCanvas?: HTMLCanvasElement | null;
@@ -182,15 +183,19 @@ class AvatarExpressionEngine {
       let surface: HTMLCanvasElement | HTMLImageElement | null = null;
       this.mountedTargets.forEach((target) => {
         if (this.visibleTargets.get(target) === false) return;
+        if (target.wav2lipCanvas && target.referencePostures) {
+          const mode = target.motionMode || 'subtle';
+          const rendered = renderTutorReference(target.wav2lipCanvas, frame, { male: target.wav2lipViewport?.tutorPersona === 'henri', gestures: target.handGestures !== false && mode !== 'off', expressions: target.facialExpressions !== false, reducedMotion: this.reducedMotion, motion: mode });
+          if (rendered) { this.applyFrameToTarget(frame, target); return; }
+        }
         if (target.wav2lipCanvas) {
           const renderer = getTutorVideoRenderer(target.wav2lipViewport?.tutorPersona);
           const mode = target.motionMode || 'subtle';
           const visibleFrame = applyTutorMotion(frame, mode, target.facialExpressions !== false, this.reducedMotion);
           const key = `${target.wav2lipViewport?.tutorPersona || 'denise'}:${mode}:${target.facialExpressions !== false}`;
           if (previousSurfaceKey !== key) { surface = renderer.renderWarpedFullFrame(visibleFrame); previousSurfaceKey = key; }
-          if (surface) renderer.renderToTargetCanvas(target.wav2lipCanvas, target.wav2lipViewport || { x: 245, y: 55, w: 495, h: 585 }, frame, surface);
+          if (surface) renderer.renderToTargetCanvas(target.wav2lipCanvas, target.wav2lipViewport || { x: 245, y: 55, w: 495, h: 585 }, visibleFrame, surface);
         }
-        if (target.handCanvas) renderTutorHands(target.handCanvas, applyTutorMotion(frame, target.motionMode || 'subtle', target.facialExpressions !== false, this.reducedMotion));
         this.applyFrameToTarget(frame, target);
       });
 

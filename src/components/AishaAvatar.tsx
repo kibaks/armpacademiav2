@@ -94,7 +94,6 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
 
   const [globalSpeaking, setGlobalSpeaking] = useState(false);
   const wav2lipCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const handCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const emotionBadgeRef = useRef<SVGTextElement | null>(null);
   const postureBadgeRef = useRef<SVGTextElement | HTMLSpanElement | null>(null);
   const visemeBadgeRef = useRef<SVGTextElement | null>(null);
@@ -129,7 +128,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
 
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: wav2lipCanvasRef.current,
-      motionMode, facialExpressions, handCanvas: handCanvasRef.current,
+      motionMode, facialExpressions, referencePostures: isStudio || isVisio, handGestures,
       wav2lipViewport: viewport,
       emotionBadgeEl: emotionBadgeRef.current,
       postureBadgeEl: postureBadgeRef.current,
@@ -186,7 +185,6 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
       />
 
 
-      {(isStudio || isVisio) && handGestures && <canvas ref={handCanvasRef} width={600} height={300} aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 z-10 h-[36%] w-full" />}
 
       {showBadge && !isVisio && !isStudio && dim.w < 180 && (
         <span
