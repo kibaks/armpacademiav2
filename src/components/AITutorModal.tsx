@@ -1656,7 +1656,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
               {isLoading && (
                 <div className="flex items-start gap-3">
-                  <AishaAvatar isLoading={true} isSpeaking={false} size={36} />
+                  <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} isLoading={true} isSpeaking={false} size={36} />
                   <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none p-3.5 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2.5 border border-slate-200 dark:border-slate-700 shadow-xs">
                     <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
                     <span>
@@ -1905,7 +1905,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             {/* Centre : Avatar de la Tutrice & Sous-titres temps réel */}
             <div className="flex flex-col items-center my-auto py-4 max-w-xl w-full text-center">
               <div className="relative mb-3">
-                <AishaAvatar
+                <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures}
                   isSpeaking={isSpeaking}
                   isListening={isListening || isRecordingVoice}
                   isLoading={isLoading}
@@ -2057,7 +2057,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <div className="absolute inset-0 z-40 bg-slate-950 flex flex-col min-h-0 overflow-hidden">
             {/* Scène principale Visio HD */}
             <div className="flex-1 min-h-0 relative bg-slate-950 overflow-hidden flex items-center justify-center">
-              <AishaAvatar
+              <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures}
                 isSpeaking={isSpeaking}
                 isListening={isListening || isRecordingVoice}
                 isLoading={isLoading}

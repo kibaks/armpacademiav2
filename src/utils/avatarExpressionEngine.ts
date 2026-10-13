@@ -176,7 +176,10 @@ class AvatarExpressionEngine {
       );
 
       const frame = this.latestFrame;
-      const surfaces = new Map<string, HTMLCanvasElement | HTMLImageElement | null>();
+      // Render surfaces are mutable. Reuse only consecutive identical styles,
+      // otherwise another avatar's motion mode would overwrite a cached surface.
+      let previousSurfaceKey: string | null = null;
+      let surface: HTMLCanvasElement | HTMLImageElement | null = null;
       this.mountedTargets.forEach((target) => {
         if (this.visibleTargets.get(target) === false) return;
         if (target.wav2lipCanvas) {
@@ -184,8 +187,7 @@ class AvatarExpressionEngine {
           const mode = target.motionMode || 'subtle';
           const visibleFrame = applyTutorMotion(frame, mode, target.facialExpressions !== false, this.reducedMotion);
           const key = `${target.wav2lipViewport?.tutorPersona || 'denise'}:${mode}:${target.facialExpressions !== false}`;
-          if (!surfaces.has(key)) surfaces.set(key, renderer.renderWarpedFullFrame(visibleFrame));
-          const surface = surfaces.get(key);
+          if (previousSurfaceKey !== key) { surface = renderer.renderWarpedFullFrame(visibleFrame); previousSurfaceKey = key; }
           if (surface) renderer.renderToTargetCanvas(target.wav2lipCanvas, target.wav2lipViewport || { x: 245, y: 55, w: 495, h: 585 }, frame, surface);
         }
         if (target.handCanvas) renderTutorHands(target.handCanvas, applyTutorMotion(frame, target.motionMode || 'subtle', target.facialExpressions !== false, this.reducedMotion));
