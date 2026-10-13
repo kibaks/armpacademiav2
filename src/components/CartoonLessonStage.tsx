@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { cartoonSceneKind, cartoonSpeechMouth, CARTOON_SCENE_LABELS } from '../utils/cartoonLessonScene';
-import { sampleLessonStoryboard, motionWindow, lessonKeywords } from '../utils/motionLessonStoryboard';
+import { sampleLessonStoryboard, motionWindow } from '../utils/motionLessonStoryboard';
 import './CartoonLesson.css';
 
 type StageProps = { screen: SingleScreenCardData; progress: number; playing: boolean; speaking: boolean; mouthOpenness: number; viseme: string; male?: boolean; legalRef: string; sceneCount: number; reducedMotion?: boolean };
@@ -134,23 +134,24 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  c.restore();
  const x=portrait?38:824,y=portrait?650:208,bw=portrait?644:408,bh=portrait?355:366;
  c.save();c.translate(0,reduced?0:(1-motionWindow(shot.pageProgress,0,.13))*10);
- box(c,x+4,y+7,bw,bh,'#203B5010',20);box(c,x,y,bw,bh,shot.phase==='rule'?'#FFF0CF':'#FFFFFF',20);
  c.textAlign='left';c.font=`800 ${portrait?20:12}px system-ui, sans-serif`;c.fillStyle=shot.phase==='rule'?'#926027':teal;
- c.fillText(shot.phase==='rule'?'LE BON RÉFLEXE':'COMPRENDRE EN PRATIQUE',x+25,y+34);
- trace(c,[x+25,y+49,x+bw-25,y+49],reduced?1:motionWindow(shot.pageProgress,0,.18),shot.phase==='rule'?gold:teal,3);
- const captionLayout=paragraph(c,shot.text,x+25,y+91,bw-50,bh-146,portrait?30:25,ink,600);
- const currentLine=Math.min(captionLayout.lines.length-1,Math.floor(shot.pageProgress*captionLayout.lines.length));
- if(currentLine>=0){const lineText=captionLayout.lines[currentLine],lineWidth=Math.min(bw-50,c.measureText(lineText).width);const fraction=shot.pageProgress>=1?1:(shot.pageProgress*captionLayout.lines.length)%1;
- trace(c,[x+25,y+99+currentLine*captionLayout.size*1.4,x+25+lineWidth,y+99+currentLine*captionLayout.size*1.4],reduced?1:Math.max(.12,fraction),gold,3);}
-
- const keywords=lessonKeywords(shot.phase==='rule'?shot.text:props.screen.title+' '+shot.text).slice(0,portrait?2:3);let tx=x+25;
- keywords.forEach((word,index)=>{
-  c.font=`700 ${portrait?18:11}px system-ui, sans-serif`;const tw=Math.min(c.measureText(word).width+21,(bw-50)/keywords.length-5);
-  const enter=reduced?1:motionWindow(shot.pageProgress,.02+index*.045,.15+index*.045);
-  c.save();c.globalAlpha=.35+.65*enter;c.translate(0,(1-enter)*6);box(c,tx,y+bh-52,tw,26,shot.phase==='rule'?'#F1DCA9':'#E5F0E8',6);
-  c.fillStyle=teal;c.textAlign='left';c.fillText(word,tx+10,y+bh-35,tw-18);c.restore();tx+=tw+6;
+ c.fillText(shot.phase==='rule'?'À RETENIR':'L’IDÉE ESSENTIELLE',x+25,y+34);
+ const words=shot.text.split(/\s+/).filter(Boolean);
+ const size=fitCanvasText(c,shot.text,bw-50,bh-125,portrait?58:49,900).size, lineHeight=size*1.15;
+ let wx=x+25, wy=y+113;
+ words.forEach((word,index)=>{
+  c.font=`900 ${size}px system-ui, sans-serif`;
+  const width=c.measureText(word).width;
+  if(wx+width>x+bw-25 && wx>x+25){wx=x+25;wy+=lineHeight;}
+  const enter=reduced?1:motionWindow(shot.pageProgress,index*.035,.2+index*.035);
+  c.save();c.globalAlpha=reduced?1:.18+.82*enter;
+  c.translate(wx,wy+(1-enter)*18);
+  c.scale(.94+.06*enter,.94+.06*enter);
+  c.fillStyle=index===words.length-1?(shot.phase==='rule'?coral:teal):ink;
+  c.fillText(word,0,0,bw-50);c.restore();
+  wx+=width+c.measureText(' ').width;
  });
- c.textAlign='right';c.fillStyle='#72877C';c.font=`600 ${portrait?15:10}px system-ui, sans-serif`;c.fillText(`${shot.pageIndex+1} / ${shot.pageCount}`,x+bw-25,y+bh-12);
+ trace(c,[x+25,y+bh-40,x+145,y+bh-40],reduced?1:motionWindow(shot.pageProgress,.25,.65),shot.phase==='rule'?coral:teal,6);
  c.restore();
  // Shape-layer progress and a lower-third stay inside the video composition.
  const lowerY=portrait?1060:657;

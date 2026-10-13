@@ -22,12 +22,30 @@ export function paginateLessonText(text: string, maxWords = 32): string[] {
   }
   return pages.length ? pages : [''];
 }
-export function sampleLessonStoryboard(screen: SingleScreenCardData, progress: number, maxWords = 32) {
+// Visual cues are concepts, never a shortened version of every spoken sentence.
+// Only emit an action when its meaning is explicitly present in the source.
+export function essentialLessonCues(text: string): string[] {
+  const source = text.toLocaleLowerCase('fr');
+  const cues: string[] = [];
+  if (/citoyens|familles|communautés/.test(source)) cues.push('Au service des citoyens');
+  if (/égalité|même chance|mêmes chances/.test(source)) cues.push('Égalité des chances');
+  if (!/ne[\s\S]{0,30}vérifi/.test(source) && /vérifi\w*[\s\S]{0,100}crédits budgétaires/.test(source)) cues.push('Vérifier les crédits budgétaires');
+  if (/sans jamais imposer une marque|sans imposer une marque/.test(source)) cues.push('Sans marque imposée');
+  if (/besoins[\s\S]{0,50}neutre/.test(source)) cues.push('Des besoins neutres');
+  if (/document\w*[\s\S]{0,100}traçabilité/.test(source)) cues.push('Documenter pour assurer la traçabilité');
+  if (/publi\w*[\s\S]{0,70}avis/.test(source)) cues.push('Publier les avis');
+  // A neutral concept is safer than cutting a sentence before its negation,
+  // exception or legal condition. Narration and transcript retain those details.
+  if (!cues.length) cues.push(...lessonKeywords(text).map(word => word.charAt(0).toUpperCase() + word.slice(1)));
+  return [...new Set(cues)].slice(0, 3);
+}
+export function sampleLessonStoryboard(screen: SingleScreenCardData, progress: number, _maxWords = 32) {
   const p = clamp(progress);
   const introEnd = Math.max(.05, Math.min(.35, screen.explanationStartRatio || .12));
   const ruleStart = Math.max(introEnd + .1, Math.min(.95, screen.fieldRuleStartRatio || .75));
   const isRule = p >= ruleStart;
-  const pages = paginateLessonText(isRule ? screen.fieldRule : screen.explanation, maxWords);
+  const selected = essentialLessonCues(isRule ? screen.fieldRule : screen.explanation);
+  const pages = selected.length ? selected : [isRule ? 'Le bon réflexe' : 'L’idée essentielle'];
   const start = isRule ? ruleStart : introEnd, end = isRule ? 1 : ruleStart;
   const sectionProgress = clamp((p - start) / (end - start));
   const lengths = pages.map(page => Math.max(1, page.split(/\s+/).filter(Boolean).length));
