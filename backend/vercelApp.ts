@@ -1,3 +1,4 @@
+import { synthesizeCartesiaTutor } from './cartesiaTutorSpeech.js';
 import { synthesizeElevenTutor } from './elevenTutorSpeech.js';
 import { voiceBudgets } from './voiceBudgets.js';
 import { synthesizeGeminiTutor } from './tutorSpeechProviders.js';
@@ -959,6 +960,12 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
   const cleanSentence = text.trim().slice(0, 950);
   const voiceKey = voiceChoice.toLowerCase();
 
+  const cartesia = await synthesizeCartesiaTutor(cleanSentence, voiceKey);
+  if (cartesia) {
+    const audio = cartesia.audioBuffer.toString('base64');
+    return { audioData: audio, audioBase64: audio, mimeType: cartesia.mimeType, provider: cartesia.provider, wordBoundaries: [], emotion: detectSentenceEmotion(cleanSentence) };
+  }
+
   // Try ElevenLabs if configured
   if (process.env.ELEVENLABS_API_KEY) {
     const el = await synthesizeElevenTutor(cleanSentence, voiceKey);
@@ -981,7 +988,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
     return { audioData: audio, audioBase64: audio, mimeType: gemini.mimeType, provider: gemini.provider, wordBoundaries: [], emotion: detectSentenceEmotion(cleanSentence) };
   }
 
-  if (process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY) throw new Error('Les fournisseurs studio sont momentanément indisponibles.');
+  if (process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY) throw new Error('Les fournisseurs studio sont momentanément indisponibles.');
 
   // Try Edge Neural Voices
   const candidateVoices = getTutorVoice(voiceKey).voices;
@@ -1008,6 +1015,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
 // ------------------------------------------------------------------
 const DEFAULT_TTS_SETTINGS = {
   order: [
+    { id: 'cartesia', name: 'Cartesia Sonic', enabled: !!process.env.CARTESIA_API_KEY },
     { id: 'elevenlabs', name: 'ElevenLabs Studio v2', enabled: true },
     { id: 'neural', name: 'Studio Neural HD (Vivienne / Denise)', enabled: true },
     { id: 'gemini', name: 'Gemini Audio TTS', enabled: !!process.env.GEMINI_API_KEY },
@@ -1019,8 +1027,9 @@ const DEFAULT_TTS_SETTINGS = {
 app.get(['/api/tts/settings', '/tts/settings'], (_req, res) => {
   res.json({
     ...DEFAULT_TTS_SETTINGS,
-    defaultVoiceMode: process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
+    defaultVoiceMode: process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: {
+      cartesia: !!process.env.CARTESIA_API_KEY,
       elevenlabs: !!process.env.ELEVENLABS_API_KEY,
       neural: true,
       gemini: !!process.env.GEMINI_API_KEY,

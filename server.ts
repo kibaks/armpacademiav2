@@ -1,3 +1,4 @@
+import { synthesizeCartesiaTutor } from './backend/cartesiaTutorSpeech.js';
 import { synthesizeElevenTutor } from './backend/elevenTutorSpeech.js';
 import { voiceBudgets } from './backend/voiceBudgets.js';
 import { synthesizeGeminiTutor } from './backend/tutorSpeechProviders.js';
@@ -943,6 +944,7 @@ interface CachedTtsPayload {
   audioData: string;
   mimeType: string;
   provider:
+    | 'cartesia-sonic'
     | 'elevenlabs-v2'
     | 'neural-vivienne-hd'
     | 'neural-denise-hd'
@@ -1395,7 +1397,7 @@ function normalizeCongoleseProperNounsServer(text: string): string {
 // redémarrage). Par défaut: ElevenLabs d'abord, voix Neural Studio ensuite,
 // Gemini TTS désactivé (remplacé par la chaîne ElevenLabs/Neural).
 // ============================================================================
-type TtsProviderId = 'elevenlabs' | 'neural' | 'gemini';
+type TtsProviderId = 'cartesia' | 'elevenlabs' | 'neural' | 'gemini';
 type NeuralVoicePref = 'denise' | 'vivienne-multilingual' | 'vivienne';
 
 interface TtsSettings {
@@ -1406,10 +1408,11 @@ interface TtsSettings {
 }
 
 const TTS_SETTINGS_FILE = path.join(process.cwd(), 'tts-settings.json');
-const TTS_PROVIDER_IDS: TtsProviderId[] = ['elevenlabs', 'neural', 'gemini'];
+const TTS_PROVIDER_IDS: TtsProviderId[] = ['cartesia', 'elevenlabs', 'neural', 'gemini'];
 const NEURAL_VOICE_PREFS: NeuralVoicePref[] = ['denise', 'vivienne-multilingual', 'vivienne'];
 const DEFAULT_TTS_SETTINGS: TtsSettings = {
   order: [
+    { id: 'cartesia', enabled: true },
     { id: 'elevenlabs', enabled: true },
     { id: 'neural', enabled: true },
     { id: 'gemini', enabled: false },
@@ -1457,6 +1460,7 @@ function loadTtsSettings(): TtsSettings {
 
 function ttsAvailability() {
   return {
+    cartesia: !!process.env.CARTESIA_API_KEY,
     elevenlabs: !!process.env.ELEVENLABS_API_KEY,
     neural: true, // edge-tts: aucune clé requise
     gemini: !!(process.env.API_KEY || process.env.GEMINI_API_KEY),
@@ -1467,7 +1471,7 @@ app.get('/api/tts/settings', (_req, res) => {
   res.json({
     ...loadTtsSettings(),
     browserFallback: true,
-    defaultVoiceMode: process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
+    defaultVoiceMode: process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: ttsAvailability(),
     elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
   });
@@ -1554,6 +1558,11 @@ async function getOrSynthesizeTtsPayload(
       for (const tier of ttsSettings.order) {
         if (!tier.enabled) continue;
 
+        if (tier.id === 'cartesia') {
+          const cartesia = await synthesizeCartesiaTutor(cleanText, voiceKey);
+          if (cartesia) return storeInCache({ audioData: cartesia.audioBuffer.toString('base64'), mimeType: cartesia.mimeType, provider: cartesia.provider, wordBoundaries: buildEstimatedWordBoundaries(cleanText) });
+        }
+
         // 1. ElevenLabs — voix la plus humaine (souffles, exclamations, émotion),
         //    protégée par un garde-mensuel doux (free tier = 10k caractères/mois).
         if (tier.id === 'elevenlabs' && process.env.ELEVENLABS_API_KEY) {
@@ -1568,7 +1577,7 @@ async function getOrSynthesizeTtsPayload(
           const gemini = await synthesizeGeminiTutor(cleanText, voiceKey, { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_TTS_MODEL });
           if (gemini) return storeInCache({ audioData: gemini.audioBuffer.toString('base64'), mimeType: gemini.mimeType, provider: gemini.provider, wordBoundaries: buildEstimatedWordBoundaries(cleanText) });
 
-          if (process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY) continue;
+          if (process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY) continue;
           const studioNeuralPayload = await synthesizeWithStudioNeuralHD(
             cleanText,
             voiceKey,

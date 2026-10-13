@@ -45,6 +45,7 @@ export interface SpeechPlaybackState {
   currentSentenceText?: string;
   source: 'gemini-tts' | 'web-speech' | 'none';
   voiceProvider?:
+    | 'cartesia-sonic'
     | 'elevenlabs-v2'
     | 'neural-vivienne-hd'
     | 'neural-denise-hd'

@@ -1,4 +1,4 @@
-export type VoiceProvider = 'elevenlabs' | 'gemini';
+export type VoiceProvider = 'elevenlabs' | 'gemini' | 'cartesia';
 export class VoiceBudgets {
   private blocked = new Map<VoiceProvider, number>();
   private reason = new Map<VoiceProvider, string>();
@@ -48,6 +48,7 @@ export class VoiceBudgets {
   recordGeminiUsage(tokens: unknown) { if (typeof tokens === 'number' && Number.isFinite(tokens) && tokens >= 0) this.geminiTokensObserved += tokens; }
   snapshot() {
     return {
+      cartesia: { remainingCredits: null, retryAt: this.available('cartesia') ? null : this.blocked.get('cartesia'), reason: this.available('cartesia') ? null : this.reason.get('cartesia') },
       elevenlabs: { quotaReadable: this.quota.readable, remainingCharacters: this.quota.readable && this.quota.limit !== null && this.quota.used !== null ? Math.max(0, this.quota.limit - this.quota.used - this.reserved) : null, checkedAt: this.checkedAt || null, retryAt: this.available('elevenlabs') ? null : this.blocked.get('elevenlabs'), reason: this.available('elevenlabs') ? null : this.reason.get('elevenlabs') },
       gemini: { remainingTokens: null, observedTokensThisInstance: this.geminiTokensObserved, retryAt: this.available('gemini') ? null : this.blocked.get('gemini'), reason: this.available('gemini') ? null : this.reason.get('gemini') },
     };

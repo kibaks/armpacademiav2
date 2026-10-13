@@ -27,3 +27,7 @@ Gemini : les réponses 429 et `RESOURCE_EXHAUSTED` suspendent les tentatives pen
 Le préchargement est limité à la phrase suivante. Les résultats vocaux déjà générés restent en cache. Les voix studio masculine et féminine ont été générées réellement avec les deux fournisseurs pendant la validation.
 
 Références : https://elevenlabs.io/docs/api-reference/user/subscription/get et https://ai.google.dev/gemini-api/docs/generate-content/speech-generation.
+
+## Cartesia
+
+Configurer `CARTESIA_API_KEY` en variable serveur secrète Vercel, puis redéployer. Cartesia Sonic est prioritaire, puis ElevenLabs et Gemini. `CARTESIA_TTS_MODEL` vaut `sonic-3.6`. Les profils utilisent des voix françaises distinctes ; Henri utilise Joris (grave et ferme), Aïsha utilise Vanessa (assurée). Le quota restant est inconnu ; les refus du fournisseur et Retry-After bloquent les relances. Aucun secours automatique par voix appareil.

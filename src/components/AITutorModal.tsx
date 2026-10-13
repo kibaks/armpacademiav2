@@ -530,10 +530,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<{
-    order: Array<{ id: 'elevenlabs' | 'neural' | 'gemini'; enabled: boolean }>;
+    order: Array<{ id: 'cartesia' | 'elevenlabs' | 'neural' | 'gemini'; enabled: boolean }>;
     neuralVoice: 'denise' | 'vivienne-multilingual' | 'vivienne';
     browserFallback?: boolean;
-    availability?: { elevenlabs?: boolean; neural?: boolean; gemini?: boolean };
+    availability?: { cartesia?: boolean; elevenlabs?: boolean; neural?: boolean; gemini?: boolean };
     elevenlabsVoiceId?: string;
   } | null>(null);
   const [voiceSettingsMsg, setVoiceSettingsMsg] = useState('');
@@ -646,7 +646,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   useEffect(() => {
     const unsub = speechService.subscribe((st) => {
-      setPlaybackProvider(st.source === 'web-speech' ? 'Voix de l’appareil' : st.voiceProvider === 'gemini-tts' ? 'Gemini' : st.voiceProvider === 'elevenlabs-v2' ? 'ElevenLabs' : 'Voix studio');
+      setPlaybackProvider(st.source === 'web-speech' ? 'Voix de l’appareil' : st.voiceProvider === 'cartesia-sonic' ? 'Cartesia' : st.voiceProvider === 'gemini-tts' ? 'Gemini' : st.voiceProvider === 'elevenlabs-v2' ? 'ElevenLabs' : 'Voix studio');
       if (st.error) { setToastNotice(st.error); setTimeout(() => setToastNotice(null), 6500); }
       if (st.currentId && st.currentId.startsWith('tutor-')) {
         setIsSpeaking(Boolean(st.isPlaying && !st.isLoading));
@@ -1605,7 +1605,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 <div className="space-y-1.5">
                   {voiceSettings.order.map((tier, idx) => {
                     const meta =
-                      tier.id === 'elevenlabs'
+                      tier.id === 'cartesia'
+                        ? { label: 'Cartesia Sonic', hint: 'Voix françaises • lecture des cours et tuteur', ok: !!voiceSettings.availability?.cartesia, okText: 'clé ✓', koText: 'clé manquante' }
+                        : tier.id === 'elevenlabs'
                         ? {
                             label: 'ElevenLabs — Rachel (voix humaine)',
                             hint: 'Souffles, émotion, exclamations • garde-mensuel protégé (10k car.)',
@@ -1734,7 +1736,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <select id="tutor-voice-mode" value={voiceMode} onChange={event => {
             const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode);
           }} className="rounded-lg border border-slate-300 dark:border-slate-700 bg-transparent px-2 py-2">
-            <option value="studio">Voix studio · Gemini / ElevenLabs</option><option value="device">Voix gratuites de cet appareil</option>
+            <option value="studio">Voix studio · Cartesia / Gemini / ElevenLabs</option><option value="device">Voix gratuites de cet appareil</option>
           </select>
           <button type="button" onClick={() => speak(activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed)} className="rounded-lg px-3 py-2 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 font-semibold">Écouter un exemple</button>
           {isSpeaking && <span role="status" className="text-blue-700 dark:text-blue-200 font-semibold">Lecture : {playbackProvider}</span>}
