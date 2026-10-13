@@ -72,3 +72,9 @@ export function lessonKeywords(text: string): string[] {
   const preferred=vocabulary.filter(word=>words.includes(word));
   return [...new Set([...preferred,...words.filter(word => word.length >= 7 && word.length <= 22 && !stop.has(word))])].slice(0,3).map(word=>['cgpmp','dgcmp','armp','sigmap'].includes(word)?word.toUpperCase():word);
 }
+
+// Complete typing within the first half of the cue; leave time to read it.
+export function typewriterCount(text: string, progress: number, reducedMotion = false): number {
+  const length = Array.from(new Intl.Segmenter('fr', { granularity: 'grapheme' }).segment(text)).length;
+  return reducedMotion ? length : Math.floor(length * clamp(progress / .5));
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { essentialLessonCues, sampleLessonStoryboard, motionWindow } from '../src/utils/motionLessonStoryboard';
+import { typewriterCount, essentialLessonCues, sampleLessonStoryboard, motionWindow } from '../src/utils/motionLessonStoryboard';
 import type { SingleScreenCardData } from '../src/components/ProfessorFilmScenes';
 const explanation='Les besoins doivent être définis avec les équipes de terrain. Chaque étape de la procédure doit être documentée afin de préserver la transparence et la traçabilité des décisions.';
 const rule='Vérifiez les crédits budgétaires avant de lancer la procédure.';
@@ -34,4 +34,15 @@ test('keyframes clamp invalid input and ease to their final position',()=>{
   assert.ok(shot.pageIndex>=0&&shot.pageIndex<shot.pageCount);
   assert.ok(Number.isFinite(shot.pageProgress));
  }
+});
+
+test('typing preserves graphemes and reserves time to read the whole phrase',()=>{
+ const text='Éthique 👩🏽‍🏫 et égalité.';
+ const total=Array.from(new Intl.Segmenter('fr',{granularity:'grapheme'}).segment(text)).length;
+ assert.equal(typewriterCount(text,0),0);
+ assert.equal(typewriterCount(text,.5),total);
+ assert.equal(typewriterCount(text,1),total);
+ assert.equal(typewriterCount(text,0,true),total);
+ assert.equal(typewriterCount(text,NaN),0);
+ assert.ok(typewriterCount(text,.25)>0 && typewriterCount(text,.25)<total);
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { cartoonSceneKind, cartoonSpeechMouth, CARTOON_SCENE_LABELS } from '../utils/cartoonLessonScene';
-import { sampleLessonStoryboard, motionWindow } from '../utils/motionLessonStoryboard';
+import { sampleLessonStoryboard, motionWindow, typewriterCount } from '../utils/motionLessonStoryboard';
 import './CartoonLesson.css';
 
 type StageProps = { screen: SingleScreenCardData; progress: number; playing: boolean; speaking: boolean; mouthOpenness: number; viseme: string; male?: boolean; legalRef: string; sceneCount: number; reducedMotion?: boolean };
@@ -136,11 +136,22 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  c.save();c.translate(0,reduced?0:(1-motionWindow(shot.pageProgress,0,.13))*10);
  c.textAlign='left';c.font=`800 ${portrait?20:12}px system-ui, sans-serif`;c.fillStyle=shot.phase==='rule'?'#926027':teal;
  c.fillText(shot.phase==='rule'?'À RETENIR':'L’IDÉE ESSENTIELLE',x+25,y+34);
- const enter=reduced?1:motionWindow(shot.pageProgress,0,.2);
- c.save();c.globalAlpha=.4+.6*enter;
- c.translate(x+25,y+103+(1-enter)*18);
- c.scale(.97+.03*enter,.97+.03*enter);
- paragraph(c,shot.text,0,0,bw-50,bh-125,portrait?48:38,shot.phase==='rule'?teal:ink,800);
+ // Layout the complete sentence once so words never jump between lines while typing.
+ const layout=fitCanvasText(c,shot.text,bw-50,bh-125,portrait?48:38,800);
+ let remaining=typewriterCount(shot.text,shot.pageProgress,reduced);
+ let cursorX=0,cursorY=0;
+ c.save();c.translate(x+25,y+103);
+ c.font=`800 ${layout.size}px system-ui, sans-serif`;
+ c.fillStyle=shot.phase==='rule'?teal:ink;c.textAlign='left';
+ layout.lines.forEach((text,index)=>{
+  const characters=Array.from(new Intl.Segmenter('fr',{granularity:'grapheme'}).segment(text),part=>part.segment);
+  const visible=characters.slice(0,Math.max(0,remaining)).join('');
+  if(visible){c.fillText(visible,0,index*layout.size*1.4);cursorX=c.measureText(visible).width;cursorY=index*layout.size*1.4;}
+  remaining-=characters.length+1;
+ });
+ if(!reduced && props.playing && (shot.pageProgress<.5 || Math.floor(time*2)%2===0)){
+  box(c,Math.min(cursorX+4,bw-54),cursorY-layout.size*.8,3,layout.size,coral,1);
+ }
  c.restore();
  trace(c,[x+25,y+bh-40,x+145,y+bh-40],reduced?1:motionWindow(shot.pageProgress,.25,.65),shot.phase==='rule'?coral:teal,6);
  c.restore();
