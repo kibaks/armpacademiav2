@@ -30,4 +30,4 @@ Références : https://elevenlabs.io/docs/api-reference/user/subscription/get et
 
 ## Cartesia
 
-Configurer `CARTESIA_API_KEY` en variable serveur secrète Vercel, puis redéployer. Cartesia Sonic est prioritaire, puis ElevenLabs et Gemini. `CARTESIA_TTS_MODEL` vaut `sonic-3.6`. Les profils utilisent des voix françaises distinctes ; Henri utilise Gérard (grave, posé, accent français de France), Aïsha utilise Vanessa (assurée). Le quota restant est inconnu ; les refus du fournisseur et Retry-After bloquent les relances. Aucun secours automatique par voix appareil.
+Configurer `CARTESIA_API_KEY` en variable serveur secrète Vercel, puis redéployer. Cartesia Sonic est prioritaire, puis ElevenLabs et Gemini. `CARTESIA_TTS_MODEL` vaut `sonic-3.6`. Les profils utilisent des voix françaises distinctes ; Henri utilise Gérard (grave, posé, accent français de France), Aïsha utilise Inès (diction articulée, narration assurée, accent français de France). Le quota restant est inconnu ; les refus du fournisseur et Retry-After bloquent les relances. Aucun secours automatique par voix appareil.

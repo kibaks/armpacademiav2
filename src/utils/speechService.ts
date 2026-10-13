@@ -1602,7 +1602,7 @@ class SpeechService {
     timeoutMs: number = 35000
   ): Promise<DecodedNeuralEntry | null> {
     if (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `tutor_voice_v5::${voice}::${sentence}`;
+    const cacheKey = `tutor_voice_v6::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1894,7 +1894,7 @@ class SpeechService {
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if (this.neuralTtsAvailable && this.getVoiceMode() !== 'device') {
-      const cacheKey = `tutor_voice_v5::${voiceName}::${sentence}`;
+      const cacheKey = `tutor_voice_v6::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,

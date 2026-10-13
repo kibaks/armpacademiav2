@@ -1522,7 +1522,7 @@ async function getOrSynthesizeTtsPayload(
     ? requestedVoiceKey
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `tutor_authority_v29::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `tutor_authority_v30::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
   if (cached) {
     ttsMemoryCache.set(cacheKey, cached);
