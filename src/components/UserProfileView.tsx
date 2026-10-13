@@ -590,8 +590,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       setCoverDraftUrl(null);
       onShowToast?.('Photo de couverture mise à jour !');
     } catch {
-      setShowCoverModal(true);
-      onShowToast?.('Couverture non enregistrée. La précédente est conservée. Réessayez.');
+      onShowToast?.('La couverture n’a pas pu être enregistrée. La précédente est conservée. Vous pouvez réessayer depuis Modifier la couverture.');
     } finally {
       setIsMediaSaving(false);
     }
@@ -659,8 +658,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       setAvatarDraftUrl(null);
       onShowToast?.('Photo de profil mise à jour avec succès ✓');
     } catch {
-      setShowAvatarModal(true);
-      onShowToast?.('Photo non enregistrée. La précédente est conservée. Réessayez.');
+      onShowToast?.('La photo n’a pas pu être enregistrée. La précédente est conservée. Vous pouvez réessayer depuis Modifier la photo.');
     } finally {
       setIsMediaSaving(false);
     }

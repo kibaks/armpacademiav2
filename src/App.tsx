@@ -492,7 +492,9 @@ export default function App() {
     }
     try {
       await syncUserProfileToFirestore(updated, patch);
-      if (auth.currentUser?.uid !== uid || generation !== sessionGeneration.current) throw new Error('La session a changé.');
+      if (auth.currentUser?.uid !== uid) throw new Error('La session a changé.');
+      // A verified session refresh will read the saved profile itself.
+      if (generation !== sessionGeneration.current) return;
       setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...patch } }));
       setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? { ...profile, ...patch } : profile));
     } catch (error) {
