@@ -1,3 +1,4 @@
+import { synthesizePiperTutor, piperConfigured } from './piperTutorSpeech.js';
 import { profileMediaRouter } from './profileMedia.js';
 import { readTutorPresentation } from './tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './cartesiaTutorSpeech.js';
@@ -973,6 +974,12 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
   const cleanSentence = text.trim().slice(0, 950);
   const voiceKey = voiceChoice.toLowerCase();
 
+  const piper = await synthesizePiperTutor(cleanSentence, voiceKey);
+  if (piper) {
+    const audio = piper.audioBuffer.toString('base64');
+    return { audioData: audio, audioBase64: audio, mimeType: piper.mimeType, provider: piper.provider, wordBoundaries: [], emotion: detectSentenceEmotion(cleanSentence) };
+  }
+
   const cartesia = await synthesizeCartesiaTutor(cleanSentence, voiceKey);
   if (cartesia) {
     const audio = cartesia.audioBuffer.toString('base64');
@@ -1028,6 +1035,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
 // ------------------------------------------------------------------
 const DEFAULT_TTS_SETTINGS = {
   order: [
+    { id: 'piper', name: 'Piper — Tom grave / Siwis', enabled: piperConfigured() },
     { id: 'cartesia', name: 'Cartesia Sonic', enabled: !!process.env.CARTESIA_API_KEY },
     { id: 'elevenlabs', name: 'ElevenLabs Studio v2', enabled: true },
     { id: 'neural', name: 'Studio Neural HD (Vivienne / Denise)', enabled: true },
@@ -1040,9 +1048,10 @@ const DEFAULT_TTS_SETTINGS = {
 app.get(['/api/tts/settings', '/tts/settings'], (_req, res) => {
   res.json({
     ...DEFAULT_TTS_SETTINGS,
-    defaultVoiceMode: process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
+    defaultVoiceMode: piperConfigured() || process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: {
-      cartesia: !!process.env.CARTESIA_API_KEY,
+      piper: piperConfigured(),
+    cartesia: !!process.env.CARTESIA_API_KEY,
       elevenlabs: !!process.env.ELEVENLABS_API_KEY,
       neural: true,
       gemini: !!process.env.GEMINI_API_KEY,
@@ -1072,7 +1081,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     }
 
     const cleanSentence = rawText.slice(0, 950);
-    const cacheKey = `v35:${voiceChoice}:${cleanSentence}`;
+    const cacheKey = `v36-piper:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1127,7 +1136,7 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     for (const s of sentences) {
       const cleanSentence = (s || '').toString().trim().slice(0, 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v35:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v36-piper:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
 
       synthesizeSpeech(cleanSentence, voiceChoice)

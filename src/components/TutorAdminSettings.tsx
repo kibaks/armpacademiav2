@@ -7,7 +7,7 @@ import { normalizeTutorPresentation, type TutorPresentation } from '../../shared
 import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
 interface VoiceConfiguration { availability?: Record<string, boolean>; defaultVoiceMode?: string }
 interface QuotaState { reason?: string | null; retryAt?: number | null; remainingCredits?: number | null; remainingCharacters?: number | null; remainingTokens?: number | null }
-const providers = [{ id: 'cartesia', name: 'Cartesia', description: 'Voix françaises avec horodatage des phonèmes' }, { id: 'elevenlabs', name: 'ElevenLabs', description: 'Secours vocal si configuré' }, { id: 'gemini', name: 'Gemini', description: 'Dernier secours vocal si configuré' }];
+const providers = [{ id: 'piper', name: 'Piper', description: 'Serveur Academia : Tom grave et Siwis' }, { id: 'cartesia', name: 'Cartesia', description: 'Voix françaises avec horodatage des phonèmes' }, { id: 'elevenlabs', name: 'ElevenLabs', description: 'Secours vocal si configuré' }, { id: 'gemini', name: 'Gemini', description: 'Dernier secours vocal si configuré' }];
 const control = 'min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800';
 export function TutorAdminSettings() {
   const [settings, setSettings] = useState<TutorPresentation | null>(null);

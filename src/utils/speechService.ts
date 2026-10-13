@@ -46,6 +46,7 @@ export interface SpeechPlaybackState {
   currentSentenceText?: string;
   source: 'gemini-tts' | 'web-speech' | 'none';
   voiceProvider?:
+    | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'
     | 'neural-vivienne-hd'
@@ -636,7 +637,7 @@ class SpeechService {
     if (this.lastModeReadAt && Date.now() - this.lastModeReadAt < 60000) return Promise.resolve(this.getVoiceMode());
     if (this.modeLoading) return this.modeLoading;
     this.modeLoading = (async () => {
-      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.cartesiaAvailable = !!data.availability?.cartesia; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
+      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.cartesiaAvailable = !!data.availability?.cartesia && !data.availability?.piper; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
       return this.getVoiceMode();
     })().finally(() => { this.modeLoading = null; });
     return this.modeLoading;

@@ -1,3 +1,4 @@
+import { synthesizePiperTutor, piperConfigured } from './backend/piperTutorSpeech.js';
 import { profileMediaRouter } from './backend/profileMedia.js';
 import { readTutorPresentation } from './backend/tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './backend/cartesiaTutorSpeech.js';
@@ -952,6 +953,7 @@ interface CachedTtsPayload {
   audioData: string;
   mimeType: string;
   provider:
+    | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'
     | 'neural-vivienne-hd'
@@ -1470,6 +1472,7 @@ function loadTtsSettings(): TtsSettings {
 
 function ttsAvailability() {
   return {
+    piper: piperConfigured(),
     cartesia: !!process.env.CARTESIA_API_KEY,
     elevenlabs: !!process.env.ELEVENLABS_API_KEY,
     neural: true, // edge-tts: aucune clé requise
@@ -1481,7 +1484,7 @@ app.get('/api/tts/settings', (_req, res) => {
   res.json({
     ...loadTtsSettings(),
     browserFallback: true,
-    defaultVoiceMode: process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
+    defaultVoiceMode: piperConfigured() || process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: ttsAvailability(),
     elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'Rachel (voix par défaut)',
   });
@@ -1532,7 +1535,7 @@ async function getOrSynthesizeTtsPayload(
     ? requestedVoiceKey
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `tutor_authority_v31::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `tutor_authority_v32_piper::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
   if (cached) {
     ttsMemoryCache.set(cacheKey, cached);
@@ -1561,6 +1564,9 @@ async function getOrSynthesizeTtsPayload(
         saveTtsToDisk(cacheKey, enrichedPayload);
         return enrichedPayload;
       };
+
+      const piper = await synthesizePiperTutor(cleanText, voiceKey);
+      if (piper) return storeInCache({ audioData: piper.audioBuffer.toString('base64'), mimeType: piper.mimeType, provider: piper.provider, wordBoundaries: [] });
 
       // Chaîne vocale pilotée par tts-settings.json (GET/POST /api/tts/settings):
       // ordre + activation choisis dans le panneau de paramétrage, relu à chaque synthèse.
