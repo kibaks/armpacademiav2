@@ -1875,7 +1875,7 @@ Message exact de l'apprenant : "${fullMessage}"
       contents: conversationPrompt,
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
-      primaryTimeoutMs: 8000,
+      primaryTimeoutMs: 15000,
       config: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'minimal' } },
       fallbackConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'low' } },
       requireText: true,
