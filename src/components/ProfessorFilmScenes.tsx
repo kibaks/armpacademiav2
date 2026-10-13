@@ -988,8 +988,8 @@ export function buildSynchronizedLessonScreens(
     const shortLabel = pillarMeta.tab;
 
     // Clean, eloquent & well-paced explanation & practical rule matched to whiteboard drawing speed
-    const explanationText = truncateClean(parsed.explanationBody, 230);
-    const fieldRuleText = truncateClean(parsed.terrainRule, 150);
+    const explanationText = cleanPedagogicalClause(parsed.explanationBody);
+    const fieldRuleText = cleanPedagogicalClause(parsed.terrainRule);
 
     const variation =
       PEDAGOGICAL_TRANSITION_VARIATIONS[

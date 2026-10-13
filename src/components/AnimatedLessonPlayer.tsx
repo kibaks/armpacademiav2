@@ -1,4 +1,5 @@
-import { authenticatedFetch } from '../lib/adminApi';
+import { CartoonLessonStage } from './CartoonLessonStage';
+import './CartoonLesson.css';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Play,
@@ -31,12 +32,8 @@ import {
   analyzeFrenchPhonemeAt
 } from '../utils/speechService';
 import { ambientMusicService } from '../utils/ambientMusicService';
-import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
-import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
-import imgTutrice from '../assets/images/aisha_avatar_thumb.jpg';
 import {
   ContextualSceneType,
-  ProfessorContextualStage,
   buildSynchronizedLessonScreens,
   formatProtocolPrecedenceIdentity
 } from './ProfessorFilmScenes';
@@ -168,19 +165,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [voicePersona, setVoicePersona] = useState<VoicePersona>(() => speechService.getVoicePersona());
 
-  // Miniature Avatar inside Course Screen state
-  const [avatarInCoursePosition, setAvatarInCoursePosition] = useState<'top-right' | 'top-left' | 'minimized'>('top-right');
-  const [avatarMiniatureSize, setAvatarMiniatureSize] = useState<'miniature' | 'compact' | 'expanded'>('miniature');
-  const [pipExpanded, setPipExpanded] = useState<boolean>(false);
-  const [manualWinkUntil, setManualWinkUntil] = useState<number>(0);
-
-  // Real-Time 60 FPS Wav2Lip Video Engine state (active by default)
-  const [flowVideoUrl, setFlowVideoUrl] = useState<string | null>(null);
-  const [flowVideoStatus, setFlowVideoStatus] = useState<'idle' | 'generating' | 'ready' | 'live_neural'>('live_neural');
-  const [flowStatusMessage, setFlowStatusMessage] = useState<string>(
-    'Synthèse Vidéo Réelle Wav2Lip HD (60 FPS) active • Synchronisation labiale, émotions & gestuelle des mains'
-  );
-  const flowVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [manualWinkUntil] = useState(0);
 
   // Overall 0..100 progress & per-screen 0..1 progress
   const [filmProgress, setFilmProgress] = useState<number>(0);
@@ -191,13 +176,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const smoothProgressRef = useRef<number>(0);
   const lastVoiceStartAtRef = useRef<number>(0);
-
-  // Direct DOM Refs for 60 FPS Zero-Lag Wav2Lip Video Synthesis & HUD Overlays
-  const headerWav2LipCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const headerEmotionBadgeRef = useRef<SVGTextElement | null>(null);
-  const headerPostureBadgeRef = useRef<SVGTextElement | null>(null);
-  const headerVisemeBadgeRef = useRef<SVGTextElement | null>(null);
-  const headerEqBarRefs = useRef<(SVGRectElement | null)[]>([]);
 
   // Smoothly damped facial & gesture kinematics ref so Aïsha's movements are fluid and poised
   const smoothFaceRef = useRef({
@@ -541,7 +519,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const handleCycleVoicePersona = () => {
     speechService.unlockAudio();
-    const personas: VoicePersona[] = ['vivienne', 'charline', 'denise', 'eloise', 'henri'];
+    const personas: VoicePersona[] = ['vivienne', 'henri'];
     const nextPersona = personas[(personas.indexOf(voicePersona) + 1) % personas.length] || 'vivienne';
     setVoicePersona(nextPersona);
     speechService.setVoicePersona(nextPersona);
@@ -553,10 +531,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         customSentences: calibratedLesson.acts.map((a) => a.text),
       });
     }
-  };
-
-  const triggerManualWink = () => {
-    setManualWinkUntil(Date.now() + 850);
   };
 
   const [musicEnabled, setMusicEnabled] = useState(() => ambientMusicService.getState().enabled);
@@ -772,842 +746,68 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const totalFormattedTime = '01:05';
   const uploadedVideoUrl = (lesson as any)?.mediaUrl;
 
-  // ===========================================================================
-  // DEDICATED WEB WORKER + requestAnimationFrame AVATAR RENDERING ENGINE
-  // All facial expression math, phoneme-viseme interpolation, and 3D head kinematics
-  // are computed in the background Web Worker thread (avatarExpressionWorker.ts)
-  // and applied inside requestAnimationFrame with zero main-thread blocking!
-  // ===========================================================================
-  const isActivelySpeakingRef = useRef(false);
-  isActivelySpeakingRef.current = isActivelySpeaking;
-
-  const [manualStudioEmotion, setManualStudioEmotion] = useState<AvatarEmotion | 'auto'>('auto');
-  const manualStudioEmotionRef = useRef<AvatarEmotion | 'auto'>('auto');
-  manualStudioEmotionRef.current = manualStudioEmotion;
-
-  const [cameraZoomMode, setCameraZoomMode] = useState<'close_up' | 'cinematic'>('close_up');
-
-  const handleSelectStudioEmotion = (emo: AvatarEmotion | 'auto') => {
-    setManualStudioEmotion(emo);
-    if (emo !== 'auto') {
-      avatarExpressionEngine.setEmotion(emo);
-    }
-  };
-
+  const playerRef = useRef<HTMLDivElement>(null);
+  const [fullScreen, setFullScreen] = useState(false);
+  const [motionEnabled, setMotionEnabled] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   useEffect(() => {
-    // Sélecteur de Zoom Caméra — both framings keep Aïsha FULLY inside the
-    // camera window (hair crown y=149 → chin y≈590 with margin), including
-    // the object-cover trim of the 720×620 backing in the responsive box:
-    //  - Gros Plan: full head framed, speech articulation centered
-    //  - Plan Buste: head + shoulders + studio decor ("vue sur les épaules")
-    // Window aspect matches the 720×620 backing (1.161) so the engine crop
-    // trims nothing.
-    const viewport =
-      cameraZoomMode === 'close_up'
-        ? { x: 151, y: 116, w: 597, h: 514 }
-        : { x: 55, y: 104, w: 785, h: 676 };
-
-    const unregister = avatarExpressionEngine.registerAvatarTarget({
-      wav2lipCanvas: headerWav2LipCanvasRef.current,
-      wav2lipViewport: viewport,
-      emotionBadgeEl: headerEmotionBadgeRef.current,
-      postureBadgeEl: headerPostureBadgeRef.current,
-      visemeBadgeEl: headerVisemeBadgeRef.current,
-      eqBars: headerEqBarRefs.current,
-      isSpeakingOverride: () => Boolean(isActivelySpeakingRef.current),
-      emotionOverride: () =>
-        manualStudioEmotionRef.current !== 'auto' ? manualStudioEmotionRef.current : undefined,
-    });
-    return unregister;
-  }, [cameraZoomMode]);
-
-  // ===========================================================================
-  // GOOGLE FLOW (VEO 3.1) VIDEO GENERATION & VOICE-SYNCHRONIZED GESTURE ENGINE
-  // ===========================================================================
-  const triggerGoogleFlowVideoGeneration = useCallback(
-    async (forceRegenerate: boolean = false) => {
-      try {
-        setFlowVideoStatus('generating');
-        setFlowStatusMessage('Génération vidéo Google Flow (Veo HD) d’Aïsha en cours…');
-        const startRes = await authenticatedFetch('/api/ai/flow-video/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            forceRegenerate,
-            contextPrompt: `Chapitre: ${safeTitle}. S'adresse avec préséance à ${userPrecedence.spokenFullName}.`
-          })
-        });
-
-        if (!startRes.ok) {
-          setFlowVideoStatus('live_neural');
-          setFlowStatusMessage('Studio Google Flow Neural HD actif • Expressions faciales & voix synchronisées');
-          return;
-        }
-
-        const startData = await startRes.json();
-        if (startData.done && startData.videoUrl) {
-          setFlowVideoUrl(startData.videoUrl);
-          setFlowVideoStatus('ready');
-          setFlowStatusMessage('Vidéo Google Flow (Veo HD) prête & synchronisée avec la voix');
-          return;
-        }
-
-        if (startData.fallback === 'live_neural' || !startData.operationName) {
-          setFlowVideoStatus('live_neural');
-          setFlowStatusMessage(
-            startData.message || 'Studio Google Flow Neural HD actif • Expressions faciales & voix synchronisées'
-          );
-          return;
-        }
-
-        const opName = startData.operationName;
-
-        // Poll status every 6 seconds up to 25 times
-        let attempts = 0;
-        const pollTimer = window.setInterval(async () => {
-          attempts += 1;
-          try {
-            const stRes = await authenticatedFetch('/api/ai/flow-video/status', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ operationName: opName })
-            });
-            if (!stRes.ok) {
-              if (attempts > 3) {
-                window.clearInterval(pollTimer);
-                setFlowVideoStatus('live_neural');
-                setFlowStatusMessage('Studio Google Flow Neural HD actif • Expressions faciales & voix synchronisées');
-              }
-              return;
-            }
-            const stData = await stRes.json();
-            if (stData.done && stData.videoUrl) {
-              window.clearInterval(pollTimer);
-              setFlowVideoUrl(stData.videoUrl);
-              setFlowVideoStatus('ready');
-              setFlowStatusMessage('Vidéo Google Flow (Veo HD) active & synchronisée avec Vivienne HD');
-            } else if (stData.fallback === 'live_neural' || attempts >= 25) {
-              window.clearInterval(pollTimer);
-              setFlowVideoStatus('live_neural');
-              setFlowStatusMessage('Studio Google Flow Neural HD actif • Expressions faciales & voix synchronisées');
-            }
-          } catch {
-            if (attempts >= 5) {
-              window.clearInterval(pollTimer);
-              setFlowVideoStatus('live_neural');
-            }
-          }
-        }, 6000);
-      } catch {
-        setFlowVideoStatus('live_neural');
-        setFlowStatusMessage('Studio Google Flow Neural HD actif • Expressions faciales & voix synchronisées');
-      }
-    },
-    [safeTitle, userPrecedence.spokenFullName]
-  );
-
-  // Keep 60 FPS WebGL Wav2Lip engine active by default
-  useEffect(() => {
-    setFlowVideoUrl(null);
-    setFlowVideoStatus('live_neural');
-    setFlowStatusMessage(
-      'Synthèse Vidéo Réelle Wav2Lip HD (60 FPS) active • Synchronisation labiale, sourire & port de tête féminin'
-    );
+    const changed = () => setFullScreen(document.fullscreenElement === playerRef.current);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
   }, []);
-
-  // Synchronize optional HTML5 <video> playback if ever loaded
-  useEffect(() => {
-    const vid = flowVideoRef.current;
-    if (!vid || !flowVideoUrl) return;
-    if (isActivelySpeaking) {
-      vid.playbackRate = Math.max(0.85, Math.min(1.18, 0.92 + dampedFace.mouth * 0.25));
-      if (vid.paused) {
-        vid.play().catch(() => {});
-      }
-    } else {
-      if (!vid.paused) {
-        vid.pause();
-      }
-    }
-  }, [isActivelySpeaking, dampedFace.mouth, flowVideoUrl]);
-
-  // Voice-synchronized upper-body & shoulder gesture kinematics ("gestuels cadrant avec sa voix")
-  const gestureKinematics = useMemo(() => {
-    const p = actVoiceProgress;
-    const ruleStart = currentScreenCard.fieldRuleStartRatio;
-    const voiceAmp = isActivelySpeaking ? dampedFace.mouth : 0;
-    const waveA = isActivelySpeaking ? Math.sin(tickCount * 0.08) : Math.sin(tickCount * 0.02) * 0.2;
-    const waveB = isActivelySpeaking ? Math.cos(tickCount * 0.065) : Math.cos(tickCount * 0.02) * 0.2;
-
-    if (p < 0.22) {
-      return {
-        gestureName: `Salutation de préséance à ${userPrecedence.displayFullName}`,
-        shoulderShiftX: waveA * 2.5,
-        shoulderLiftY: -voiceAmp * 5 + waveB * 1.8,
-        torsoScaleX: 1 + voiceAmp * 0.018,
-        mode: 'precedence_salute' as const
-      };
-    } else if (p < ruleStart) {
-      return {
-        gestureName: 'Posture pédagogique cadencée sur la voix',
-        shoulderShiftX: waveA * 4.2,
-        shoulderLiftY: -voiceAmp * 7.5 + waveB * 2.5,
-        torsoScaleX: 1 + voiceAmp * 0.026,
-        mode: 'open_teaching' as const
-      };
-    } else {
-      return {
-        gestureName: 'Présence posée de cadrage & sagesse pratique',
-        shoulderShiftX: waveA * 2.2,
-        shoulderLiftY: -voiceAmp * 4.5 + waveB * 1.5,
-        torsoScaleX: 1 + voiceAmp * 0.015,
-        mode: 'poised_framing' as const
-      };
-    }
-  }, [
-    actVoiceProgress,
-    currentScreenCard.fieldRuleStartRatio,
-    isActivelySpeaking,
-    dampedFace.mouth,
-    tickCount,
-    userPrecedence.displayFullName
-  ]);
+  const toggleFullScreen = async () => {
+    try {
+      if (document.fullscreenElement === playerRef.current) await document.exitFullscreen();
+      else await playerRef.current?.requestFullscreen();
+    } catch { /* The course remains usable when fullscreen is unavailable. */ }
+  };
+  const nextChapter = () => requiresValidationTest && !isLessonValidated ? onOpenValidationTest?.() : onNextLesson?.();
 
   return (
-    <div className="rounded-3xl overflow-hidden border-2 border-amber-500/40 bg-slate-950 shadow-2xl select-none">
-      {/* =========================================================================== */}
-      {/* 1. COMPACT EXECUTIVE TOOLBAR — PROTOCOLE DE PRÉSÉANCE & CONTRÔLE DU COURS    */}
-      {/* =========================================================================== */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-amber-500/30 px-3 sm:px-4 py-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* A. Learner Precedence & Course Info */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative shrink-0">
-              <img
-                src={effectiveUserProfile?.avatarUrl || imgTutrice}
-                alt={userPrecedence.displayFullName}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover border-2 border-amber-400"
-                referrerPolicy="no-referrer"
-              />
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-950" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-black uppercase">
-                  {userPrecedence.roleBadgeLabel}
-                </span>
-                <span className="text-[10px] font-semibold text-cyan-300 truncate">
-                  {userPrecedence.precedenceTitle}
-                </span>
-                <span className="text-slate-600">·</span>
-                <span className="text-[10px] font-bold text-amber-400/90">
-                  {course.code || 'MARCHÉS PUBLICS'} • {course.legalRef || 'Loi n° 10/010'}
-                </span>
-              </div>
-              <div className="text-xs sm:text-sm font-black text-white truncate">
-                {userPrecedence.displayFullName} • <span className="text-slate-300 font-medium">{safeTitle}</span>
-              </div>
-            </div>
+    <div ref={playerRef} className="cartoon-player" data-motion={motionEnabled ? "full" : "reduced"}>
+      <header className="cartoon-player__header">
+        <div className="cartoon-player__heading">
+          <span className="cartoon-player__mark"><GraduationCap size={23} aria-hidden="true" /></span>
+          <div><small>{course.code || 'ACADEMIA'} · COURS ANIMÉ · CHAPITRE {lessonIndex + 1}</small><h2>{safeTitle}</h2></div>
+        </div>
+        <div className="cartoon-player__header-actions">
+          {uploadedVideoUrl && <button type="button" className={`cartoon-player__pill ${showRawVideo ? 'is-active' : ''}`} onClick={() => setShowRawVideo(value => !value)} aria-pressed={showRawVideo} aria-label={showRawVideo ? 'Afficher le cours animé' : 'Afficher la vidéo du cours'}><Video /><span>{showRawVideo ? 'Animation' : 'Vidéo'}</span></button>}
+          <button type="button" className="cartoon-player__icon-button" onClick={toggleFullScreen} aria-label={fullScreen ? 'Quitter le plein écran' : 'Afficher en plein écran'}>{fullScreen ? <Minimize2 /> : <Maximize2 />}</button>
+        </div>
+      </header>
+      {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
+        <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && motionEnabled} speaking={isSpeaking} mouthOpenness={isSpeaking ? dampedFace.mouth : 0} viseme={isSpeaking ? effectiveViseme : 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || 'Loi n° 10/010'} sceneCount={calibratedLesson.acts.length} />}
+      <div className="cartoon-player__transport">
+        <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
+        <div className="cartoon-player__tools">
+          <div className="cartoon-player__tool-group">
+            <button type="button" onClick={handleTogglePlay} className="cartoon-player__play">{isPlaying ? <Pause /> : <Play />}{isPlaying ? 'Pause' : 'Lire le cours'}</button>
+            <button type="button" onClick={handleRestart} className="cartoon-player__icon-button" aria-label="Recommencer la leçon"><RotateCcw /></button>
+            <button type="button" onClick={() => handleJumpToScreen(activeAct.index - 1)} disabled={activeAct.index <= 0} className="cartoon-player__icon-button" aria-label="Scène précédente"><ChevronLeft /></button>
+            <button type="button" onClick={() => handleJumpToScreen(activeAct.index + 1)} disabled={activeAct.index >= calibratedLesson.acts.length - 1} className="cartoon-player__icon-button" aria-label="Scène suivante"><ChevronRight /></button>
           </div>
-
-          {/* B. Screen Planches 1..5 Quick Navigation */}
-          <div className="flex items-center gap-1.5 ml-auto">
-            <button
-              type="button"
-              onClick={() => handleJumpToScreen(activeAct.index - 1)}
-              disabled={activeAct.index <= 0}
-              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 text-[10px] font-bold flex items-center gap-0.5 border border-slate-700 transition cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Préc.</span>
-            </button>
-
-            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
-              {calibratedLesson.acts.map((act, idx) => {
-                const isCur = idx === activeAct.index;
-                const isPassed = idx < activeAct.index;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleJumpToScreen(idx)}
-                    className={`px-2 py-1 rounded-md text-[10px] font-black transition cursor-pointer ${
-                      isCur
-                        ? 'bg-amber-400 text-slate-950 shadow-xs'
-                        : isPassed
-                        ? 'bg-slate-800 text-emerald-400 hover:bg-slate-700'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                    }`}
-                    title={`Planche ${idx + 1}/5 : ${act.zoneTitle}`}
-                  >
-                    Planche {idx + 1}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleJumpToScreen(activeAct.index + 1)}
-              disabled={activeAct.index >= 4}
-              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 text-[10px] font-bold flex items-center gap-0.5 border border-slate-700 transition cursor-pointer"
-            >
-              <span className="hidden sm:inline">Suiv.</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Navigation Inter-Chapitres Haut de Page */}
-            <div className="flex items-center gap-1 pl-1.5 border-l border-slate-800 ml-1">
-              <button
-                type="button"
-                disabled={!hasPrevLesson}
-                onClick={onPrevLesson}
-                className="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-200 text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-                title="Chapitre précédent"
-              >
-                <ChevronLeft className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden xl:inline">Précédent</span>
-              </button>
-
-              {requiresValidationTest && (
-                <button
-                  type="button"
-                  onClick={onOpenValidationTest}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 border transition cursor-pointer ${
-                    isLessonValidated
-                      ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
-                      : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-300 animate-pulse'
-                  }`}
-                  title={isLessonValidated ? 'Test d’assimilation validé' : 'Test obligatoire pour débloquer le chapitre suivant'}
-                >
-                  {isLessonValidated ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <ShieldCheck className="w-3 h-3 text-amber-400" />}
-                  <span>{isLessonValidated ? 'Test validé' : 'Test requis'}</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (requiresValidationTest && !isLessonValidated) {
-                    onOpenValidationTest?.();
-                  } else {
-                    onNextLesson?.();
-                  }
-                }}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition cursor-pointer shadow-sm ${
-                  requiresValidationTest && !isLessonValidated
-                    ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-300 font-black'
-                    : 'bg-[#0866FF] hover:bg-blue-600 text-white border-blue-400 font-bold'
-                }`}
-                title={
-                  requiresValidationTest && !isLessonValidated
-                    ? 'Passer le test de validation requis'
-                    : 'Passer au chapitre suivant'
-                }
-              >
-                <span>
-                  {requiresValidationTest && !isLessonValidated ? 'Valider par Test →' : 'Suivant'}
-                </span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Avatar Position / Visibility Toggle in Course Screen */}
-            <div className="flex items-center gap-1 pl-1 border-l border-slate-800 ml-1">
-              <button
-                type="button"
-                onClick={() =>
-                  setAvatarInCoursePosition((pos) =>
-                    pos === 'top-right' ? 'top-left' : pos === 'top-left' ? 'minimized' : 'top-right'
-                  )
-                }
-                className="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-                title="Position de l'avatar Aïsha dans l'écran (Haut-Droit / Haut-Gauche / Réduire en badge)"
-              >
-                <span>👩🏽‍🏫</span>
-                <span className="hidden md:inline">
-                  {avatarInCoursePosition === 'top-right'
-                    ? 'Avatar Haut-Droit'
-                    : avatarInCoursePosition === 'top-left'
-                    ? 'Avatar Haut-Gauche'
-                    : 'Avatar Réduit'}
-                </span>
-              </button>
-            </div>
+          <div className="cartoon-player__tool-group">
+            <button type="button" onClick={handleToggleMute} className="cartoon-player__pill" aria-pressed={!voiceMuted} aria-label={voiceMuted ? 'Activer la narration' : 'Couper la narration'}>{voiceMuted ? <VolumeX /> : <Volume2 />}{voiceMuted ? 'Sans voix' : 'Narration'}</button>
+            <button type="button" onClick={handleCycleSpeed} className="cartoon-player__pill" aria-label={`Vitesse de lecture : ${playbackSpeed}. Changer la vitesse`}>{playbackSpeed}×</button>
+            <button type="button" onClick={handleCycleVoicePersona} className="cartoon-player__pill" aria-label="Changer la voix du professeur">{voicePersona === 'henri' ? 'Prof. Henri' : 'Prof. Aïsha'}</button>
+            <button type="button" onClick={() => setMotionEnabled(value => !value)} className="cartoon-player__pill" aria-pressed={!motionEnabled} aria-label="Mouvements réduits"><Sparkles />{motionEnabled ? 'Mouvements' : 'Mouvements réduits'}</button>
+            <button type="button" onClick={() => ambientMusicService.toggleEnabled()} className="cartoon-player__icon-button" aria-pressed={musicEnabled} aria-label={musicEnabled ? 'Couper la musique' : 'Activer la musique'}><Music /></button>
           </div>
         </div>
+        <p className="cartoon-player__status" role="status">{isPreloading || isCoursePreloading ? 'Préparation de la narration…' : isSpeaking ? 'Les scènes suivent la narration.' : voiceMuted ? 'Parcourez le cours à votre rythme.' : isPlaying ? 'Le cours est en lecture.' : 'En pause · reprenez quand vous le souhaitez.'}</p>
       </div>
-
-      {/* 2. WIDESCREEN 16:9 FULL-HEIGHT WHITEBOARD STAGE WITH AVATAR IN MINIATURE ABOVE THE SCREEN */}
-      {showRawVideo && uploadedVideoUrl ? (
-        <div className="relative aspect-video w-full bg-black">
-          <video
-            src={uploadedVideoUrl}
-            controls
-            autoPlay
-            playsInline
-            className="w-full h-full object-contain"
-          />
-        </div>
-      ) : (
-        <div className="relative w-full aspect-video min-h-[380px] sm:min-h-[480px] lg:min-h-[560px] xl:min-h-[640px] bg-slate-950 overflow-hidden">
-          {/* ========================================================================= */}
-          {/* A. AVATAR D'AÏSHA EN MINIATURE AU DESSUS DE L'ÉCRAN DU COURS (PICTURE-IN-PICTURE) */}
-          {/* ========================================================================= */}
-          {avatarInCoursePosition !== 'minimized' ? (
-            <div
-              className={`absolute z-30 transition-all duration-300 group select-none ${
-                avatarInCoursePosition === 'top-left' ? 'top-3 left-4' : 'top-3 right-4'
-              } ${
-                avatarMiniatureSize === 'compact'
-                  ? 'w-36 sm:w-44 h-[110px] sm:h-[130px]'
-                  : avatarMiniatureSize === 'expanded'
-                  ? 'w-72 sm:w-80 md:w-96 h-[225px] sm:h-[260px] md:h-[305px]'
-                  : 'w-48 sm:w-56 md:w-64 h-[145px] sm:h-[168px] md:h-[192px]'
-              }`}
-            >
-              <div
-                className={`relative w-full h-full rounded-2xl overflow-hidden bg-slate-950/95 border-2 transition-all duration-300 shadow-2xl backdrop-blur-md ${
-                  isActivelySpeaking
-                    ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.35)] ring-2 ring-amber-400/50'
-                    : 'border-slate-700/80 shadow-[0_8px_30px_rgba(0,0,0,0.8)]'
-                }`}
-              >
-                {/* Real-Time 60 FPS WebGL Wav2Lip Video Synthesizer inside Miniature Course Screen */}
-                <canvas
-                  ref={headerWav2LipCanvasRef}
-                  width={720}
-                  height={620}
-                  className="w-full h-full block object-cover"
-                />
-
-                {/* Top Badge: En Direct / Live Status */}
-                <div className="absolute top-2 left-2 z-20 flex items-center gap-1 pointer-events-none">
-                  <span className="px-1.5 py-0.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-amber-400/60 text-[9px] font-black text-amber-300 flex items-center gap-1 shadow-md">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>PROF. AÏSHA</span>
-                  </span>
-                  {isActivelySpeaking && (
-                    <span className="px-1.5 py-0.5 rounded-md bg-amber-950/85 backdrop-blur-md border border-amber-500/50 text-[9px] font-bold text-amber-200 hidden sm:flex items-center gap-0.5">
-                      <span>🎙️</span>
-                      <span>PARLE</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Micro Action Buttons on Hover/Visible */}
-                <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition">
-                  {/* Switch Position (Gauche / Droite) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAvatarInCoursePosition((p) => (p === 'top-right' ? 'top-left' : 'top-right'));
-                    }}
-                    className="p-1 rounded-md bg-slate-950/85 hover:bg-slate-900 border border-white/20 text-slate-300 text-[10px] cursor-pointer shadow-md"
-                    title={avatarInCoursePosition === 'top-right' ? 'Déplacer à gauche' : 'Déplacer à droite'}
-                  >
-                    ⇄
-                  </button>
-                  {/* Toggle Zoom Mode (Gros Plan / Plan Buste) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCameraZoomMode((m) => (m === 'close_up' ? 'cinematic' : 'close_up'));
-                    }}
-                    className="px-1.5 py-0.5 rounded-md bg-slate-950/85 hover:bg-slate-900 border border-white/20 text-slate-200 text-[9px] font-bold cursor-pointer shadow-md"
-                    title="Cadrage Caméra (Gros Plan / Plan Buste)"
-                  >
-                    {cameraZoomMode === 'close_up' ? 'Zoom' : 'Buste'}
-                  </button>
-                  {/* Toggle Miniature Size */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAvatarMiniatureSize((s) => (s === 'miniature' ? 'expanded' : s === 'expanded' ? 'compact' : 'miniature'));
-                    }}
-                    className="p-1 rounded-md bg-slate-950/85 hover:bg-slate-900 border border-white/20 text-slate-300 text-[10px] cursor-pointer shadow-md"
-                    title="Changer taille miniature"
-                  >
-                    {avatarMiniatureSize === 'expanded' ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-                  </button>
-                  {/* Minimize to Badge */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAvatarInCoursePosition('minimized');
-                    }}
-                    className="p-1 rounded-md bg-slate-950/85 hover:bg-rose-950 border border-white/20 text-slate-300 hover:text-rose-300 text-[10px] cursor-pointer shadow-md"
-                    title="Réduire l'avatar en badge audio discret"
-                  >
-                    _
-                  </button>
-                </div>
-
-                {/* Bottom Soundwave Equalizer strip inside miniature */}
-                {isActivelySpeaking && (
-                  <div className="absolute bottom-1.5 left-2 right-2 z-20 flex items-center justify-between px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-xs border border-amber-400/30">
-                    <span className="text-[8.5px] font-bold text-amber-300 truncate">
-                      {gestureKinematics.gestureName.slice(0, 32)}
-                    </span>
-                    <div className="flex items-center gap-0.5">
-                      {[0.4, 0.9, 0.6, 1.0, 0.5, 0.8].map((h, i) => (
-                        <div
-                          key={i}
-                          className="w-0.5 bg-amber-400 rounded-full animate-pulse"
-                          style={{
-                            height: `${Math.round(4 + h * 8 * Math.max(0.2, dampedFace.mouth))}px`,
-                            animationDelay: `${i * 120}ms`
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Minimized Pill Badge in top corner */
-            <div className="absolute top-3 right-4 z-30">
-              <button
-                type="button"
-                onClick={() => setAvatarInCoursePosition('top-right')}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/90 border-2 border-amber-400 text-white shadow-xl hover:bg-slate-900 transition cursor-pointer"
-                title="Cliquer pour réafficher l'avatar miniature d'Aïsha"
-              >
-                <div className="relative w-6 h-6 rounded-full overflow-hidden border border-amber-300">
-                  <img src={imgTutrice} alt="Aïsha" className="w-full h-full object-cover" />
-                  {isActivelySpeaking && (
-                    <span className="absolute inset-0 bg-amber-400/20 animate-pulse" />
-                  )}
-                </div>
-                <span className="text-[10px] font-bold text-amber-300 flex items-center gap-1">
-                  <span>Prof. Aïsha</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                </span>
-                <span className="text-[9px] text-slate-400 border-l border-slate-700 pl-1.5">
-                  Afficher miniature ↗
-                </span>
-              </button>
-            </div>
-          )}
-          <svg
-            viewBox="0 0 960 540"
-            className="w-full h-full block"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            <defs>
-              <linearGradient id="studioWallBg" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0F172A" />
-                <stop offset="100%" stopColor="#020617" />
-              </linearGradient>
-
-              <pattern id="boardDots" width="22" height="22" patternUnits="userSpaceOnUse">
-                <circle cx="2" cy="2" r="1.1" fill="#CBD5E1" />
-              </pattern>
-
-              <filter id="cardDropShadow" x="-10%" y="-10%" width="125%" height="125%">
-                <feDropShadow dx="2" dy="4" stdDeviation="3" floodColor="#0F172A" floodOpacity="0.24" />
-              </filter>
-            </defs>
-
-            {/* A. STUDIO BACKGROUND & FULL-HEIGHT PRESENTATION WHITEBOARD (516px tall) */}
-            <rect x="0" y="0" width="960" height="540" fill="url(#studioWallBg)" />
-
-            <g filter="url(#cardDropShadow)">
-              <rect
-                x="16"
-                y="12"
-                width="928"
-                height="516"
-                rx="18"
-                fill="#FFFDF9"
-                stroke="#1E293B"
-                strokeWidth="3"
-              />
-              <rect x="16" y="12" width="928" height="516" rx="18" fill="url(#boardDots)" />
-
-              {/* Top Presentation Window Bar */}
-              <rect x="16" y="12" width="928" height="34" rx="14" fill="#0F172A" />
-              <circle cx="38" cy="29" r="5" fill="#F43F5E" />
-              <circle cx="54" cy="29" r="5" fill="#FBBF24" />
-              <circle cx="70" cy="29" r="5" fill="#10B981" />
-              <text x="90" y="33" fill="#FFFFFF" fontSize="11" fontWeight="900">
-                ✍️ TABLEAU BLANC GRAND ÉCRAN — {safeTitle.slice(0, 46).toUpperCase()}
-              </text>
-              <text
-                x="926"
-                y="33"
-                textAnchor="end"
-                fill="#FBBF24"
-                fontSize="10.5"
-                fontWeight="800"
-                fontFamily="monospace"
-              >
-                PLANCHE {activeAct.index + 1}/5 • DESSIN EN DIRECT {Math.round(actVoiceProgress * 100)}%
-              </text>
-            </g>
-
-            {/* B. WIDESCREEN STAGE WITH ARTICULATED HAND DRAWING EXPLANATIONS */}
-            <ProfessorContextualStage
-              data={calibratedLesson.sceneData}
-              activeActIndex={activeAct.index}
-              actVoiceProgress={actVoiceProgress}
-              tickCount={tickCount}
-              courseLegalRef={course.legalRef}
-              onSelectScreen={handleJumpToScreen}
-            />
-          </svg>
-        </div>
-      )}
-
-      {/* 3. BOTTOM TIMELINE & CONTROLS */}
-      <div className="bg-slate-900 border-t border-slate-800 px-3 sm:px-5 py-3 flex flex-col gap-2.5">
-        {/* 5-Screen Interactive Timeline Bar */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono font-bold text-amber-400 w-11">
-            {formatTime(filmProgress)}
-          </span>
-          <div className="relative flex-1 h-2.5 bg-slate-800 rounded-full overflow-hidden cursor-pointer">
-            <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-400 via-emerald-400 to-cyan-400 transition-all duration-75"
-              style={{ width: `${filmProgress}%` }}
-            />
-            {[20, 40, 60, 80].map((mark) => (
-              <div
-                key={mark}
-                className="absolute top-0 bottom-0 w-0.5 bg-slate-950/80"
-                style={{ left: `${mark}%` }}
-              />
-            ))}
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={0.2}
-              value={filmProgress}
-              onChange={(e) => handleSeek(parseFloat(e.target.value))}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              aria-label="Progression de la leçon"
-            />
-          </div>
-          <span className="text-[11px] font-mono font-bold text-slate-400 w-11 text-right">
-            {totalFormattedTime}
-          </span>
-        </div>
-
-        {/* Transport & Theme Switcher */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleTogglePlay}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md transition"
-            >
-              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              <span>{isPlaying ? 'Pause' : 'Lecture'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleRestart}
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-              title="Recommencer dès l'Écran 1"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleJumpToScreen(activeAct.index - 1)}
-              disabled={activeAct.index <= 0}
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 transition"
-              title="Écran précédent"
-            >
-              <Rewind className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleJumpToScreen(activeAct.index + 1)}
-              disabled={activeAct.index >= 4}
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 transition"
-              title="Écran suivant"
-            >
-              <FastForward className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleToggleMute}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 border transition ${
-                voiceMuted
-                  ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
-                  : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-              }`}
-            >
-              {voiceMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-              <span>{voiceMuted ? 'Voix coupée' : 'Voix active'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => ambientMusicService.toggleEnabled()}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer ${
-                musicEnabled
-                  ? 'bg-indigo-950/75 border-indigo-400/50 text-indigo-200'
-                  : 'bg-slate-800 border-slate-700 text-slate-400'
-              }`}
-              title="Activer ou couper la musique douce d'ambiance au fond"
-            >
-              <Music className="w-3.5 h-3.5 text-amber-300" />
-              <span>{musicEnabled ? 'Musique douce : ON' : 'Musique : OFF'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCycleSpeed}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-black transition cursor-pointer"
-              title="Vitesse d'élocution d'Aïsha"
-            >
-              {playbackSpeed}x • {playbackSpeed >= 1.1 ? 'Dynamique' : playbackSpeed >= 1.0 ? 'Fluide & Naturel' : 'Posé'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCycleVoicePersona}
-              className="px-2.5 py-1.5 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-200 text-xs font-black transition cursor-pointer"
-              title="Changer de timbre vocal haute définition"
-            >
-              🎙️ {voicePersona === 'denise'
-                ? 'Denise HD • Éloquente'
-                : voicePersona === 'charline'
-                ? 'Charline HD • Mélodieuse'
-                : voicePersona === 'vivienne'
-                ? 'Vivienne HD • Douce'
-                : 'Ariane HD • Cristalline'}
-            </button>
-          </div>
-
-          {/* 5 Quick Screen Jump Pills (Structured 5 Pillars) */}
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {calibratedLesson.sceneData.screens.map((scr, idx) => {
-              const isAct = activeAct.index === idx;
-              return (
-                <button
-                  key={scr.screenNumber}
-                  type="button"
-                  onClick={() => handleJumpToScreen(idx)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition whitespace-nowrap cursor-pointer ${
-                    isAct
-                      ? 'bg-amber-400 text-slate-950 shadow-xs'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                  }`}
-                >
-                  {scr.shortTabLabel}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* =========================================================================== */}
-        {/* NOUVELLE BARRE DE NAVIGATION INTER-CHAPITRES & VALIDATION DU TEST DE LEÇON */}
-        {/* =========================================================================== */}
-        <div className="pt-2.5 pb-1 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
-          {/* Bouton Précédent */}
-          <button
-            type="button"
-            disabled={!hasPrevLesson}
-            onClick={onPrevLesson}
-            className="px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none text-slate-200 text-xs font-bold flex items-center gap-2 border border-slate-700 transition cursor-pointer shadow-sm"
-            title="Revenir au chapitre précédent"
-          >
-            <ChevronLeft className="w-4 h-4 text-amber-400" />
-            <span>Chapitre précédent</span>
-          </button>
-
-          {/* Statut & Bouton de Test de Validation lié à la Leçon */}
-          <div className="flex items-center gap-2">
-            {requiresValidationTest ? (
-              isLessonValidated ? (
-                <button
-                  type="button"
-                  onClick={onOpenValidationTest}
-                  className="px-3 sm:px-4 py-2 rounded-xl bg-emerald-950/70 border border-emerald-500/50 hover:bg-emerald-900/60 text-emerald-300 text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-sm"
-                  title="Revoir le test d’assimilation (réussi à 100%)"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Test d’assimilation : Validé ✓</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenValidationTest}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-black flex items-center gap-2 transition cursor-pointer shadow-lg shadow-amber-500/20 animate-pulse border border-amber-300"
-                  title="Ce chapitre requiert de réussir un test de 2 questions pour débloquer la suite"
-                >
-                  <ShieldCheck className="w-4 h-4 text-slate-950" />
-                  <span>Valider par le test (Requis) 📝</span>
-                </button>
-              )
-            ) : (
-              <span className="text-[11px] text-slate-400 font-medium">
-                Chapitre {lessonIndex + 1} / {course.lessons?.length || 1}
-              </span>
-            )}
-          </div>
-
-          {/* Bouton Suivant */}
-          <button
-            type="button"
-            onClick={() => {
-              if (requiresValidationTest && !isLessonValidated) {
-                onOpenValidationTest?.();
-              } else {
-                onNextLesson?.();
-              }
-            }}
-            className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow-md ${
-              requiresValidationTest && !isLessonValidated
-                ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-300 ring-2 ring-amber-400/40'
-                : 'bg-[#0866FF] hover:bg-blue-600 text-white'
-            }`}
-            title={
-              requiresValidationTest && !isLessonValidated
-                ? 'Vous devez réussir le test de validation pour passer'
-                : 'Passer au chapitre suivant'
-            }
-          >
-            <span>
-              {requiresValidationTest && !isLessonValidated
-                ? 'Valider par le Test pour passer →'
-                : hasNextLesson
-                ? 'Chapitre suivant'
-                : 'Passer à l’examen final'}
-            </span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-        {profileAdaptation && (
-          <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-            <div className="flex items-start sm:items-center gap-2 min-w-0">
-              <span className="px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> {profileAdaptation.profileBadge}
-              </span>
-              <span className="text-[11px] text-slate-200 font-semibold italic truncate">
-                {profileAdaptation.animatedProfessorCallout}
-              </span>
-            </div>
-            <span className="text-[10px] font-mono font-bold text-cyan-300 shrink-0">
-              Livrable : {profileAdaptation.expectedDeliverable.slice(0, 58)}…
-            </span>
-          </div>
-        )}
-      </div>
+      <nav className="cartoon-player__scenes" aria-label="Scènes de la leçon">
+        {calibratedLesson.sceneData.screens.map((screen, index) => <button type="button" key={screen.screenNumber} className="cartoon-player__scene-button" onClick={() => handleJumpToScreen(index)} aria-current={activeAct.index === index ? 'step' : undefined}>
+          <span className="cartoon-player__scene-top">SCÈNE {String(index + 1).padStart(2, '0')}{index < activeAct.index ? <CheckCircle2 size={13} /> : <span aria-hidden="true">↗</span>}</span>
+          <strong>{screen.shortTabLabel.replace(/^\d+\s*[.•:–-]?\s*/, '')}</strong>
+          <span className="cartoon-player__scene-meter" style={{ width: `${index < activeAct.index ? 100 : index === activeAct.index ? actVoiceProgress * 100 : 0}%` }} />
+        </button>)}
+      </nav>
+      <footer className="cartoon-player__lesson-nav">
+        <button type="button" onClick={onPrevLesson} disabled={!hasPrevLesson} className="cartoon-player__pill"><ChevronLeft />Chapitre précédent</button>
+        {requiresValidationTest ? <button type="button" onClick={onOpenValidationTest} className={`cartoon-player__validation ${isLessonValidated ? 'is-validated' : ''}`}>{isLessonValidated ? <CheckCircle2 /> : <ShieldCheck />}{isLessonValidated ? 'Test validé' : 'Valider mes acquis'}</button> : <span className="cartoon-player__chapter-label">Chapitre {lessonIndex + 1} sur {course.lessons?.length || 1}</span>}
+        <button type="button" onClick={nextChapter} disabled={!(requiresValidationTest && !isLessonValidated ? onOpenValidationTest : onNextLesson)} className="cartoon-player__play">{requiresValidationTest && !isLessonValidated ? 'Passer le test' : hasNextLesson ? 'Chapitre suivant' : 'Terminer'}<ChevronRight /></button>
+      </footer>
+      {profileAdaptation && <div className="cartoon-player__adaptation">{profileAdaptation.profileBadge} · {profileAdaptation.roleSpecificObjective}</div>}
     </div>
   );
 };
