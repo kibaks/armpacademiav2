@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { UserProfile } from '../src/types';
-import { applyProfileMedia, changedProfileFields, profileWriteData } from '../src/utils/profileMediaSync';
+import { applyProfileMedia, changedProfileFields, profileWriteData, mediaPatch, rollbackProfileMedia } from '../src/utils/profileMediaSync';
 const profile = { id: 'user1', email: 'test@example.com', role: 'independant', name: 'Test', avatarUrl: 'old-avatar', coverUrl: 'old-cover', courseProgress: { c1: 10 }, roleTitle: 'Apprenant', institution: 'Test', level: 'Débutant', completedModulesCount: 0, certificationsCount: 0, offlineDownloads: [] } satisfies UserProfile;
 
 test('a late progress write cannot revert newer photos or protected identity fields', () => {
@@ -26,4 +26,15 @@ test('remote media updates preserve learning data and support a removed cover', 
   assert.equal(synced.coverUrl, undefined);
   assert.deepEqual(synced.courseProgress, profile.courseProgress);
   assert.equal(synced.role, profile.role);
+});
+
+test('a failed optimistic photo save restores the previous image without losing new course progress', () => {
+  const attempted = mediaPatch({ avatarUrl: 'new-avatar', name: 'New name' });
+  assert.deepEqual(attempted, { avatarUrl: 'new-avatar' });
+  const current = { ...profile, ...attempted, coverUrl: 'other-cover', courseProgress: { c1: 90 } };
+  const restored = rollbackProfileMedia(current, profile, attempted);
+  assert.equal(restored.avatarUrl, 'old-avatar');
+  assert.equal(restored.coverUrl, 'other-cover');
+  assert.deepEqual(restored.courseProgress, { c1: 90 });
+  assert.equal(rollbackProfileMedia({ ...current, avatarUrl: 'newer-avatar' }, profile, attempted).avatarUrl, 'newer-avatar');
 });

@@ -62,7 +62,7 @@ import {
 } from './types';
 import { DEMO_PROFILES, INITIAL_TRAINING_REQUESTS } from './data/initialData';
 import { COURSES_DATA } from './data/coursesData';
-import { applyProfileMedia, changedProfileFields } from './utils/profileMediaSync';
+import { applyProfileMedia, changedProfileFields, mediaPatch, rollbackProfileMedia } from './utils/profileMediaSync';
 import { computeUserLearningStats, recordCourseReadingInProfile } from './utils/learningStats';
 import { readModuleAuthors, recordModuleAuthor } from './utils/moduleAuthors';
 import { getLevelSettings, levelKeyFromLabel } from './utils/levelSettings';
@@ -129,6 +129,7 @@ export default function App() {
   const [firestoreProfiles, setFirestoreProfiles] = useState<UserProfile[]>([]);
 
   // Authentication & Session State
+  const pendingMedia = useRef<{ uid: string; patch: Partial<UserProfile> } | null>(null);
   const sessionGeneration = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -337,6 +338,8 @@ export default function App() {
     let active = true;
     const unsubscribe = subscribeProfileMedia(uid, media => {
       if (!active || auth.currentUser?.uid !== uid) return;
+      const pending = pendingMedia.current;
+      if (pending?.uid === uid) media = { ...media, ...pending.patch };
       setProfiles(previous => Object.fromEntries(Object.entries(previous).map(([role, profile]) =>
         [role, profile.id === uid ? applyProfileMedia(profile, media) : profile]
       )));
@@ -475,11 +478,32 @@ export default function App() {
   // Profile Update (saves to Firestore & local state)
   const handleUpdateProfile = async (updated: UserProfile) => {
     const patch = changedProfileFields(currentProfile, updated);
+    const optimistic = mediaPatch(patch);
+    const hasMedia = Object.keys(optimistic).length > 0;
     const uid = auth.currentUser?.uid;
-    await syncUserProfileToFirestore(updated, patch);
-    if (auth.currentUser?.uid !== uid) throw new Error('La session a changé.');
-    setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...patch } }));
-    setFirestoreProfiles(prev => prev.map(profile => profile.id === updated.id ? { ...profile, ...patch } : profile));
+    const generation = sessionGeneration.current;
+    if (!uid || uid !== updated.id) throw new Error('La session a changé.');
+    if (hasMedia && pendingMedia.current?.uid === uid) throw new Error('Une photo est déjà en cours d’enregistrement.');
+    const pending = { uid, patch: optimistic };
+    if (hasMedia) {
+      pendingMedia.current = pending;
+      setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...optimistic } }));
+      setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? { ...profile, ...optimistic } : profile));
+    }
+    try {
+      await syncUserProfileToFirestore(updated, patch);
+      if (auth.currentUser?.uid !== uid || generation !== sessionGeneration.current) throw new Error('La session a changé.');
+      setProfiles(prev => ({ ...prev, [updated.role]: { ...prev[updated.role], ...patch } }));
+      setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? { ...profile, ...patch } : profile));
+    } catch (error) {
+      if (hasMedia && auth.currentUser?.uid === uid && generation === sessionGeneration.current) {
+        setProfiles(prev => ({ ...prev, [updated.role]: rollbackProfileMedia(prev[updated.role], currentProfile, optimistic) }));
+        setFirestoreProfiles(prev => prev.map(profile => profile.id === uid ? rollbackProfileMedia(profile, currentProfile, optimistic) : profile));
+      }
+      throw error;
+    } finally {
+      if (pendingMedia.current === pending) pendingMedia.current = null;
+    }
   };
 
   // Two-Factor Authentication (2FA) Toggle in Profile

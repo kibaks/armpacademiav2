@@ -241,6 +241,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(null);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [isMediaSaving, setIsMediaSaving] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Cover Image picker modal — formulaire d'upload dédié avec prévisualisation
@@ -580,19 +581,19 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   const handleChangeCover = async (newUrl: string) => {
+    if (isMediaSaving || !onUpdateProfile) return;
+    setIsMediaSaving(true);
+    setShowCoverModal(false);
+    onShowToast?.('Enregistrement de la couverture…');
     try {
-      const updated: UserProfile = {
-        ...currentProfile,
-        coverUrl: newUrl
-      };
-      if (onUpdateProfile) {
-        await onUpdateProfile(updated);
-      }
-      setShowCoverModal(false);
+      await onUpdateProfile({ ...currentProfile, coverUrl: newUrl });
       setCoverDraftUrl(null);
       onShowToast?.('Photo de couverture mise à jour !');
     } catch {
-      onShowToast?.('Erreur lors du changement de couverture.');
+      setShowCoverModal(true);
+      onShowToast?.('Couverture non enregistrée. La précédente est conservée. Réessayez.');
+    } finally {
+      setIsMediaSaving(false);
     }
   };
 
@@ -649,15 +650,19 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   const handleSaveAvatar = async () => {
-    if (!avatarDraftUrl) return;
+    if (!avatarDraftUrl || isMediaSaving || !onUpdateProfile) return;
+    setIsMediaSaving(true);
+    setShowAvatarModal(false);
+    onShowToast?.('Enregistrement de la photo…');
     try {
-      const updated: UserProfile = { ...currentProfile, avatarUrl: avatarDraftUrl };
-      if (onUpdateProfile) await onUpdateProfile(updated);
-      setShowAvatarModal(false);
+      await onUpdateProfile({ ...currentProfile, avatarUrl: avatarDraftUrl });
       setAvatarDraftUrl(null);
       onShowToast?.('Photo de profil mise à jour avec succès ✓');
     } catch {
-      onShowToast?.('Erreur lors de la mise à jour de la photo.');
+      setShowAvatarModal(true);
+      onShowToast?.('Photo non enregistrée. La précédente est conservée. Réessayez.');
+    } finally {
+      setIsMediaSaving(false);
     }
   };
 
@@ -3721,9 +3726,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button onClick={() => { setShowCoverModal(false); setCoverDraftUrl(null); }} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs">Annuler</button>
-              <button onClick={handleSaveCover} disabled={!coverDraftUrl || isCoverUploading} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5">
+              <button onClick={handleSaveCover} disabled={!coverDraftUrl || isCoverUploading || isMediaSaving || !onUpdateProfile} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5">
                 <Save className="w-4 h-4" />
-                <span>Enregistrer comme couverture</span>
+                <span>{isMediaSaving ? 'Enregistrement…' : 'Enregistrer comme couverture'}</span>
               </button>
             </div>
           </div>
@@ -3774,9 +3779,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button onClick={() => { setShowAvatarModal(false); setAvatarDraftUrl(null); }} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs">Annuler</button>
-              <button onClick={handleSaveAvatar} disabled={!avatarDraftUrl || isAvatarUploading} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5">
+              <button onClick={handleSaveAvatar} disabled={!avatarDraftUrl || isAvatarUploading || isMediaSaving || !onUpdateProfile} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5">
                 <Save className="w-4 h-4" />
-                <span>Enregistrer comme photo de profil</span>
+                <span>{isMediaSaving ? 'Enregistrement…' : 'Enregistrer comme photo de profil'}</span>
               </button>
             </div>
           </div>

@@ -20,3 +20,15 @@ export function changedProfileFields(before: UserProfile, after: UserProfile): P
 export function applyProfileMedia(profile: UserProfile, media: Partial<UserProfile>): UserProfile {
   return { ...profile, avatarUrl: media.avatarUrl ?? profile.avatarUrl, coverUrl: media.coverUrl };
 }
+
+export function mediaPatch(patch: Partial<UserProfile>): Partial<UserProfile> {
+  return Object.fromEntries(Object.entries(patch).filter(([key]) => key === 'avatarUrl' || key === 'coverUrl'));
+}
+
+// Roll back only the failed image, preserving work done while the request was pending.
+export function rollbackProfileMedia(current: UserProfile, before: UserProfile, attempted: Partial<UserProfile>): UserProfile {
+  const rollback = Object.fromEntries(Object.entries(mediaPatch(attempted)).filter(([key, value]) =>
+    current[key as keyof UserProfile] === value
+  ).map(([key]) => [key, before[key as keyof UserProfile]]));
+  return { ...current, ...rollback };
+}
