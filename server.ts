@@ -156,6 +156,7 @@ async function generateWithResilience(
     config?: any;
     primaryModel?: string;
     fallbackModel?: string;
+    primaryTimeoutMs?: number;
   }
 ) {
   const primary = params.primaryModel || 'gemini-3.8-flash';
@@ -165,7 +166,7 @@ async function generateWithResilience(
     return await ai.models.generateContent({
       model: primary,
       contents: params.contents,
-      config: { ...params.config, httpOptions: { timeout: 18000 } },
+      config: { ...params.config, httpOptions: { timeout: params.primaryTimeoutMs || 18000 } },
     });
   } catch (primaryErr: any) {
     console.info(
@@ -1868,8 +1869,10 @@ Message exact de l'apprenant : "${fullMessage}"
 
     const response = await generateWithResilience(ai, {
       contents: conversationPrompt,
-      primaryModel: 'gemini-3.8-flash',
-      fallbackModel: 'gemini-3.1-flash-lite',
+      primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
+      fallbackModel: 'gemini-3.8-flash',
+      primaryTimeoutMs: 8000,
+      config: { maxOutputTokens: 800 },
     });
 
     const fallbackMeta = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
