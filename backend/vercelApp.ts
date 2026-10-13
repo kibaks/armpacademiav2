@@ -139,15 +139,17 @@ Tu es Aïsha, tutrice IA d'ACADEMIA ITECH RDC, propulsée par les cerveaux IA d'
 
 async function generateWithResilience(
   ai: GoogleGenAI,
-  params: { contents: any; config?: any; primaryModel?: string; fallbackModel?: string; primaryTimeoutMs?: number }
+  params: { contents: any; config?: any; primaryModel?: string; fallbackModel?: string; primaryTimeoutMs?: number; fallbackConfig?: any; requireText?: boolean }
 ) {
   const primary = params.primaryModel || 'gemini-3.8-flash';
   const fallback = params.fallbackModel || 'gemini-3.1-flash-lite';
   try {
-    return await ai.models.generateContent({ model: primary, contents: params.contents, config: { ...params.config, httpOptions: { timeout: params.primaryTimeoutMs || 18000 } } });
+    const response = await ai.models.generateContent({ model: primary, contents: params.contents, config: { ...params.config, httpOptions: { timeout: params.primaryTimeoutMs || 18000 } } });
+    if (params.requireText && !response.text?.trim()) throw new Error('Le modèle a renvoyé une réponse vide.');
+    return response;
   } catch (primaryErr: any) {
     console.warn(`[Gemini API] Primary (${primary}) high demand, fallback ${fallback}...`);
-    return await ai.models.generateContent({ model: fallback, contents: params.contents, config: { ...params.config, httpOptions: { timeout: 10000 } } });
+    return await ai.models.generateContent({ model: fallback, contents: params.contents, config: { ...(params.fallbackConfig || params.config), httpOptions: { timeout: 10000 } } });
   }
 }
 
@@ -673,7 +675,9 @@ Question de l'apprenant : ${fullMessage}
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
       primaryTimeoutMs: 8000,
-      config: { maxOutputTokens: 800 },
+      config: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'minimal' } },
+      fallbackConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'low' } },
+      requireText: true,
     });
 
     const replyText = response?.text?.trim() || getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history).reply;

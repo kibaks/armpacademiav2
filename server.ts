@@ -157,17 +157,21 @@ async function generateWithResilience(
     primaryModel?: string;
     fallbackModel?: string;
     primaryTimeoutMs?: number;
+    fallbackConfig?: any;
+    requireText?: boolean;
   }
 ) {
   const primary = params.primaryModel || 'gemini-3.8-flash';
   const fallback = params.fallbackModel || 'gemini-3.1-flash-lite';
 
   try {
-    return await ai.models.generateContent({
+    const response = await ai.models.generateContent({
       model: primary,
       contents: params.contents,
       config: { ...params.config, httpOptions: { timeout: params.primaryTimeoutMs || 18000 } },
     });
+    if (params.requireText && !response.text?.trim()) throw new Error('Le modèle a renvoyé une réponse vide.');
+    return response;
   } catch (primaryErr: any) {
     console.info(
       `[Gemini API] Switching from ${primary} to fallback ${fallback} (status: ${primaryErr?.status || 'busy'})`
@@ -175,7 +179,7 @@ async function generateWithResilience(
     return await ai.models.generateContent({
       model: fallback,
       contents: params.contents,
-      config: { ...params.config, httpOptions: { timeout: 10000 } },
+      config: { ...(params.fallbackConfig || params.config), httpOptions: { timeout: 10000 } },
     });
   }
 }
@@ -1872,7 +1876,9 @@ Message exact de l'apprenant : "${fullMessage}"
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
       primaryTimeoutMs: 8000,
-      config: { maxOutputTokens: 800 },
+      config: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'minimal' } },
+      fallbackConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'low' } },
+      requireText: true,
     });
 
     const fallbackMeta = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
