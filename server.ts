@@ -958,6 +958,8 @@ interface CachedTtsPayload {
     | 'neural-henri-hd'
     | 'gemini-tts';
   wordBoundaries: TtsWordBoundary[];
+  phonemeBoundaries?: import('./shared/speechTiming.js').TimedPhoneme[];
+  timingSource?: 'provider';
   emotion?: string;
   emotionalTags?: TtsEmotionalTag[];
 }
@@ -1527,7 +1529,7 @@ async function getOrSynthesizeTtsPayload(
     ? requestedVoiceKey
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `tutor_authority_v30::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `tutor_authority_v31::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
   if (cached) {
     ttsMemoryCache.set(cacheKey, cached);
@@ -1565,7 +1567,7 @@ async function getOrSynthesizeTtsPayload(
 
         if (tier.id === 'cartesia') {
           const cartesia = await synthesizeCartesiaTutor(cleanText, voiceKey);
-          if (cartesia) return storeInCache({ audioData: cartesia.audioBuffer.toString('base64'), mimeType: cartesia.mimeType, provider: cartesia.provider, wordBoundaries: buildEstimatedWordBoundaries(cleanText) });
+          if (cartesia) return storeInCache({ audioData: cartesia.audioBuffer.toString('base64'), mimeType: cartesia.mimeType, provider: cartesia.provider, wordBoundaries: cartesia.wordBoundaries, phonemeBoundaries: cartesia.phonemeBoundaries, timingSource: cartesia.timingSource });
         }
 
         // 1. ElevenLabs — voix la plus humaine (souffles, exclamations, émotion),

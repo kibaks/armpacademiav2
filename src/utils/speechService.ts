@@ -1,3 +1,4 @@
+import { samplePhoneme, type TimedPhoneme } from '../../shared/speechTiming';
 import { readTutorVoiceMode, TUTOR_VOICE_MODE_KEY } from './tutorVoiceMode';
 import { pickBrowserTutorVoice, browserTutorProsody } from './browserTutorVoices';
 import { TUTOR_VOICES } from '../../shared/tutorVoices';
@@ -80,6 +81,8 @@ interface DecodedNeuralEntry {
   envelope5ms?: Float32Array | null;
   audioDataUrl: string;
   wordBoundaries: TtsWordBoundary[];
+  phonemeBoundaries?: TimedPhoneme[];
+  timingSource?: 'provider';
   emotionalTags: TtsEmotionalTag[];
   emotion?: AvatarEmotion;
   provider: NonNullable<SpeechPlaybackState['voiceProvider']>;
@@ -500,6 +503,8 @@ class SpeechService {
   private inFlightFetches = new Map<string, Promise<DecodedNeuralEntry | null>>();
   private listeners: Set<StateListener> = new Set();
   private queue: string[] = [];
+  private currentPhonemeBoundaries: TimedPhoneme[] = [];
+  private playbackGeneration = 0;
   private currentSentenceIndex = 0;
   private currentPlayingId: string | null = null;
   private currentOptions?: {
@@ -625,10 +630,13 @@ class SpeechService {
   private defaultVoiceMode: 'studio' | 'device' = 'studio';
   private explicitVoiceMode: 'studio' | 'device' | null = null;
   private modeLoading: Promise<'studio' | 'device'> | null = null;
+  private lastModeReadAt = 0;
+  private cartesiaAvailable = false;
   public loadVoiceModeDefault(): Promise<'studio' | 'device'> {
+    if (this.lastModeReadAt && Date.now() - this.lastModeReadAt < 60000) return Promise.resolve(this.getVoiceMode());
     if (this.modeLoading) return this.modeLoading;
     this.modeLoading = (async () => {
-      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; } } catch { /* Keep device playback when configuration cannot be loaded. */ }
+      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.cartesiaAvailable = !!data.availability?.cartesia; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
       return this.getVoiceMode();
     })().finally(() => { this.modeLoading = null; });
     return this.modeLoading;
@@ -708,9 +716,11 @@ class SpeechService {
   private getExactAudioStreamElapsedMs(
     nowMs: number = typeof performance !== 'undefined' ? performance.now() : Date.now()
   ): number {
-    const ARTICULATORY_LEAD_MS = 20;
+    const ARTICULATORY_LEAD_MS = this.currentPhonemeBoundaries.length ? 0 : 20;
     if (this.audioCtx && this.currentSourceNode && this.audioCtx.state === 'running') {
-      const elapsedSec = Math.max(0, this.audioCtx.currentTime - this.currentStartTimeCtx);
+      const output = this.audioCtx.getOutputTimestamp?.();
+      const audibleTime = typeof output?.contextTime === 'number' && typeof output.performanceTime === 'number' && output.contextTime > 0 ? output.contextTime + Math.max(0, nowMs - output.performanceTime) / 1000 : this.audioCtx.currentTime;
+      const elapsedSec = Math.max(0, audibleTime - this.currentStartTimeCtx);
       return elapsedSec * this.currentPlaybackRate * 1000 + ARTICULATORY_LEAD_MS;
     }
     if (
@@ -737,6 +747,7 @@ class SpeechService {
     viseme: LipViseme;
     isPauseBetweenWords: boolean;
     emotion: AvatarEmotion;
+    hasProviderTiming?: boolean;
   } {
     const st = this.state;
     const hasActiveWebAudio = Boolean(
@@ -815,6 +826,7 @@ class SpeechService {
       }
     }
 
+    const timedPhoneme = samplePhoneme(this.currentPhonemeBoundaries, streamElapsedMs);
     const isQuietPause = Boolean(
       st.isPauseBetweenWords || (hasHardwareTelemetry && this.currentEnvelope5ms && acousticRms < 0.012)
     );
@@ -823,10 +835,11 @@ class SpeechService {
       isSpeaking: true,
       streamElapsedMs,
       acousticRms,
-      mouthOpenness: isQuietPause ? 0 : st.mouthOpenness ?? 0.72,
-      viseme: isQuietPause ? 'closed' : st.viseme || 'open',
-      isPauseBetweenWords: isQuietPause,
+      mouthOpenness: timedPhoneme ? (timedPhoneme.pause ? 0 : timedPhoneme.openness) : isQuietPause ? 0 : st.mouthOpenness ?? 0.72,
+      viseme: timedPhoneme?.viseme || (isQuietPause ? 'closed' : st.viseme || 'open'),
+      isPauseBetweenWords: timedPhoneme?.pause ?? isQuietPause,
       emotion: activeEmotion,
+      hasProviderTiming: this.currentPhonemeBoundaries.length > 0,
     };
   }
 
@@ -1341,7 +1354,7 @@ class SpeechService {
     }
 
     // Merge any short opening fragment (< 50 chars) with the following sentence so the neural voice has full French context
-    if (result.length >= 2 && result[0].length < 50) {
+    if (result.length >= 2 && result[0].length < 50 && (!this.cartesiaAvailable || result[0].length + result[1].length <= 140)) {
       result[1] = `${result[0]} ${result[1]}`.trim();
       result.shift();
     }
@@ -1602,7 +1615,7 @@ class SpeechService {
     timeoutMs: number = 35000
   ): Promise<DecodedNeuralEntry | null> {
     if (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `tutor_voice_v6::${voice}::${sentence}`;
+    const cacheKey = `tutor_voice_v7::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1633,8 +1646,7 @@ class SpeechService {
                 emotion: detectSentenceEmotion(sentence),
               }),
               signal: controller.signal,
-            });
-            window.clearTimeout(timeoutId);
+            }).finally(() => window.clearTimeout(timeoutId));
 
             if ([401, 403, 429, 503].includes(response.status)) return null;
             if (response.ok && response.status !== 204) {
@@ -1666,7 +1678,7 @@ class SpeechService {
                 }
 
                 const env5ms = decoded ? computeAudioBufferEnvelope5ms(decoded) : null;
-                const calibratedBoundaries = calibrateWordBoundariesToEnvelope(
+                const calibratedBoundaries = data.timingSource === 'provider' && Array.isArray(data.wordBoundaries) && data.wordBoundaries.length ? data.wordBoundaries : calibrateWordBoundariesToEnvelope(
                   sentence,
                   Array.isArray(data.wordBoundaries) ? data.wordBoundaries : [],
                   env5ms,
@@ -1686,10 +1698,13 @@ class SpeechService {
                   envelope5ms: env5ms,
                   audioDataUrl,
                   wordBoundaries: calibratedBoundaries,
+                  phonemeBoundaries: Array.isArray(data.phonemeBoundaries) ? data.phonemeBoundaries : [],
+                  timingSource: data.timingSource === 'provider' ? 'provider' : undefined,
                   emotionalTags: calibratedTags,
                   emotion: resolvedEmotion,
                   provider: data.provider || 'neural-vivienne-hd',
                 };
+                if (this.audioBufferCache.size >= 24) { const oldest = this.audioBufferCache.keys().next().value; if (oldest) this.audioBufferCache.delete(oldest); }
                 this.audioBufferCache.set(cacheKey, entry);
                 return entry;
               }
@@ -1726,20 +1741,17 @@ class SpeechService {
 
       // 2. Then prewarm remaining sentences sequentially on server and client
       if (normalized.length > 1) {
-        authenticatedFetch('/api/ai/tts/prewarm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sentences: normalized.slice(1, 2), voice: targetVoice }),
-        }).catch(() => {});
         await this.fetchNeuralAudioBuffer(normalized[1], targetVoice, 35000);
       }
     })();
   }
 
   public stop() {
+    this.playbackGeneration++;
     this.isCancelled = true;
     this.clearCadenceTimer();
     this.queue = [];
+    this.currentPhonemeBoundaries = [];
     this.currentSentenceIndex = 0;
     this.currentUtterance = null;
     this.currentEnvelope5ms = null;
@@ -1826,6 +1838,7 @@ class SpeechService {
 
     this.stop();
     this.isCancelled = false;
+    const generation = this.playbackGeneration;
 
     const sentences =
       options?.customSentences && options.customSentences.length > 0
@@ -1872,11 +1885,12 @@ class SpeechService {
 
     // Wait for provider configuration before the first sentence; studio failures never select a device voice automatically.
     await this.loadVoiceModeDefault();
-    if (this.isCancelled || this.currentPlayingId !== id) return;
+    if (this.isCancelled || generation !== this.playbackGeneration || this.currentPlayingId !== id) return;
     await this.playNextInQueue();
   }
 
   private async playNextInQueue() {
+    const generation = this.playbackGeneration;
     if (this.isCancelled) {
       this.stop();
       return;
@@ -1894,7 +1908,7 @@ class SpeechService {
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if (this.neuralTtsAvailable && this.getVoiceMode() !== 'device') {
-      const cacheKey = `tutor_voice_v6::${voiceName}::${sentence}`;
+      const cacheKey = `tutor_voice_v7::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -1909,8 +1923,12 @@ class SpeechService {
         };
         this.notify();
       }
-      const neuralEntry = await this.fetchNeuralAudioBuffer(sentence, voiceName, 35000);
-      if (this.isCancelled || this.currentSentenceIndex !== sentenceIdx) return;
+      const currentAudio = this.fetchNeuralAudioBuffer(sentence, voiceName, 35000);
+      // Cartesia can prepare the next phrase while the short opening is synthesized.
+      // The client in-flight map deduplicates it with later playback/preload requests.
+      if (this.cartesiaAvailable && sentenceIdx === 0 && sentenceIdx + 1 < this.queue.length) void this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 35000);
+      const neuralEntry = await currentAudio;
+      if (this.isCancelled || generation !== this.playbackGeneration || this.currentSentenceIndex !== sentenceIdx) return;
 
       // Now that the current sentence is ready, pre-fetch the next sentences in the background
       if (sentenceIdx + 1 < this.queue.length) {
@@ -1924,6 +1942,7 @@ class SpeechService {
         const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
         const playbackRate = Math.max(0.92, Math.min(1.25, userSpeed * 1.02));
         let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
+        this.currentPhonemeBoundaries = neuralEntry.phonemeBoundaries || [];
 
         if (ctx && ctx.state === 'suspended') {
           await Promise.race([
@@ -1940,7 +1959,7 @@ class SpeechService {
               audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(b64));
               neuralEntry.audioBuffer = audioBuffer;
               neuralEntry.envelope5ms = computeAudioBufferEnvelope5ms(audioBuffer);
-              neuralEntry.wordBoundaries = calibrateWordBoundariesToEnvelope(
+              neuralEntry.wordBoundaries = neuralEntry.timingSource === 'provider' ? wordBoundaries : calibrateWordBoundariesToEnvelope(
                 sentence,
                 wordBoundaries || [],
                 neuralEntry.envelope5ms,
@@ -2061,10 +2080,10 @@ class SpeechService {
               };
               this.notify();
               window.setTimeout(() => {
-                if (this.isCancelled) return;
+                if (this.isCancelled || generation !== this.playbackGeneration) return;
                 this.currentSentenceIndex++;
                 this.playNextInQueue();
-              }, 650);
+              }, 80);
             };
 
             const exactStartAt = ctx.currentTime;
@@ -2247,10 +2266,10 @@ class SpeechService {
               };
               this.notify();
               window.setTimeout(() => {
-                if (this.isCancelled) return;
+                if (this.isCancelled || generation !== this.playbackGeneration) return;
                 this.currentSentenceIndex++;
                 this.playNextInQueue();
-              }, 680);
+              }, 80);
             };
 
             try {
@@ -2304,7 +2323,7 @@ class SpeechService {
         const done = () => { clearTimeout(timer); synth.removeEventListener('voiceschanged', done); resolve(); };
         const timer = setTimeout(done, 1500); synth.addEventListener('voiceschanged', done);
       });
-      if (this.isCancelled) return;
+      if (this.isCancelled || generation !== this.playbackGeneration) return;
     }
     const voice = this.getBestFrenchVoice();
     if (!voice) {
@@ -2389,14 +2408,14 @@ class SpeechService {
       if (this.isCancelled || this.currentUtterance !== utterance) return;
       this.clearCadenceTimer();
       window.setTimeout(() => {
-        if (this.isCancelled) return;
+        if (this.isCancelled || generation !== this.playbackGeneration) return;
         this.currentSentenceIndex++;
         this.playNextInQueue();
-      }, 650);
+      }, 80);
     };
 
     utterance.onerror = () => {
-      if (this.isCancelled) return;
+      if (this.isCancelled || generation !== this.playbackGeneration) return;
       this.clearCadenceTimer();
       this.currentSentenceIndex++;
       if (this.currentSentenceIndex < this.queue.length) {

@@ -31,3 +31,13 @@ Références : https://elevenlabs.io/docs/api-reference/user/subscription/get et
 ## Cartesia
 
 Configurer `CARTESIA_API_KEY` en variable serveur secrète Vercel, puis redéployer. Cartesia Sonic est prioritaire, puis ElevenLabs et Gemini. `CARTESIA_TTS_MODEL` vaut `sonic-3.6`. Les profils utilisent des voix françaises distinctes ; Henri utilise Gérard (grave, posé, accent français de France), Aïsha utilise Inès (diction articulée, narration assurée, accent français de France). Le quota restant est inconnu ; les refus du fournisseur et Retry-After bloquent les relances. Aucun secours automatique par voix appareil.
+
+## Synchronisation et latence
+
+Cartesia est appelé via `/tts/sse`, avec les horodatages réels des mots et phonèmes. Le serveur assemble le PCM en WAV ; le client conserve ces temps et anime les lèvres sur l’horloge de sortie audio. La lecture attend encore le fragment complet ; il ne s’agit pas d’un streaming audio progressif jusqu’au navigateur.
+
+Les pauses entre fragments passent à 80 ms. Le premier fragment et le suivant sont préparés en parallèle pour Cartesia, avec déduplication des requêtes. Le cache audio du navigateur est limité à 24 entrées et les réglages fournisseur sont conservés une minute. Les anciens résultats sans phonèmes sont invalidés. Une génération annulée ne peut plus reprendre après une nouvelle lecture.
+
+Le moteur de portrait WebGL existant utilise désormais ces phonèmes. Son nom de fichier historique `wav2lipVideoRenderer.ts` ne désigne pas le modèle neuronal Wav2Lip. Les avatars hors écran ne sont plus rendus et les avatars au repos sont limités à 15 images par seconde. Higgsfield génère des vidéos par requêtes asynchrones : il n’est pas ajouté au chemin interactif pour éviter une attente supplémentaire. Aucune clé Higgsfield n’est incluse dans le dépôt.
+
+Références : https://docs.cartesia.ai/api-reference/tts/sse et https://open.higgsfield.ai/quick-start.

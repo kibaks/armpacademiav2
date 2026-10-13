@@ -815,6 +815,8 @@ interface CachedTtsPayload {
   mimeType: string;
   provider: string;
   wordBoundaries: TtsWordBoundary[];
+  phonemeBoundaries?: import('../shared/speechTiming.js').TimedPhoneme[];
+  timingSource?: 'provider';
   emotion?: string;
 }
 
@@ -969,7 +971,7 @@ async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): P
   const cartesia = await synthesizeCartesiaTutor(cleanSentence, voiceKey);
   if (cartesia) {
     const audio = cartesia.audioBuffer.toString('base64');
-    return { audioData: audio, audioBase64: audio, mimeType: cartesia.mimeType, provider: cartesia.provider, wordBoundaries: [], emotion: detectSentenceEmotion(cleanSentence) };
+    return { audioData: audio, audioBase64: audio, mimeType: cartesia.mimeType, provider: cartesia.provider, wordBoundaries: cartesia.wordBoundaries, phonemeBoundaries: cartesia.phonemeBoundaries, timingSource: cartesia.timingSource, emotion: detectSentenceEmotion(cleanSentence) };
   }
 
   // Try ElevenLabs if configured
@@ -1065,7 +1067,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     }
 
     const cleanSentence = rawText.slice(0, 950);
-    const cacheKey = `v34:${voiceChoice}:${cleanSentence}`;
+    const cacheKey = `v35:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1120,7 +1122,7 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     for (const s of sentences) {
       const cleanSentence = (s || '').toString().trim().slice(0, 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v34:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v35:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
 
       synthesizeSpeech(cleanSentence, voiceChoice)

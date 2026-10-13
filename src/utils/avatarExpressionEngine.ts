@@ -55,6 +55,8 @@ class AvatarExpressionEngine {
   private latestFrame: AvatarComputedFrame = DEFAULT_FRAME;
   private mountedTargets = new Set<AvatarSvgDomRefs>();
   private rafId: number | null = null;
+  private lastRenderAt = 0;
+  private visibleTargets = new WeakMap<AvatarSvgDomRefs, boolean>();
   private currentEmotion: AvatarEmotion = 'pedagogical';
 
   constructor() {
@@ -90,10 +92,17 @@ class AvatarExpressionEngine {
 
   public registerAvatarTarget(target: AvatarSvgDomRefs): () => void {
     this.mountedTargets.add(target);
+    let observer: IntersectionObserver | null = null;
+    if (target.wav2lipCanvas && typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver(entries => { this.visibleTargets.set(target, entries.some(entry => entry.isIntersecting)); });
+      observer.observe(target.wav2lipCanvas);
+    }
     this.applyFrameToTarget(this.latestFrame, target);
     this.ensureRafRunning();
 
     return () => {
+      observer?.disconnect();
+      this.visibleTargets.delete(target);
       this.mountedTargets.delete(target);
       if (this.mountedTargets.size === 0 && this.rafId !== null && typeof window !== 'undefined') {
         window.cancelAnimationFrame(this.rafId);
@@ -115,6 +124,7 @@ class AvatarExpressionEngine {
         return;
       }
 
+      if (document.hidden) { this.rafId = window.requestAnimationFrame(loop); return; }
       const audioTelemetry = speechService.sampleInstantAudioTelemetry(nowMs);
       const speechState = speechService.getState();
 
@@ -139,6 +149,9 @@ class AvatarExpressionEngine {
         }
       });
 
+      // Preserve fluent speech animation; use fewer GPU frames while the tutor is idle.
+      if (!anyTargetSpeaking && nowMs - this.lastRenderAt < 1000 / 15) { this.rafId = window.requestAnimationFrame(loop); return; }
+      this.lastRenderAt = nowMs;
       const rawViseme = audioTelemetry.viseme as string;
       const mappedViseme: WorkerViseme =
         rawViseme === 'medium' ? 'open' : (rawViseme as WorkerViseme) || 'open';
@@ -151,12 +164,14 @@ class AvatarExpressionEngine {
         audioTelemetry.mouthOpenness,
         mappedViseme,
         audioTelemetry.isPauseBetweenWords,
-        targetEmotion
+        targetEmotion,
+        audioTelemetry.hasProviderTiming === true
       );
 
       const frame = this.latestFrame;
       const surfaces = new Map<ReturnType<typeof getTutorVideoRenderer>, HTMLCanvasElement | HTMLImageElement | null>();
       this.mountedTargets.forEach((target) => {
+        if (this.visibleTargets.get(target) === false) return;
         if (target.wav2lipCanvas) {
           const renderer = getTutorVideoRenderer(target.wav2lipViewport?.tutorPersona);
           if (!surfaces.has(renderer)) surfaces.set(renderer, renderer.renderWarpedFullFrame(frame));

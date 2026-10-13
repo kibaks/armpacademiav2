@@ -1368,7 +1368,8 @@ export function stepAvatarExpressionFrame(
   fallbackOpen: number,
   fallbackViseme: WorkerViseme,
   isPauseHint: boolean,
-  emotionOverride?: AvatarEmotion
+  emotionOverride?: AvatarEmotion,
+  useProviderPhoneme: boolean = false
 ): AvatarComputedFrame {
   const emotion: AvatarEmotion = emotionOverride || activeSentenceEmotion || 'pedagogical';
   const dtMs = pose.lastNowMs > 0 ? Math.min(40, Math.max(8, nowMs - pose.lastNowMs)) : 16.67;
@@ -1400,7 +1401,14 @@ export function stepAvatarExpressionFrame(
   if (isSpeaking) {
     const coart = streamElapsedMs > 0 ? lookupCoarticulatedPhoneme(streamElapsedMs) : null;
 
-    if (coart) {
+    if (useProviderPhoneme) {
+      targetOpen = isPauseHint ? 0 : Math.max(0, Math.min(1, fallbackOpen));
+      viseme = isPauseHint ? 'closed' : fallbackViseme;
+      targetRoundness = viseme === 'round' ? 0.85 : 0.05;
+      targetSpread = viseme === 'wide' ? 0.75 : viseme === 'closed' ? 0 : 0.18;
+      targetUpperLipLift = viseme === 'closed' ? -0.95 : viseme === 'wide' ? 0.55 : 0.15;
+      targetTongueLift = viseme === 'narrow' ? 0.45 : 0;
+    } else if (coart) {
       targetRoundness = coart.roundness;
       targetSpread = coart.spread;
       targetUpperLipLift = coart.upperLipLift;
@@ -1501,7 +1509,8 @@ export function stepAvatarExpressionFrame(
   const dtSec = dtMs / 1000.0;
   pose.rawOpen = targetOpen;
   pose.open = avatarKalmanSmoother.mouthOpen.update(targetOpen, dtSec);
-  if (targetOpen <= 0.045 && pose.open <= 0.075) {
+  if (useProviderPhoneme && fallbackViseme === 'closed') { pose.open = 0; }
+  else if (targetOpen <= 0.045 && pose.open <= 0.075) {
     pose.open = targetOpen; // Snappy crisp closure on consonants & pauses
   } else if (!isSpeaking && Math.abs(pose.open - REST_OPEN) < 0.02) {
     pose.open = REST_OPEN;

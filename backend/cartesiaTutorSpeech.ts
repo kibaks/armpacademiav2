@@ -1,3 +1,4 @@
+import { readCartesiaStream } from './cartesiaStream.js';
 import { voiceBudgets, type VoiceBudgets } from './voiceBudgets.js';
 import type { TutorPersona } from '../shared/tutorVoices.js';
 export const CARTESIA_TUTOR_VOICES: Record<TutorPersona, string> = {
@@ -15,14 +16,13 @@ export async function synthesizeCartesiaTutor(text: string, persona: string, opt
   const selected = Object.hasOwn(CARTESIA_TUTOR_VOICES, persona) ? persona as TutorPersona : 'vivienne';
   const voice = env[`CARTESIA_VOICE_${selected.toUpperCase()}`] || CARTESIA_TUTOR_VOICES[selected];
   try {
-    const response = await (options.fetcher || fetch)('https://api.cartesia.ai/tts/bytes', {
+    const response = await (options.fetcher || fetch)('https://api.cartesia.ai/tts/sse', {
       method: 'POST', headers: { Authorization: `Bearer ${env.CARTESIA_API_KEY}`, 'Cartesia-Version': '2026-08-14', 'content-type': 'application/json' },
-      body: JSON.stringify({ model_id: env.CARTESIA_TTS_MODEL || 'sonic-3.6', transcript: text, voice, ...(selected === 'henri' || selected === 'vivienne' ? { locale: 'fr-FR', accent: 'parisian' } : { language: 'fr' }), output_format: { container: 'wav', encoding: 'pcm_s16le', sample_rate: 24000 }, generation_config: { speed: 0.94 } }),
+      body: JSON.stringify({ model_id: env.CARTESIA_TTS_MODEL || 'sonic-3.6', transcript: text, voice, ...(selected === 'henri' || selected === 'vivienne' ? { locale: 'fr-FR', accent: 'parisian' } : { language: 'fr' }), output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: 24000 }, add_timestamps: true, add_phoneme_timestamps: true, use_normalized_timestamps: false, generation_config: { speed: 0.94 } }),
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) { budgets.fail('cartesia', response.status, response.headers.get('retry-after')); return null; }
-    const audioBuffer = Buffer.from(await response.arrayBuffer());
-    if (audioBuffer.length < 256 || audioBuffer.subarray(0, 4).toString() !== 'RIFF' || audioBuffer.subarray(8, 12).toString() !== 'WAVE') return null;
-    return { audioBuffer, mimeType: 'audio/wav', provider: 'cartesia-sonic' as const };
+    const result = await readCartesiaStream(response, text);
+    return { ...result, mimeType: 'audio/wav', provider: 'cartesia-sonic' as const, timingSource: 'provider' as const };
   } catch { budgets.fail('cartesia', 503); return null; }
 }

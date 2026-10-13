@@ -2,10 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { synthesizeCartesiaTutor, CARTESIA_TUTOR_VOICES } from '../backend/cartesiaTutorSpeech.js';
 import { VoiceBudgets } from '../backend/voiceBudgets.js';
-const wav = Buffer.alloc(512); wav.write('RIFF'); wav.write('WAVE', 8);
 test('Cartesia sends French narration with distinct masculine and feminine presets, and returns real WAV', async () => {
   const requests: any[] = [];
-  const fetcher = (async (_url, init) => { requests.push(JSON.parse(init!.body as string)); return new Response(wav); }) as typeof fetch;
+  const fetcher = (async (_url, init) => { requests.push(JSON.parse(init!.body as string)); return new Response(`data: ${JSON.stringify({type:'chunk',data:Buffer.alloc(512).toString('base64')})}\n\ndata: ${JSON.stringify({type:'done',done:true})}\n\n`); }) as typeof fetch;
   for (const persona of ['henri', 'vivienne']) {
     const audio = await synthesizeCartesiaTutor('Bonjour.', persona, { env: { CARTESIA_API_KEY: 'test' }, fetcher, budgets: new VoiceBudgets() });
     assert.equal(audio?.provider, 'cartesia-sonic'); assert.equal(audio?.mimeType, 'audio/wav');
