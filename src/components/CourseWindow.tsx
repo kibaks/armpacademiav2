@@ -551,6 +551,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
   // Q&A (persisté dans Firestore + localStorage + réponse IA en direct avec voix d'Aïsha)
   const [isAskingTutorQA, setIsAskingTutorQA] = useState(false);
+  const [tutorQaError, setTutorQaError] = useState<string | null>(null);
   const [activeSpeakingQaId, setActiveSpeakingQaId] = useState<string | null>(null);
 
   const speakQaAnswer = (answerText: string, qaId: string) => {
@@ -566,7 +567,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     setActiveSpeakingQaId(qaId);
     speechService.play(clean, `qa-voice-${qaId}`, {
       speed: 0.9,
-      voice: speechService.getVoicePersona()
+      voice: 'vivienne'
     });
   };
 
@@ -578,6 +579,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     const qaId = `qa-${course.id}-${Date.now()}`;
     if (!presetQuestion) setQuestionInput('');
     setIsAskingTutorQA(true);
+    setTutorQaError(null);
 
     try {
       const res = await authenticatedFetch('/api/ai/tutor', {
@@ -586,7 +588,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
         body: JSON.stringify({
           message: qText,
           userName: currentProfile.name,
-          context: `Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle} | Cours actif: ${course.code} - ${course.title} (${course.legalRef}) | Chapitre ${activeLessonIndex + 1}: ${currentLesson.title} | Contenu: ${(currentLesson.content || '').slice(0, 500)}`,
+          history: qaItems.filter(item => item.author === currentProfile.name).slice(0, 3).reverse().flatMap(item => [{ sender: 'user', text: item.question }, { sender: 'tuteur', text: item.answer || '' }]),
+          context: `Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle} | Cours actif: ${course.code} - ${course.title} (${course.legalRef}) | Chapitre ${activeLessonIndex + 1}: ${currentLesson.title} | Contenu: ${(currentLesson.content || '').slice(0, 6000)}`,
           learningContext: {
             lastCourseTitle: course.title,
             lastCourseCode: course.code,
@@ -594,14 +597,13 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
             lastCourseProgress: progress,
             recentTitles: course.title,
             overallProgress: progress,
-            lastCourseExcerpt: `${currentLesson.title} — ${(currentLesson.content || '').slice(0, 380)}`
+            lastCourseExcerpt: `${currentLesson.title} — ${(currentLesson.content || '').slice(0, 6000)}`
           }
         })
       });
       const data = await res.json().catch(() => ({}));
-      const aiAnswer =
-        data.reply ||
-        `En référence à ${course.legalRef} (Chapitre ${activeLessonIndex + 1} : ${currentLesson.title}), la règle impose le respect strict de la procédure préalable et la traçabilité écrite de chaque étape.`;
+      if (!res.ok || !data.reply?.trim()) throw new Error(data.error || 'La réponse n’a pas pu être chargée. Réessayez.');
+      const aiAnswer: string = data.reply.trim();
 
       const newQ: CourseQAItem = {
         id: qaId,
@@ -624,22 +626,9 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
       // Lecture vocale automatique de la réponse d'Aïsha
       setTimeout(() => speakQaAnswer(aiAnswer, qaId), 80);
-    } catch {
-      const fallbackAnswer = `En référence à ${course.legalRef} (Chapitre ${activeLessonIndex + 1} : ${currentLesson.title}), veillez à documenter chaque étape conformément au manuel officiel ARMP.`;
-      const newQ: CourseQAItem = {
-        id: qaId,
-        courseId: course.id,
-        authorId: currentProfile.id,
-        author: currentProfile.name,
-        avatar: currentProfile.avatarUrl,
-        question: qText,
-        answer: fallbackAnswer,
-        likes: 1,
-        time: "À l'instant",
-        createdAt: new Date().toISOString()
-      };
-      const nextList = [newQ, ...qaItems];
-      setQaItems(nextList);
+    } catch (error) {
+      setQuestionInput(qText);
+      setTutorQaError(error instanceof Error && error.name !== 'TimeoutError' ? error.message : 'Le tuteur met trop de temps à répondre. Votre question est conservée : réessayez.');
     } finally {
       setIsAskingTutorQA(false);
     }
@@ -1640,6 +1629,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     </div>
                   </div>
 
+                  {tutorQaError && <p role="alert" className="p-3 rounded-xl bg-rose-950/40 text-rose-200 text-sm">{tutorQaError}</p>}
+                  {playbackState.error && <p role="status" className="p-3 rounded-xl bg-amber-950/40 text-amber-200 text-sm">{playbackState.error}</p>}
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="text-sm font-black text-white flex items-center space-x-2">

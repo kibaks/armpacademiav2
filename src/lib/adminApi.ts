@@ -8,7 +8,7 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
   if (auth.currentUser?.uid !== user.uid) throw new Error('La session a changé. Reconnectez-vous.');
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${token}`);
-  const response = await fetch(url, { ...options, credentials: 'same-origin', headers, signal: options.signal || AbortSignal.timeout(15000) });
+  const response = await fetch(url, { ...options, credentials: 'same-origin', headers, signal: options.signal || AbortSignal.timeout(url === '/api/ai/tutor' ? 45000 : 15000) });
   if (!url.startsWith('/api/auth/') && !url.startsWith('/api/2fa/') && (response.status === 401 || response.status === 403)) {
     const data = await response.clone().json().catch(() => ({}));
     if (auth.currentUser?.uid === user.uid && ['SESSION_INVALID', 'AUTH_REQUIRED', 'REAUTH_REQUIRED', 'MFA_REQUIRED'].includes(data.code)) {

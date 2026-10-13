@@ -17,7 +17,7 @@ export async function synthesizeGeminiTutor(text: string, persona: string, optio
     const response = await (options.fetcher || fetch)(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(options.model || 'gemini-3.8-flash-tts')}:generateContent`, {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': options.apiKey },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text, speechMetadata: { style } }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { voice } } } }),
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) { let detail = ''; try { const data = await response.json(); detail = data.error?.status || ''; } catch {} budgets.fail('gemini', response.status, response.headers.get('retry-after'), detail); return null; }
     const data = await response.json();

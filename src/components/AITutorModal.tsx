@@ -1271,6 +1271,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       });
       const data = await response.json().catch(() => ({}));
 
+      if (!response.ok || !data.reply?.trim()) throw new Error(data.error || 'La réponse n’a pas pu être chargée. Réessayez.');
+
       // Si le serveur a transcrit la note vocale audio, enrichir le message utilisateur avec la transcription
       const transcribedText = typeof data.transcribedText === 'string' ? data.transcribedText.trim() : '';
       const updatedUserMessages = transcribedText && !text
@@ -1313,15 +1315,13 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       if (autoSpeak || mediaToSend?.type === 'audio' || isCallActive || isVideoCallActive) {
         setTimeout(() => speak(reply, botMsgId), 80);
       }
-    } catch {
+    } catch (error) {
       const fallbackBotMsg: EnhancedMessage = {
         id: `bot-${Date.now()}`,
         sender: 'tuteur',
-        text: `Je suis toujours là avec toi, ${
-          currentProfile.name.split(' ')[0]
-        } 🌸. Même si la connexion hésite une seconde, ne t'inquiète pas : reformule-moi simplement ta question avec tes mots et nous allons la résoudre pas à pas.`,
+        text: error instanceof Error && error.name !== 'TimeoutError' ? error.message : 'Le tuteur met trop de temps à répondre. Réessayez dans un instant.',
         timestamp: 'À l’instant',
-        sources: ['Aïsha • Présence bienveillante', 'Loi n° 10/010'],
+        sources: [],
         suggestedFollowUps: [
           'Quelles sont les 8 étapes d’un marché public ?',
           'Lance-moi un Quiz interactif Q/R',

@@ -96,6 +96,7 @@ async function callArenaLLM(prompt: string): Promise<string | null> {
     const res = await fetch(ARENA_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ARENA_API_KEY}`, "User-Agent": "aistudio-build-arena" },
+      signal: AbortSignal.timeout(5000),
       body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "user", content: prompt }], temperature: 0.5, max_tokens: 1300 })
     });
     if (!res.ok) {
@@ -163,7 +164,7 @@ async function generateWithResilience(
     return await ai.models.generateContent({
       model: primary,
       contents: params.contents,
-      config: params.config,
+      config: { ...params.config, httpOptions: { timeout: 18000 } },
     });
   } catch (primaryErr: any) {
     console.info(
@@ -172,7 +173,7 @@ async function generateWithResilience(
     return await ai.models.generateContent({
       model: fallback,
       contents: params.contents,
-      config: params.config,
+      config: { ...params.config, httpOptions: { timeout: 10000 } },
     });
   }
 }
@@ -1783,7 +1784,8 @@ app.post('/api/ai/tutor', async (req, res) => {
       .replace(/\bAïsha\b/g, activeTutorMeta.name);
   };
 
-  const lc = learningContext || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
+  const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
+  const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
   const mediaNote = hasMedia ? ` [Média joint: ${mediaType || 'fichier'} — analyser avec précision juridique]` : '';
   const fullMessage = (message || '') + mediaNote;
   const ai = getAIClient();
@@ -1793,7 +1795,7 @@ app.post('/api/ai/tutor', async (req, res) => {
   const historyTextForRag = Array.isArray(history) ? history.map((h:any)=> (h.text||'').toLowerCase()).join(' ') : '';
   const isFollowUpRag = /^(et|et alors|et les|combien|délais|délai|exemple|détaille|précise|pourquoi|comment)\b/i.test(fullMessage.trim()) || fullMessage.trim().length < 12;
   const ragQuery = (isFollowUpRag && historyTextForRag.length>10) ? (historyTextForRag + ' ' + fullMessage) : fullMessage;
-  const ragLessons = findRelevantLessons(ragQuery, lc || learningContext || lastCourse);
+  const ragLessons = findRelevantLessons(ragQuery, courseContext || lc);
   const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (À CITER OBLIGATOIREMENT) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
 
   if (!ai) {
