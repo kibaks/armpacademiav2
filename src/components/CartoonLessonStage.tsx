@@ -136,21 +136,12 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
  c.save();c.translate(0,reduced?0:(1-motionWindow(shot.pageProgress,0,.13))*10);
  c.textAlign='left';c.font=`800 ${portrait?20:12}px system-ui, sans-serif`;c.fillStyle=shot.phase==='rule'?'#926027':teal;
  c.fillText(shot.phase==='rule'?'À RETENIR':'L’IDÉE ESSENTIELLE',x+25,y+34);
- const words=shot.text.split(/\s+/).filter(Boolean);
- const size=fitCanvasText(c,shot.text,bw-50,bh-125,portrait?58:49,900).size, lineHeight=size*1.15;
- let wx=x+25, wy=y+113;
- words.forEach((word,index)=>{
-  c.font=`900 ${size}px system-ui, sans-serif`;
-  const width=c.measureText(word).width;
-  if(wx+width>x+bw-25 && wx>x+25){wx=x+25;wy+=lineHeight;}
-  const enter=reduced?1:motionWindow(shot.pageProgress,index*.035,.2+index*.035);
-  c.save();c.globalAlpha=reduced?1:.18+.82*enter;
-  c.translate(wx,wy+(1-enter)*18);
-  c.scale(.94+.06*enter,.94+.06*enter);
-  c.fillStyle=index===words.length-1?(shot.phase==='rule'?coral:teal):ink;
-  c.fillText(word,0,0,bw-50);c.restore();
-  wx+=width+c.measureText(' ').width;
- });
+ const enter=reduced?1:motionWindow(shot.pageProgress,0,.2);
+ c.save();c.globalAlpha=.4+.6*enter;
+ c.translate(x+25,y+103+(1-enter)*18);
+ c.scale(.97+.03*enter,.97+.03*enter);
+ paragraph(c,shot.text,0,0,bw-50,bh-125,portrait?48:38,shot.phase==='rule'?teal:ink,800);
+ c.restore();
  trace(c,[x+25,y+bh-40,x+145,y+bh-40],reduced?1:motionWindow(shot.pageProgress,.25,.65),shot.phase==='rule'?coral:teal,6);
  c.restore();
  // Shape-layer progress and a lower-third stay inside the video composition.

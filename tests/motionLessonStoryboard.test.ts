@@ -8,12 +8,14 @@ const screen={explanation,fieldRule:rule,explanationStartRatio:.15,fieldRuleStar
 test('visual cues select essential concepts rather than reproduce narration',()=>{
  const cues=essentialLessonCues(explanation);
  assert.ok(cues.length<=3);
- assert.ok(cues.every(cue=>cue.split(/\s+/).length<=6));
+ assert.ok(cues.every(cue=>cue.split(/\s+/).length<=18));
  assert.notEqual(cues.join(' '),explanation);
- assert.deepEqual(essentialLessonCues(rule),['Vérifier les crédits budgétaires']);
- assert.deepEqual(essentialLessonCues('Sans jamais imposer une marque commerciale précise.'),['Sans marque imposée']);
+ assert.deepEqual(essentialLessonCues(rule),['Vérifiez la disponibilité des crédits budgétaires.']);
+ assert.deepEqual(essentialLessonCues('Sans jamais imposer une marque commerciale précise.'),['N’imposez pas de marque commerciale.']);
  assert.deepEqual(essentialLessonCues(''),[]);
- assert.ok(!essentialLessonCues('Ne vérifiez pas les crédits budgétaires.').includes('Vérifier les crédits budgétaires'));
+ assert.ok(essentialLessonCues('La procédure garantit un contrôle indépendant.').every(cue=>/[.!?]$/.test(cue)));
+ assert.ok(essentialLessonCues('Contrôle transparence procédure').every(cue=>cue.split(/\s+/).length>1));
+ assert.ok(!essentialLessonCues('Ne vérifiez pas les crédits budgétaires.').includes('Vérifiez la disponibilité des crédits budgétaires.'));
 });
 test('caption phase follows narration and seeking is deterministic',()=>{
  assert.equal(sampleLessonStoryboard(screen,.79,8).phase,'explanation');
