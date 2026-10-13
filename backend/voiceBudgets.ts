@@ -15,7 +15,7 @@ export class VoiceBudgets {
     if (retryAfter) {
       const seconds = Number(retryAfter);
       const duration = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - this.clock();
-      if (Number.isFinite(duration) && duration > 0) wait = Math.max(1000, Math.min(duration, 3600000));
+      if (Number.isFinite(duration) && duration > 0) wait = Math.max(1000, Math.min(duration, 86400000));
     }
     this.blocked.set(provider, this.clock() + wait);
     this.reason.set(provider, status === 429 || status === 402 || /quota|exhausted|credits/i.test(detail || '') ? 'quota' : status === 401 || status === 403 ? 'permission' : 'unavailable');

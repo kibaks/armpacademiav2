@@ -25,3 +25,19 @@ test('missing credentials, provider refusals and invalid audio fail without retu
   assert.equal(await synthesizeGeminiTutor('Bonjour.', 'henri', { apiKey: 'test', budgets: new VoiceBudgets(), fetcher: (async () => new Response('{}', { status: 403 })) as typeof fetch }), null);
   assert.equal(await synthesizeGeminiTutor('Bonjour.', 'henri', { apiKey: 'test', budgets: new VoiceBudgets(), fetcher: (async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { data: pcm, mimeType: 'text/plain' } }] } }] }))) as typeof fetch }), null);
 });
+
+test('Gemini daily quota reset is respected instead of retrying every few minutes', async () => {
+  let now = 1000;
+  const budgets = new VoiceBudgets(() => now);
+  let calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: { status: 'RESOURCE_EXHAUSTED', details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '21600s' }] } }), { status: 429 });
+  }) as typeof fetch;
+  assert.equal(await synthesizeGeminiTutor('Bonjour', 'henri', { apiKey: 'test', fetcher, budgets }), null);
+  now += 3600000;
+  assert.equal(await synthesizeGeminiTutor('Bonjour', 'henri', { apiKey: 'test', fetcher, budgets }), null);
+  assert.equal(calls, 1);
+  now = 21601000;
+  assert.equal(budgets.available('gemini'), true);
+});

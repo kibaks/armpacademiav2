@@ -19,7 +19,17 @@ export async function synthesizeGeminiTutor(text: string, persona: string, optio
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text, speechMetadata: { style } }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { voice } } } }),
       signal: AbortSignal.timeout(20000),
     });
-    if (!response.ok) { let detail = ''; try { const data = await response.json(); detail = data.error?.status || ''; } catch {} budgets.fail('gemini', response.status, response.headers.get('retry-after'), detail); return null; }
+    if (!response.ok) {
+      let detail = '', retryAfter = response.headers.get('retry-after');
+      try {
+        const data = await response.json();
+        detail = data.error?.status || '';
+        const retry = data.error?.details?.find((item: any) => item['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+        if (!retryAfter && typeof retry?.retryDelay === 'string' && /^\d+(?:\.\d+)?s$/.test(retry.retryDelay)) retryAfter = retry.retryDelay.slice(0, -1);
+      } catch { /* Keep the HTTP status when the provider returns no structured error. */ }
+      budgets.fail('gemini', response.status, retryAfter, detail);
+      return null;
+    }
     const data = await response.json();
     budgets.recordGeminiUsage(data.usageMetadata?.totalTokenCount);
     const audio = data.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData?.data)?.inlineData;
