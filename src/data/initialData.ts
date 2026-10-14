@@ -438,6 +438,8 @@ export const DEFAULT_PROFILES: Record<string, UserProfile> = {
     completedModulesCount: 6,
     certificationsCount: 6,
     offlineDownloads: ['MOD-001', 'MOD-002'],
+    registeredCourseIds: ['MOD-001', 'MOD-002'],
+    assignedCourseIds: ['MOD-001', 'MOD-002'],
     twoFactorEnabled: true,
     privacyCertificates: 'public',
     showInDirectory: true,

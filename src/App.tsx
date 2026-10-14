@@ -1301,16 +1301,19 @@ export default function App() {
         {/* TAB 6: ESPACE FORMATEUR & STUDIO — réservé formateur connecté uniquement (pas en déconnecté) */}
         {(activeTab === 'formateur' || activeTab === 'studio-formateur') && (
           isAuthenticated && currentProfile.role === 'formateur' ? (
-            <TrainerPortal
-              currentProfile={currentProfile}
-              allProfiles={profiles}
-              courses={courses}
-              onAddCourse={handleAddCustomCourse}
-              onPreviewCourse={(course) => setPreviewCourse(course)}
-              onOpenCoursePlayer={handleOpenCourse}
-              onSwitchToTrainerRole={() => handleRoleChange('formateur')}
-              isDarkMode={isDarkMode}
-            />
+            <div className="w-full">
+              <TrainerPortal
+                currentProfile={currentProfile}
+                allProfiles={profiles}
+                courses={courses}
+                onAddCourse={handleAddCustomCourse}
+                onPreviewCourse={(course) => setPreviewCourse(course)}
+                onOpenCoursePlayer={handleOpenCourse}
+                onSwitchToTrainerRole={() => handleRoleChange('formateur')}
+                onUpdateProfile={handleUpdateProfile}
+                isDarkMode={isDarkMode}
+              />
+            </div>
           ) : (
             <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
               <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center mx-auto">

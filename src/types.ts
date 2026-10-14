@@ -118,6 +118,8 @@ export interface UserProfile {
     issuedAt: string;
     sealNumber: string;
   }[];
+  registeredCourseIds?: string[];
+  assignedCourseIds?: string[];
 }
 
 export interface SocialPost {
@@ -205,7 +207,6 @@ export interface SavedAnalyticsReport {
 export type LessonFormat = 'video' | 'audio' | 'animation' | 'ia_ppt' | 'pdf' | 'visioconference' | 'texte' | 'autre';
 
 export interface CourseModule {
-  authorId?: string;
   authorName?: string;
   id: string;
   code: string;
@@ -221,6 +222,10 @@ export interface CourseModule {
   rating: number;
   studentsCount: number;
   requiresDfatApproval: boolean;
+  trainerId?: string;
+  trainerName?: string;
+  authorId?: string;
+  createdBy?: string;
   lessons: {
     id: string;
     title: string;

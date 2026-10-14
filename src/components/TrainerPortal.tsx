@@ -103,6 +103,7 @@ interface TrainerPortalProps {
   onPreviewCourse: (course: CourseModule) => void;
   onOpenCoursePlayer: (course: CourseModule) => void;
   onSwitchToTrainerRole?: () => void;
+  onUpdateProfile?: (updated: UserProfile) => void | Promise<void>;
   isDarkMode: boolean;
 }
 
@@ -127,10 +128,13 @@ export const TrainerPortal: React.FC<TrainerPortalProps> = ({
   onPreviewCourse,
   onOpenCoursePlayer,
   onSwitchToTrainerRole,
+  onUpdateProfile,
   isDarkMode
 }) => {
   // Navigation tabs for the trainer portal
   const [activeTab, setActiveTab] = useState<TrainerTab>('dashboard');
+  // Mode de visualisation des cours : 'registered' (uniquement ses modules enregistrés) ou 'catalog' (catalogue complet)
+  const [courseCatalogMode, setCourseCatalogMode] = useState<'registered' | 'catalog'>('registered');
   // Immersive editor state — même disposition que CourseWindow apprenant
   const [activeLessonEditIndex, setActiveLessonEditIndex] = useState(0);
   const [isZenModeTrainer, setIsZenModeTrainer] = useState(false);
@@ -580,19 +584,84 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     setTimeout(() => setTrainerNotice(null), 4000);
   };
 
+  // --- Modules Enregistrés du Formateur Actuel ---
+  // Règle d'or : chaque formateur ne suit, ne voit ou ne gère QUE ses modules enregistrés / homologués
+  const trainerCourses = React.useMemo(() => {
+    const registeredIds = new Set<string>();
+    if (Array.isArray(currentProfile.registeredCourseIds)) {
+      currentProfile.registeredCourseIds.forEach(id => registeredIds.add(id));
+    }
+    if (Array.isArray(currentProfile.assignedCourseIds)) {
+      currentProfile.assignedCourseIds.forEach(id => registeredIds.add(id));
+    }
+
+    // Valeur par défaut pour le profil formateur de référence Dr. Sylvie Tshilomba si pas encore de registeredCourseIds
+    const isSylvie = currentProfile.id === 'USR-FORM-06' || currentProfile.email === 'sylvie.tshilomba@academia-itech.cd' || currentProfile.name?.includes('Sylvie');
+    if (isSylvie && registeredIds.size === 0) {
+      registeredIds.add('MOD-001');
+      registeredIds.add('MOD-002');
+    }
+
+    return courses.filter(c => {
+      // 1. Module explicitement enregistré ou assigné au formateur
+      if (registeredIds.has(c.id) || registeredIds.has(c.code)) return true;
+      // 2. Créé par ce formateur ou sous son ID
+      if (c.trainerId && c.trainerId === currentProfile.id) return true;
+      if (c.authorId && c.authorId === currentProfile.id) return true;
+      if (c.createdBy && (c.createdBy === currentProfile.id || c.createdBy === currentProfile.name)) return true;
+      // 3. Nom du formateur correspondant
+      if (c.trainerName && (
+        c.trainerName.toLowerCase().includes(currentProfile.name.toLowerCase()) ||
+        currentProfile.name.toLowerCase().includes(c.trainerName.toLowerCase())
+      )) return true;
+
+      return false;
+    });
+  }, [courses, currentProfile]);
+
+  const handleToggleRegisterCourse = async (course: CourseModule) => {
+    const currentList = currentProfile.registeredCourseIds || currentProfile.assignedCourseIds || [];
+    const isAlready = currentList.includes(course.id) || currentList.includes(course.code);
+    const updatedIds = isAlready
+      ? currentList.filter(id => id !== course.id && id !== course.code)
+      : [...currentList, course.id];
+
+    const updatedProfile: UserProfile = {
+      ...currentProfile,
+      registeredCourseIds: updatedIds,
+      assignedCourseIds: updatedIds
+    };
+
+    if (onUpdateProfile) {
+      await onUpdateProfile(updatedProfile);
+    }
+    setTrainerNotice(
+      isAlready
+        ? `Module « ${course.code} » retiré de vos modules enregistrés.`
+        : `Module « ${course.code} — ${course.title} » enregistré dans votre portefeuille formateur ✓`
+    );
+    setTimeout(() => setTrainerNotice(null), 4000);
+  };
+
   // Calculs dynamiques et réels des KPIs Formateur
   const profilesArray = allProfiles ? Object.values(allProfiles) : [currentProfile];
   const learnerProfiles = profilesArray.filter(p => p.role !== 'formateur' && p.role !== 'dfat_admin');
   const totalStudentsCount = learnerProfiles.length;
-  const certifiedLearnersCount = learnerProfiles.filter(p => 
-    (p.certificationsCount || 0) > 0 || 
-    (p.completedCourseIds && p.completedCourseIds.length > 0) || 
-    (p.completedModulesCount && p.completedModulesCount > 0)
-  ).length;
-  const activeLearnersCount = learnerProfiles.filter(p => 
-    (p.courseProgress && Object.values(p.courseProgress).some(v => typeof v === 'number' && v > 0)) || 
-    (p.completedModulesCount && p.completedModulesCount > 0)
-  ).length;
+
+  // Apprenants certifiés et actifs sur les modules enregistrés du formateur
+  const trainerCourseIds = new Set(trainerCourses.flatMap(c => [c.id, c.code]));
+  const certifiedLearnersCount = learnerProfiles.filter(p => {
+    const hasCert = (p.certificates && p.certificates.some(c => trainerCourseIds.has(c.courseId) || trainerCourseIds.has(c.courseCode))) ||
+      (p.completedCourseIds && p.completedCourseIds.some(cid => trainerCourseIds.has(cid))) ||
+      customCertifiedIds.some(key => key.startsWith(p.id) && Array.from(trainerCourseIds).some(cid => key.endsWith(cid)));
+    return Boolean(hasCert || (p.completedModulesCount && p.completedModulesCount > 0));
+  }).length;
+
+  const activeLearnersCount = learnerProfiles.filter(p => {
+    const hasProg = p.courseProgress && Object.entries(p.courseProgress).some(([cid, prog]) => trainerCourseIds.has(cid) && typeof prog === 'number' && prog > 0);
+    return Boolean(hasProg || (p.courseProgress && Object.values(p.courseProgress).some(v => typeof v === 'number' && v > 0)));
+  }).length;
+
   const avgSuccessRate = Number(
     (learnerProfiles.reduce((acc, p) => acc + (p.placementScore || 80), 0) / Math.max(1, learnerProfiles.length)).toFixed(1)
   );
@@ -651,15 +720,18 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   };
 
   // Liste des apprenants inscrits selon le cours sélectionné
+  // Filtré EXCLUSIVEMENT sur les modules enregistrés du formateur
   const getEnrolledLearners = (courseId: string) => {
+    if (trainerCourses.length === 0) return [];
+
     if (courseId === 'all') {
       return learnerProfiles.map((lp, idx) => {
-        const assignedCourse = courses[idx % courses.length] || courses[0];
+        const assignedCourse = trainerCourses[idx % trainerCourses.length] || trainerCourses[0];
         return computeLearnerCourseProgress(lp, assignedCourse);
       });
     }
 
-    const targetCourse = courses.find(c => c.id === courseId || c.code === courseId) || courses[0];
+    const targetCourse = trainerCourses.find(c => c.id === courseId || c.code === courseId) || trainerCourses[0];
     if (!targetCourse) return [];
 
     return learnerProfiles.map(lp => computeLearnerCourseProgress(lp, targetCourse));
@@ -953,31 +1025,51 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       rating: 5.0,
       studentsCount: 1,
       requiresDfatApproval: false,
+      trainerId: currentProfile.id,
+      trainerName: currentProfile.name,
+      authorId: currentProfile.id,
+      createdBy: currentProfile.name,
       lessons: lessonsList,
       quiz: quizList
     };
 
-    try { await onAddCourse(createdCourse); }
-    catch (error) { setTrainerNotice(error instanceof Error ? error.message : 'Publication impossible.'); return; }
+    try {
+      await onAddCourse(createdCourse);
+      // Auto-enregistrement du cours nouvellement créé dans les modules du formateur
+      const currentList = currentProfile.registeredCourseIds || currentProfile.assignedCourseIds || [];
+      if (!currentList.includes(createdCourse.id)) {
+        const nextList = [...currentList, createdCourse.id];
+        if (onUpdateProfile) {
+          await onUpdateProfile({
+            ...currentProfile,
+            registeredCourseIds: nextList,
+            assignedCourseIds: nextList
+          });
+        }
+      }
+    } catch (error) {
+      setTrainerNotice(error instanceof Error ? error.message : 'Publication impossible.');
+      return;
+    }
     setActiveTab('courses');
     setAuthoringStep(1);
     setNewCourseTitle('');
-    setTrainerNotice(`La formation « ${createdCourse.title} » a été publiée et persistée dans Firestore ✓`);
+    setTrainerNotice(`La formation « ${createdCourse.title} » a été publiée et enregistrée dans vos modules supervisés ✓`);
     setTimeout(() => setTrainerNotice(null), 5000);
   };
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} pb-24 transition-colors`}>
+    <div className={`w-full min-h-screen ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'} pb-24 transition-colors`}>
       
       {/* ========================================================================= */}
-      {/* 1. HEADER FULL WIDTH — COVER + AVATAR + TABS (full bleed, content en container) */}
+      {/* 1. HEADER FULL WIDTH — COVER + AVATAR + TABS (pleine largeur comme pour le profil) */}
       {/* ========================================================================= */}
       <div className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           
-          {/* Cover Photo — full width edge-to-edge */}
-          <div className="h-44 sm:h-64 md:h-80 w-full relative overflow-hidden bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 group">
+          {/* Cover Photo — plein écran comme pour le profil */}
+          <div className="h-48 sm:h-72 md:h-88 w-full relative overflow-hidden bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 group">
             <img
-              src={imgSeminar}
+              src={currentProfile.coverUrl || imgSeminar}
               alt="Couverture Studio Formateur"
               className="w-full h-full object-cover object-center transition duration-500 group-hover:scale-105"
               referrerPolicy="no-referrer"
@@ -1030,7 +1122,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                       {currentProfile.institution}
                     </span>
                   </div>
-                  {/* Statistiques Réelles et Nombre Réel d'Apprenants */}
+                  {/* Statistiques Réelles et Nombre Réel d'Apprenants (uniquement sur ses modules enregistrés) */}
                   <div className="space-y-2 pt-2">
                     {/* Pills de KPIs réels pour le Formateur */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left">
@@ -1055,7 +1147,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                           <BookOpen className="w-3 h-3" /> Formations
                         </div>
                         <div className="text-sm font-black text-indigo-700 dark:text-indigo-300">
-                          {courses.length} <span className="text-[10px] font-semibold text-indigo-500">cours</span>
+                          {trainerCourses.length} <span className="text-[10px] font-semibold text-indigo-500">modules</span>
                         </div>
                       </div>
                       <div className="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200/70 dark:border-amber-900/50">
@@ -1130,7 +1222,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             <div className="mt-4 pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar">
               {[
                 { id: 'dashboard' as const, label: 'Tableau de bord', icon: BarChart3 },
-                { id: 'courses' as const, label: 'Mes Formations', icon: BookOpen, badge: courses.length },
+                { id: 'courses' as const, label: 'Mes Formations', icon: BookOpen, badge: trainerCourses.length },
                 { id: 'ai_generator' as const, label: 'Générateur IA Animé', icon: Sparkles, badge: 'IA' },
                 { id: 'authoring' as const, label: 'Créateur de Cours', icon: FolderPlus },
                 { id: 'studio' as const, label: 'Studio Vidéo', icon: Tv },
@@ -1179,15 +1271,15 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-1`}>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Formations Créées</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Modules Enregistrés</span>
                   <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600">
                     <BookOpen className="w-4 h-4" />
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono">
-                  {courses.length}
+                  {trainerCourses.length}
                 </div>
-                <span className="text-[11px] text-emerald-500 font-bold block">✓ 100% Homologuées DFAT</span>
+                <span className="text-[11px] text-emerald-500 font-bold block">✓ Homologués DFAT</span>
               </div>
 
               <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-1`}>
@@ -1213,7 +1305,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono">
                   {avgSuccessRate}%
                 </div>
-                <span className="text-[11px] text-emerald-500 font-bold block">{certifiedLearnersCount} certifiés sur {learnerProfiles.length}</span>
+                <span className="text-[11px] text-emerald-500 font-bold block">{certifiedLearnersCount} certifiés sur vos modules</span>
               </div>
 
               <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-1`}>
@@ -1239,21 +1331,21 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                   <div>
                     <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center space-x-2">
                       <BookOpen className="w-5 h-5 text-blue-600" />
-                      <span>Formations sous votre supervision pédagogique</span>
+                      <span>Vos modules enregistrés sous votre supervision</span>
                     </h3>
-                    <p className="text-xs text-slate-500">Modules publiés au catalogue national ACADEMIA ITECH</p>
+                    <p className="text-xs text-slate-500">Seuls vos modules enregistrés et homologués DFAT sont affichés</p>
                   </div>
                   <button
                     onClick={() => setActiveTab('courses')}
                     className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
                   >
-                    <span>Voir tout</span>
+                    <span>Voir tout ({trainerCourses.length})</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
 
                 <div className="space-y-3">
-                  {courses.slice(0, 4).map(c => (
+                  {trainerCourses.slice(0, 4).map(c => (
                     <div
                       key={c.id}
                       className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between gap-3 group hover:border-blue-400 transition"
@@ -1351,117 +1443,200 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
             
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                  Gestion des Programmes & Formations
+                <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center space-x-2">
+                  <BookOpen className="w-5 h-5 text-blue-600" />
+                  <span>Gestion des Programmes & Formations</span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Consultez, modifiez ou créez les cursus de formation destinés aux autorités contractantes
+                  {courseCatalogMode === 'registered' 
+                    ? `Vos ${trainerCourses.length} modules homologués enregistrés sous votre encadrement pédagogique` 
+                    : `Catalogue officiel ARMP • ${courses.length} formations disponibles pour enrichir votre portefeuille`}
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setActiveTab('authoring');
-                  setAuthoringStep(1);
-                }}
-                className="px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center space-x-2 self-start sm:self-auto"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Nouveau Cursus</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                {/* Switcher Mode: Mes modules enregistrés VS Catalogue DFAT */}
+                <div className="flex items-center p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-800 border border-slate-300/50 dark:border-slate-700">
+                  <button
+                    onClick={() => setCourseCatalogMode('registered')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+                      courseCatalogMode === 'registered'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    <span>Mes Modules ({trainerCourses.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setCourseCatalogMode('catalog')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+                      courseCatalogMode === 'catalog'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Catalogue DFAT ({courses.length})</span>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('authoring');
+                    setAuthoringStep(1);
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center space-x-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nouveau Cursus</span>
+                </button>
+              </div>
             </div>
+
+            {/* Banner si aucun cours enregistré */}
+            {courseCatalogMode === 'registered' && trainerCourses.length === 0 && (
+              <div className={`p-8 rounded-3xl border text-center space-y-4 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center mx-auto">
+                  <Bookmark className="w-7 h-7" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Aucun module enregistré pour l'instant</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Enregistrez les modules du catalogue national que vous supervisez ou créez un nouveau cours pour enrichir votre portefeuille.
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => setCourseCatalogMode('catalog')}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition"
+                  >
+                    Parcourir le Catalogue DFAT
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab('authoring'); setAuthoringStep(1); }}
+                    className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Créer un nouveau module
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Courses Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {courses.map(course => (
-                <div
-                  key={course.id}
-                  className={`rounded-3xl border overflow-hidden transition flex flex-col ${
-                    isDarkMode ? 'bg-slate-900 border-slate-800 hover:border-blue-500' : 'bg-white border-slate-200 hover:border-blue-400'
-                  } shadow-sm group`}
-                >
-                  <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
-                    <img
-                      src={course.coverImage}
-                      alt={course.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-mono text-[10px] font-bold">
-                      {course.code}
-                    </span>
-                    <span className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/60 text-amber-300 font-bold text-[10px] backdrop-blur-xs">
-                      {course.level}
-                    </span>
-                    <div className="absolute bottom-2 left-3 right-3 text-white text-xs flex items-center justify-between">
-                      <span className="font-mono text-[11px]">{course.duration}</span>
-                      <span className="font-bold text-emerald-400">{course.lessons.length} leçons</span>
-                    </div>
-                  </div>
-
-                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
-                        {course.category}
+              {(courseCatalogMode === 'registered' ? trainerCourses : courses).map(course => {
+                const isRegistered = trainerCourses.some(tc => tc.id === course.id || tc.code === course.code);
+                const enrolled = getEnrolledLearners(course.id);
+                return (
+                  <div
+                    key={course.id}
+                    className={`rounded-3xl border overflow-hidden transition flex flex-col ${
+                      isDarkMode ? 'bg-slate-900 border-slate-800 hover:border-blue-500' : 'bg-white border-slate-200 hover:border-blue-400'
+                    } shadow-sm group`}
+                  >
+                    <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
+                      <img
+                        src={course.coverImage}
+                        alt={course.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+                      <span className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-mono text-[10px] font-bold">
+                        {course.code}
                       </span>
-                      <h3 className="text-sm font-black text-slate-900 dark:text-white line-clamp-2">
-                        {course.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                        {course.description}
-                      </p>
-                    </div>
-
-                    <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/60 flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5" />
-                        <span>{learnerProfiles.length} apprenants inscrits</span>
+                      <span className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/60 text-amber-300 font-bold text-[10px] backdrop-blur-xs">
+                        {course.level}
                       </span>
-                      <button
-                        onClick={() => {
-                          setSelectedTrackingCourseId(course.id);
-                          setActiveTab('learners');
-                        }}
-                        className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 transition cursor-pointer"
-                      >
-                        <span>Suivre les apprenants</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
+                      {isRegistered && (
+                        <span className="absolute bottom-10 left-3 px-2.5 py-0.5 rounded-full bg-emerald-500/90 text-white text-[10px] font-bold shadow-md flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Module Enregistré
+                        </span>
+                      )}
+                      <div className="absolute bottom-2 left-3 right-3 text-white text-xs flex items-center justify-between">
+                        <span className="font-mono text-[11px]">{course.duration}</span>
+                        <span className="font-bold text-emerald-400">{course.lessons.length} leçons</span>
+                      </div>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                      <button
-                        onClick={() => onPreviewCourse(course)}
-                        className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 transition"
-                      >
-                        Aperçu
-                      </button>
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
+                            {course.category}
+                          </span>
+                          {courseCatalogMode === 'catalog' && (
+                            <button
+                              onClick={() => handleToggleRegisterCourse(course)}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition ${
+                                isRegistered 
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
+                                  : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:bg-blue-200'
+                              }`}
+                            >
+                              {isRegistered ? '✓ Enregistré (Retirer)' : '+ Enregistrer'}
+                            </button>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900 dark:text-white line-clamp-2">
+                          {course.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                          {course.description}
+                        </p>
+                      </div>
 
-                      <div className="flex items-center space-x-1.5">
+                      <div className="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/60 flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>{enrolled.length} apprenants inscrits</span>
+                        </span>
                         <button
                           onClick={() => {
-                            setActiveTab('studio');
-                            setNewCourseCode(course.code);
+                            setSelectedTrackingCourseId(course.id);
+                            setActiveTab('learners');
                           }}
-                          className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 text-xs font-bold transition"
-                          title="Enregistrer une vidéo pour ce cours"
+                          className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 transition cursor-pointer"
                         >
-                          <Video className="w-4 h-4" />
+                          <span>Suivre les apprenants</span>
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => onPreviewCourse(course)}
+                          className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 transition"
+                        >
+                          Aperçu
                         </button>
 
-                        <button
-                          onClick={() => onOpenCoursePlayer(course)}
-                          className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-1 shadow-sm transition"
-                        >
-                          <Play className="w-3 h-3 fill-white" />
-                          <span>Lancer</span>
-                        </button>
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            onClick={() => {
+                              setActiveTab('studio');
+                              setNewCourseCode(course.code);
+                            }}
+                            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 text-xs font-bold transition"
+                            title="Enregistrer une vidéo pour ce cours"
+                          >
+                            <Video className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => onOpenCoursePlayer(course)}
+                            className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-1 shadow-sm transition"
+                          >
+                            <Play className="w-3 h-3 fill-white" />
+                            <span>Lancer</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
           </div>
@@ -1590,7 +1765,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                       onChange={(e) => {
                         const cid = e.target.value;
                         setAiSelectedExistingCourseId(cid);
-                        const found = courses.find((c) => c.id === cid);
+                        const found = (trainerCourses.length > 0 ? trainerCourses : courses).find((c) => c.id === cid);
                         if (found) {
                           setAiSourceTitle(`${found.title} (Édition Animée IA)`);
                           setAiCategory(found.category);
@@ -1605,7 +1780,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                       }}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-xs font-bold text-slate-900 dark:text-white"
                     >
-                      {courses.map((c) => (
+                      {(trainerCourses.length > 0 ? trainerCourses : courses).map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.code} — {c.title} ({c.lessons.length} chapitres)
                         </option>
@@ -3173,7 +3348,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
 
           const currentCourseObj = selectedTrackingCourseId === 'all' 
             ? null 
-            : courses.find(c => c.id === selectedTrackingCourseId || c.code === selectedTrackingCourseId);
+            : trainerCourses.find(c => c.id === selectedTrackingCourseId || c.code === selectedTrackingCourseId);
 
           const totalInCourse = rawLearners.length;
           const certifiedCount = rawLearners.filter(l => l.isCertified).length;
@@ -3194,7 +3369,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                     <span>Suivi Pédagogique des Apprenants Inscrits</span>
                   </h2>
                   <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                    Supervisez les cursus de vos formations, mesurez l'avancement des chapitres de la Loi 10/010 et délivrez les habilitations officielles DFAT.
+                    Supervisez les {trainerCourses.length} modules enregistrés sous votre encadrement, mesurez l'avancement des chapitres de la Loi 10/010 et délivrez les habilitations officielles DFAT.
                   </p>
                 </div>
 
@@ -3216,12 +3391,12 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                 </div>
               )}
 
-              {/* 1. Sélecteur de Cours du Formateur (Pills horizontaux) */}
+              {/* 1. Sélecteur de Cours du Formateur (Pills horizontaux - Uniquement les modules enregistrés) */}
               <div className={`p-4 rounded-3xl border ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-3`}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Filtrer par Formation ({courses.length} cursus disponibles)</span>
+                    <span>Filtrer par Formation ({trainerCourses.length} modules enregistrés)</span>
                   </span>
                   {selectedTrackingCourseId !== 'all' && (
                     <button
@@ -3229,7 +3404,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                       className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      <span>Réinitialiser (Tous les cours)</span>
+                      <span>Réinitialiser (Tous vos modules)</span>
                     </button>
                   )}
                 </div>
@@ -3243,14 +3418,15 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                         : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    <span>📚 Vue d'ensemble (Tous les cours)</span>
+                    <span>📚 Vue d'ensemble ({trainerCourses.length} modules)</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${selectedTrackingCourseId === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600'}`}>
                       {learnerProfiles.length}
                     </span>
                   </button>
 
-                  {courses.map(c => {
+                  {trainerCourses.map(c => {
                     const isSelected = selectedTrackingCourseId === c.id || selectedTrackingCourseId === c.code;
+                    const countInCourse = getEnrolledLearners(c.id).length;
                     return (
                       <button
                         key={c.id}
@@ -3266,7 +3442,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                         </span>
                         <span className="truncate max-w-[200px]">{c.title}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600'}`}>
-                          {learnerProfiles.length}
+                          {countInCourse}
                         </span>
                       </button>
                     );
