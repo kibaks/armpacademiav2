@@ -971,7 +971,7 @@ async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthe
 
 // Cascaded Synthesis Engine
 async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): Promise<CachedTtsPayload> {
-  const cleanSentence = text.trim().slice(0, 950);
+  const cleanSentence = text.trim().slice(0, piperConfigured() ? 3000 : 950);
   const voiceKey = voiceChoice.toLowerCase();
 
   const piper = await synthesizePiperTutor(cleanSentence, voiceKey);
@@ -1080,8 +1080,9 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
       return res.status(400).json({ error: 'Texte requis pour la synthèse vocale.' });
     }
 
-    const cleanSentence = rawText.slice(0, 950);
-    const cacheKey = `v36-piper:${voiceChoice}:${cleanSentence}`;
+    if (piperConfigured() && rawText.length > 3000) return res.status(400).json({ error: 'Le passage est trop long. Limitez-le à 3000 caractères.' });
+    const cleanSentence = rawText.slice(0, piperConfigured() ? 3000 : 950);
+    const cacheKey = `v37-piper-passages:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
       return res.json(cached);
@@ -1134,9 +1135,9 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     res.json({ status: 'prewarming', count: sentences.length, voice: voiceChoice });
 
     for (const s of sentences) {
-      const cleanSentence = (s || '').toString().trim().slice(0, 950);
+      const cleanSentence = (s || '').toString().trim().slice(0, piperConfigured() ? 3000 : 950);
       if (!cleanSentence) continue;
-      const cacheKey = `v36-piper:${voiceChoice}:${cleanSentence}`;
+      const cacheKey = `v37-piper-passages:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;
 
       synthesizeSpeech(cleanSentence, voiceChoice)

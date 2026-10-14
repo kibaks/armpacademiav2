@@ -16,4 +16,6 @@ URL de service : `https://academia.137.184.59.184.nip.io/piper/synthesize`.
 Ne jamais enregistrer la valeur de `PIPER_TTS_API_KEY` dans Git.
 
 Vérification : `GET /api/tts/settings` doit annoncer `availability.piper=true` et `defaultVoiceMode=studio`.
-`POST /api/ai/tts` avec un texte et `voice=henri` doit renvoyer `provider=piper` et `mimeType=audio/wav`.
+`POST /api/ai/tts` avec un texte et `voice=henri` doit renvoyer `provider=piper` et `mimeType=audio/mpeg`.
+
+Les passages sont limités à 3000 caractères et synthétisés en fragments courts sans couper les mots. Le transfert vers Vercel utilise MP3 pour éviter des réponses WAV trop lourdes. Les anciens caches sont invalidés après changement du profil de synthèse.

@@ -1,3 +1,4 @@
+import { providerRate } from './speechPlaybackProfile';
 import { samplePhoneme, type TimedPhoneme } from '../../shared/speechTiming';
 import { readTutorVoiceMode, TUTOR_VOICE_MODE_KEY } from './tutorVoiceMode';
 import { pickBrowserTutorVoice, browserTutorProsody } from './browserTutorVoices';
@@ -500,6 +501,7 @@ class SpeechService {
   private currentSourceNode: AudioBufferSourceNode | null = null;
   private currentAudioElement: HTMLAudioElement | null = null;
   private currentAnalyser: AnalyserNode | null = null;
+  private currentAudioNodes: AudioNode[] = [];
   private audioBufferCache = new Map<string, DecodedNeuralEntry>();
   private inFlightFetches = new Map<string, Promise<DecodedNeuralEntry | null>>();
   private listeners: Set<StateListener> = new Set();
@@ -633,11 +635,12 @@ class SpeechService {
   private modeLoading: Promise<'studio' | 'device'> | null = null;
   private lastModeReadAt = 0;
   private cartesiaAvailable = false;
+  private piperAvailable = false;
   public loadVoiceModeDefault(): Promise<'studio' | 'device'> {
     if (this.lastModeReadAt && Date.now() - this.lastModeReadAt < 60000) return Promise.resolve(this.getVoiceMode());
     if (this.modeLoading) return this.modeLoading;
     this.modeLoading = (async () => {
-      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.cartesiaAvailable = !!data.availability?.cartesia && !data.availability?.piper; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
+      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.piperAvailable = !!data.availability?.piper; this.cartesiaAvailable = !!data.availability?.cartesia && !this.piperAvailable; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
       return this.getVoiceMode();
     })().finally(() => { this.modeLoading = null; });
     return this.modeLoading;
@@ -1636,7 +1639,8 @@ class SpeechService {
         for (let attempt = 0; attempt <= NEURAL_BACKOFF_MS.length; attempt++) {
           try {
             const controller = new AbortController();
-            const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+            const requestTimeout = this.piperAvailable ? Math.max(timeoutMs, Math.min(90000, 10000 + sentence.length * 40)) : timeoutMs;
+            const timeoutId = window.setTimeout(() => controller.abort(), requestTimeout);
 
             const response = await authenticatedFetch('/api/ai/tts', {
               method: 'POST',
@@ -1737,6 +1741,7 @@ class SpeechService {
     if (normalized.length === 0) return;
 
     (async () => {
+      await this.loadVoiceModeDefault();
       // 1. Fetch & decode Sentence 1 FIRST with zero competition so the opening of the lesson is instant & pure Vivienne HD
       await this.fetchNeuralAudioBuffer(normalized[0], targetVoice, 35000);
 
@@ -1791,6 +1796,9 @@ class SpeechService {
       } catch {}
       this.currentAnalyser = null;
     }
+
+    this.currentAudioNodes.forEach(node => { try { node.disconnect(); } catch {} });
+    this.currentAudioNodes = [];
 
     this.state = {
       isPlaying: false,
@@ -1941,7 +1949,7 @@ class SpeechService {
         const ctx = this.getAudioContext();
         // Natural, fluent & lively pedagogical playback rate matching standard speech
         const sentenceEmotion = neuralEntry.emotion || detectSentenceEmotion(sentence);
-        const playbackRate = Math.max(0.92, Math.min(1.25, userSpeed * 1.02));
+        const playbackRate = Math.max(0.92, Math.min(1.25, providerRate(neuralEntry.provider, userSpeed)));
         let { audioBuffer, audioDataUrl, wordBoundaries, emotionalTags, provider } = neuralEntry;
         this.currentPhonemeBoundaries = neuralEntry.phonemeBoundaries || [];
 
@@ -1995,7 +2003,7 @@ class SpeechService {
         }
 
         // Path 1A: Web Audio API with Natural Broadcast Condenser Microphone Warmth & De-Harshing EQ
-        if (ctx && ctx.state === 'running' && audioBuffer) {
+        if (ctx && ctx.state === 'running' && audioBuffer && (provider !== 'piper' || playbackRate === 1)) {
           try {
             const sourceNode = ctx.createBufferSource();
             sourceNode.buffer = audioBuffer;
@@ -2029,12 +2037,24 @@ class SpeechService {
             const gainNode = ctx.createGain();
             gainNode.gain.value = 1.08;
 
-            sourceNode.connect(warmthFilter);
-            warmthFilter.connect(presenceFilter);
-            presenceFilter.connect(deHarshFilter);
-            deHarshFilter.connect(analyser);
+            if (provider === 'piper') {
+              // Piper is mastered on the server; preserve its pitch and headroom.
+              gainNode.gain.value = 1;
+              sourceNode.connect(analyser);
+            } else {
+              sourceNode.connect(warmthFilter);
+              warmthFilter.connect(presenceFilter);
+              presenceFilter.connect(deHarshFilter);
+              deHarshFilter.connect(analyser);
+            }
             analyser.connect(gainNode);
             gainNode.connect(ctx.destination);
+            const playbackNodes: AudioNode[] = [sourceNode, warmthFilter, presenceFilter, deHarshFilter, analyser, gainNode];
+            this.currentAudioNodes = playbackNodes;
+            const releaseNodes = () => {
+              playbackNodes.forEach(node => { try { node.disconnect(); } catch {} });
+              if (this.currentAudioNodes === playbackNodes) this.currentAudioNodes = [];
+            };
 
             this.currentSourceNode = sourceNode;
             this.currentAnalyser = analyser;
@@ -2068,6 +2088,7 @@ class SpeechService {
             this.notify();
 
             sourceNode.onended = () => {
+              releaseNodes();
               if (this.isCancelled || this.currentSourceNode !== sourceNode) return;
               this.clearCadenceTimer();
               this.currentSourceNode = null;
@@ -2103,6 +2124,9 @@ class SpeechService {
             );
             return;
           } catch (err) {
+            if (this.currentSourceNode) { this.currentSourceNode.onended = null; try { this.currentSourceNode.stop(); } catch {} }
+            this.currentAudioNodes.forEach(node => { try { node.disconnect(); } catch {} });
+            this.currentAudioNodes = []; this.currentSourceNode = null; this.currentAnalyser = null;
             console.warn('[Speech] WebAudio playback fallback to HTMLAudioElement:', err);
           }
         }

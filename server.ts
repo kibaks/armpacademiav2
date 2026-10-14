@@ -1523,7 +1523,7 @@ async function getOrSynthesizeTtsPayload(
   emotion?: string
 ): Promise<CachedTtsPayload | null> {
   const cleanText = humanizeTextForNaturalEloquenceServer(
-    normalizeCongoleseProperNounsServer((rawText || '').trim().slice(0, 950))
+    normalizeCongoleseProperNounsServer((rawText || '').trim().slice(0, piperConfigured() ? 3000 : 950))
   );
   if (!cleanText) return null;
 
@@ -1535,7 +1535,7 @@ async function getOrSynthesizeTtsPayload(
     ? requestedVoiceKey
     : 'vivienne';
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
-  const cacheKey = `tutor_authority_v32_piper::${voiceKey}::${emoKey}::${cleanText}`;
+  const cacheKey = `tutor_authority_v33_piper_passages::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
   if (cached) {
     ttsMemoryCache.set(cacheKey, cached);
