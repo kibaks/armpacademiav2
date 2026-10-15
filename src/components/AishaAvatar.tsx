@@ -115,6 +115,9 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
   }, []);
 
   useEffect(() => {
+    // Female replies use a generated MP4 with embedded audio. Keep a still
+    // portrait while idle or in audio-only mode, without simulated lips.
+    if (tutorPersona !== 'henri') return;
     // Portrait framing (Close-Up) framing on Aïsha's expressive face, smile, eyes & mouth
     // with static pedagogical studio background (flower pots, plants & warm shelves)
     // Visio framing keeps the full head inside the camera (crown y=149,
@@ -171,7 +174,8 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
         </>
       )}
 
-      <canvas
+      {tutorPersona !== 'henri' ? <img src="/assets/tutrice-portrait-v1.jpg" alt="Tutrice virtuelle"
+        className="relative z-10 w-full h-full object-contain object-center" /> : <canvas
         role="img" aria-label={tutorPersona === 'henri' ? 'Professeur Henri, tuteur masculin' : 'Tutrice virtuelle'}
         ref={wav2lipCanvasRef}
         width={isVisio ? 680 : isStudio ? 656 : dim.w >= 180 ? 600 : 360}
@@ -181,7 +185,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
             ? 'relative z-10 w-full h-full block object-contain object-center'
             : 'w-full h-full block object-cover object-top'
         }
-      />
+      />}
 
 
 

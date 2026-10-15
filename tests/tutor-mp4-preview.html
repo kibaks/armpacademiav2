@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="fr"><meta charset="utf-8"><title>Tutrice — lecteur MP4 synchronisé</title>
+<style>body{font:16px system-ui;background:#132c36;color:white;margin:24px}main{height:640px;max-width:480px;margin:24px auto}button{padding:12px;margin:4px}h1,p{text-align:center}</style>
+<h1>Tutrice — lecteur MP4 synchronisé</h1><p>Contrôle local du lecteur : extrait réel Sync-3 avec sa propre piste audio.</p>
+<div id="controls"></div><main id="root"></main>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { TutorVideoPlayer } from '../src/components/TutorVideoPlayer.tsx';
+import { AishaAvatar } from '../src/components/AishaAvatar.tsx';
+import '../src/index.css';
+const root=createRoot(document.getElementById('root'));
+function draw(state={status:'idle'}){root.render(React.createElement(TutorVideoPlayer,{state,persona:'vivienne',onStop:()=>draw(),onAudioOnly:()=>draw()},React.createElement(AishaAvatar,{tutorPersona:'vivienne',variant:'studio',showBadge:false})));}
+for(const [label,state] of [['Extrait de démonstration',{status:'idle'}],['Attente',{status:'loading'}],['Erreur',{status:'error',error:'Essai local : vidéo indisponible.'}],['Réponse MP4',{status:'ready',url:'/assets/tutrice-reponse-sync-v1.mp4'}]]){const b=document.createElement('button');b.textContent=label;b.onclick=()=>draw(state);document.getElementById('controls').append(b);}draw();
+</script></html>

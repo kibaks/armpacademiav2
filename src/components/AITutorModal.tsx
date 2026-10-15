@@ -45,6 +45,8 @@ import { speechService, VoicePersona } from '../utils/speechService';
 import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
 import type { AvatarEmotion } from '../workers/avatarExpressionWorker';
 import { AishaAvatar } from './AishaAvatar';
+import { TutorVideoPlayer } from './TutorVideoPlayer';
+import { useTutorVideoReply } from '../utils/useTutorVideoReply';
 
 // Rendu Markdown enrichi : gras, listes, citations juridiques, tableaux et blocs Question
 const renderMarkdown = (text: string) => {
@@ -555,6 +557,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     return () => { active = false; controller.abort(); };
   }, [isOpen]);
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
+  const tutorVideo = useTutorVideoReply(selectedVoice, isOpen);
   const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
   const [showStudioStage, setShowStudioStage] = useState<boolean>(true);
   const [toastNotice, setToastNotice] = useState<string | null>(null);
@@ -748,7 +751,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       .slice(0, 1800);
   };
 
-  const speak = (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number) => {
+  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number) => {
     if (!text) return;
     speechService.unlockAudio();
 
@@ -757,6 +760,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
+
+    if ((!isCallActive || isVideoCallActive) && await tutorVideo.start(text, voiceToUse)) return;
+    tutorVideo.stop();
 
     if (msgId) setActiveSpeakingMsgId(msgId);
     setSpokenSubtitle(clean.split(/(?<=[.!?…])\s+/)[0] || clean.slice(0, 140));
@@ -768,6 +774,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const stopSpeaking = () => {
+    tutorVideo.stop();
     speechService.stop();
     setIsSpeaking(false);
     setActiveSpeakingMsgId(null);
@@ -1397,7 +1404,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           {showStudioStage && (
             <aside className="tutor-portrait-panel">
               <div className="tutor-portrait">
-                <AishaAvatar isSpeaking={isSpeaking} isListening={isListening || isRecordingVoice} isLoading={isLoading} emotion={effectiveTutorEmotion} tutorPersona={selectedVoice} variant="studio" motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} showBadge={false} />
+                <TutorVideoPlayer persona={selectedVoice} active={!isVideoCallActive && !isCallActive} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
+                  <AishaAvatar isSpeaking={isSpeaking} isListening={isListening || isRecordingVoice} isLoading={isLoading} emotion={effectiveTutorEmotion} tutorPersona={selectedVoice} variant="studio" motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} showBadge={false} />
+                </TutorVideoPlayer>
 
               </div>
               <div className="tutor-listening-card">
@@ -2057,6 +2066,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <div className="absolute inset-0 z-40 bg-slate-950 flex flex-col min-h-0 overflow-hidden">
             {/* Scène principale Visio HD */}
             <div className="flex-1 min-h-0 relative bg-slate-950 overflow-hidden flex items-center justify-center">
+              <TutorVideoPlayer persona={selectedVoice} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
               <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures}
                 isSpeaking={isSpeaking}
                 isListening={isListening || isRecordingVoice}
@@ -2066,6 +2076,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 variant="visio"
                 className="w-full h-full"
               />
+              </TutorVideoPlayer>
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-slate-950/60 pointer-events-none z-10" />
 
               {/* Barre supérieure Visio : Statut + Sélecteur des 4 Tutrices + Quitter */}

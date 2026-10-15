@@ -1,4 +1,5 @@
 import { synthesizePiperTutor, piperConfigured } from './piperTutorSpeech.js';
+import { createSyncTutorVideoRouter } from './syncTutorVideo.js';
 import { profileMediaRouter } from './profileMedia.js';
 import { readTutorPresentation } from './tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './cartesiaTutorSpeech.js';
@@ -58,6 +59,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
  if (req.method === 'GET') return next();
  authenticate(req, res, () => requireAdmin(req, res, next));
 });
+app.use('/api/ai/tutor-video', createSyncTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;

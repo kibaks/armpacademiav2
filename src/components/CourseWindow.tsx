@@ -1,4 +1,6 @@
 import { authenticatedFetch } from '../lib/adminApi';
+import { TutorVideoPlayer } from './TutorVideoPlayer';
+import { useTutorVideoReply } from '../utils/useTutorVideoReply';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -557,7 +559,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [tutorQaError, setTutorQaError] = useState<string | null>(null);
   const [activeSpeakingQaId, setActiveSpeakingQaId] = useState<string | null>(null);
 
-  const speakQaAnswer = (answerText: string, qaId: string) => {
+  const tutorVideo = useTutorVideoReply(courseTutorPersona, mode === 'qa');
+  const speakQaAnswer = async (answerText: string, qaId: string) => {
     if (!answerText) return;
     speechService.unlockAudio();
     const clean = answerText
@@ -567,6 +570,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       .replace(/\s+/g, ' ')
       .trim();
     if (!clean) return;
+    if (await tutorVideo.start(answerText, courseTutorPersona)) return;
+    tutorVideo.stop();
     setActiveSpeakingQaId(qaId);
     speechService.play(clean, `qa-voice-${qaId}`, {
       speed: 0.9,
@@ -1648,6 +1653,11 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     </div>
                   </div>
 
+                  {courseTutorPersona !== 'henri' && <div className="h-[32rem] max-w-md mx-auto">
+                    <TutorVideoPlayer persona={courseTutorPersona} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
+                      <AishaAvatar tutorPersona={courseTutorPersona} variant="studio" handGestures={false} showBadge={false} />
+                    </TutorVideoPlayer>
+                  </div>}
                   {tutorQaError && <p role="alert" className="p-3 rounded-xl bg-rose-950/40 text-rose-200 text-sm">{tutorQaError}</p>}
                   {playbackState.error && <p role="status" className="p-3 rounded-xl bg-amber-950/40 text-amber-200 text-sm">{playbackState.error}</p>}
                   <div className="flex items-center justify-between">

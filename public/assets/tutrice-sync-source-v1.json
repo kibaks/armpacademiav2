@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-15",
+  "sourcePortrait": {
+    "name": "tutrice-frontale-bouche-fermee.png",
+    "sha256": "562ac40109de871e5004a7dc071e5937f60810e825a2f93b264779b2f701f410"
+  },
+  "closedEyes": {
+    "name": "neutral-closed.png",
+    "sha256": "03551d8253d4efffb04000f5459e5273969a3a2eb0ff63d18b64e4cb247603d8"
+  },
+  "source": "Generated original portraits; pure image geometry and masked eyes; no neural mouth model outputs",
+  "renderer": "tools/create_sync_master.py",
+  "video": {
+    "file": "tutrice-sync-source-v1.mp4",
+    "sha256": "11355cabb08fe88b82f46232241431d48989f68ca79d2549b0766d8888f231cd",
+    "durationSeconds": 12,
+    "fps": 25,
+    "width": 540,
+    "height": 720,
+    "audio": false
+  },
+  "motion": "Approximate head depth and neck joint; fixed camera, 0.5-second blinks, preset head gestures; not true 3D or semantic gestures"
+}
