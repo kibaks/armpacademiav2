@@ -124,6 +124,9 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
+  const [courseTutorPersona, setCourseTutorPersona] = useState<'henri' | 'vivienne'>(() =>
+    speechService.getVoicePersona() === 'henri' ? 'henri' : 'vivienne');
+  const courseTutorName = courseTutorPersona === 'henri' ? 'Prof. Henri' : 'Prof. Aïsha';
   const [autoReadLessons, setAutoReadLessons] = useState<boolean>(() => {
     try {
       return localStorage.getItem('academia_course_autoread') === 'true';
@@ -567,7 +570,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     setActiveSpeakingQaId(qaId);
     speechService.play(clean, `qa-voice-${qaId}`, {
       speed: 0.9,
-      voice: 'vivienne'
+      voice: courseTutorPersona
     });
   };
 
@@ -1551,6 +1554,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   {/* Studio Aïsha — Bandeau Tuteur Virtuel du Chapitre */}
                   <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-950 border border-blue-800/40 flex flex-col sm:flex-row items-center gap-4 text-white shadow-xl">
                     <AishaAvatar
+                      tutorPersona={courseTutorPersona}
                       isSpeaking={Boolean(playbackState.isPlaying && playbackState.currentId?.startsWith('qa-voice-'))}
                       isLoading={isAskingTutorQA}
                       size="lg"
@@ -1559,14 +1563,14 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     <div className="flex-1 text-center sm:text-left space-y-1.5">
                       <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                         <h3 className="text-base sm:text-lg font-black tracking-tight">
-                          Prof. Aïsha • Questions / Réponses sur le Chapitre {activeLessonIndex + 1}
+                          {courseTutorName} • Questions / Réponses sur le Chapitre {activeLessonIndex + 1}
                         </h3>
                         <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] font-black uppercase">
                           {course.code} • {course.legalRef}
                         </span>
                       </div>
                       <p className="text-xs text-blue-200/90 leading-relaxed">
-                        Posez votre question ci-dessous : Aïsha vous répond immédiatement par écrit et de vive voix en s'appuyant sur « <b>{currentLesson.title}</b> ».
+                        Posez votre question ci-dessous : votre tuteur vous répond par écrit et de vive voix en s'appuyant sur « <b>{currentLesson.title}</b> ».
                       </p>
                       <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
                         {[
@@ -1586,21 +1590,32 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 shrink-0">
+                      <label className="text-xs font-semibold">Tuteur du chapitre
+                        <select value={courseTutorPersona} onChange={event => {
+                          const persona = event.target.value === 'henri' ? 'henri' : 'vivienne';
+                          speechService.stop();
+                          speechService.setVoicePersona(persona);
+                          setCourseTutorPersona(persona);
+                        }} className="mt-1 block w-full rounded-lg bg-slate-900 border border-blue-700 p-2 text-white">
+                          <option value="henri">Prof. Henri</option>
+                          <option value="vivienne">Prof. Aïsha</option>
+                        </select>
+                      </label>
                       <button
                         onClick={() =>
                           onCallTutor
-                            ? onCallTutor('call', 'denise')
+                            ? onCallTutor('call', courseTutorPersona)
                             : onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)
                         }
                         className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
                       >
                         <Phone className="w-3.5 h-3.5" />
-                        <span>Appeler la Tutrice</span>
+                        <span>Appeler le tuteur</span>
                       </button>
                       <button
                         onClick={() =>
                           onCallTutor
-                            ? onCallTutor('voice', 'denise')
+                            ? onCallTutor('voice', courseTutorPersona)
                             : onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)
                         }
                         className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
@@ -1609,7 +1624,11 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                         <span>Envoyer un Voice</span>
                       </button>
                       <button
-                        onClick={() => onAskTutor?.(`J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`)}
+                        onClick={() => {
+                          const question = `J'étudie le chapitre "${currentLesson.title}" (${course.code}). Peux-tu m'interroger dessus ?`;
+                          if (onCallTutor) onCallTutor('chat', courseTutorPersona, question);
+                          else onAskTutor?.(question);
+                        }}
                         className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
                       >
                         <Sparkles className="w-3.5 h-3.5" />

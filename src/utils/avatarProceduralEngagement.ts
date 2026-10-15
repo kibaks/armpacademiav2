@@ -1,3 +1,4 @@
+import { sampleTutorBlink } from './tutorPortraitMotion';
 // Procedural Engagement & Biomechanical Micro-Movement Engine for AI Studio Avatar
 // Simulates natural human presence, eliminating robotic stiffness via:
 // 1. Stochastic Bio-Blinking: Asymmetric eyelid closure/opening, double-blinks & saccade coupling.
@@ -150,69 +151,18 @@ export class AvatarProceduralEngagementEngine {
    * Biological blinking model with asymmetric closing/opening curves,
    * stochastic inter-blink intervals, double-blinks, and winks.
    */
-  private updateBlinking(nowMs: number, isSpeaking: boolean, emotion: AvatarEmotion) {
-    // Schedule next natural blink if idle
+  private updateBlinking(nowMs: number, isSpeaking: boolean, _emotion: AvatarEmotion) {
     if (!this.isBlinking && nowMs >= this.nextBlinkMs) {
       this.isBlinking = true;
       this.blinkStartMs = nowMs;
-      // Close phase is fast (~70-85ms), open phase is cushioned (~110-140ms)
-      this.blinkCloseDurationMs = 70 + Math.floor(pseudoNoise(nowMs) * 18);
-      this.blinkOpenDurationMs = 115 + Math.floor(pseudoNoise(nowMs + 45) * 30);
-      
-      // 18% chance of triggering a double-blink (flutter) for high human realism
-      this.isDoubleBlink = pseudoNoise(nowMs * 0.77) < 0.20 && emotion !== 'solemn';
-      this.secondBlinkPending = this.isDoubleBlink;
     }
-
-    if (this.isBlinking) {
-      const elapsed = nowMs - this.blinkStartMs;
-      const totalDuration = this.blinkCloseDurationMs + this.blinkOpenDurationMs;
-
-      if (elapsed < this.blinkCloseDurationMs) {
-        // Fast quadratic closing phase
-        const t = elapsed / this.blinkCloseDurationMs;
-        const curve = t * t * (3 - 2 * t); // smooth cubic hermite
-        this.currentBlinkLeft = curve;
-        this.currentBlinkRight = curve * (0.97 + pseudoNoise(this.blinkStartMs) * 0.06);
-      } else if (elapsed < totalDuration) {
-        // Cushioned exponential opening phase
-        const t = (elapsed - this.blinkCloseDurationMs) / this.blinkOpenDurationMs;
-        const curve = 1.0 - Math.pow(t, 0.85);
-        this.currentBlinkLeft = Math.max(0, curve);
-        this.currentBlinkRight = Math.max(0, curve * (0.97 + pseudoNoise(this.blinkStartMs) * 0.06));
-      } else {
-        // First blink complete
-        this.currentBlinkLeft = 0;
-        this.currentBlinkRight = 0;
-        this.isBlinking = false;
-
-        if (this.secondBlinkPending) {
-          this.secondBlinkPending = false;
-          // Trigger second lighter flutter after 130-180ms
-          this.nextBlinkMs = nowMs + 130 + Math.floor(pseudoNoise(nowMs + 99) * 50);
-        } else {
-          // Schedule next stochastic blink:
-          // Speaking: blinks every 2.4s to 4.5s
-          // Listening/Reflection: blinks every 3.2s to 6.0s
-          const baseInterval = isSpeaking ? 2600 : 3400;
-          const variance = isSpeaking ? 2000 : 2800;
-          this.nextBlinkMs = nowMs + baseInterval + Math.floor(pseudoNoise(nowMs * 1.33) * variance);
-        }
-      }
-    } else {
-      this.currentBlinkLeft = 0;
-      this.currentBlinkRight = 0;
-    }
-
-    // Occasional affectionate micro-wink or soft unilateral squint during smiling or encouragement
-    const winkPeriod = emotion === 'enthusiastic' || emotion === 'encouraging' ? 6200 : 8800;
-    const winkPhase = (nowMs + 2100) % winkPeriod;
-    if (winkPhase < 240 && emotion !== 'solemn' && !this.isBlinking) {
-      const w = winkPhase < 100
-        ? Math.sin((winkPhase / 100) * (Math.PI / 2))
-        : Math.cos(((winkPhase - 100) / 140) * (Math.PI / 2));
-      this.currentBlinkLeft = Math.max(this.currentBlinkLeft, w * 0.88);
-      this.currentBlinkRight = Math.max(this.currentBlinkRight, w * 0.12);
+    const elapsed = nowMs - this.blinkStartMs;
+    const value = this.isBlinking ? sampleTutorBlink(elapsed) : 0;
+    this.currentBlinkLeft = value;
+    this.currentBlinkRight = value;
+    if (this.isBlinking && elapsed >= 500) {
+      this.isBlinking = false;
+      this.nextBlinkMs = nowMs + (isSpeaking ? 3200 : 4000) + Math.floor(pseudoNoise(nowMs) * 1800);
     }
   }
 

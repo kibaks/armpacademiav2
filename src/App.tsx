@@ -201,7 +201,7 @@ export default function App() {
   const [isTutorOpen, setIsTutorOpen] = useState(false);
   const [tutorInitialQuestion, setTutorInitialQuestion] = useState<string | null>(null);
   const [tutorInitialAction, setTutorInitialAction] = useState<'chat' | 'call' | 'video' | 'voice' | null>(null);
-  const [tutorInitialPersona, setTutorInitialPersona] = useState<'denise' | 'charline' | 'vivienne' | 'eloise' | null>(null);
+  const [tutorInitialPersona, setTutorInitialPersona] = useState<'henri' | 'denise' | 'charline' | 'vivienne' | 'eloise' | null>(null);
   const [pendingTutorAfterAuth, setPendingTutorAfterAuth] = useState(false);
   const [pendingPlacementAfterAuth, setPendingPlacementAfterAuth] = useState(false);
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
@@ -402,8 +402,10 @@ export default function App() {
 
   const handleCallTutor = (
     action: 'chat' | 'call' | 'video' | 'voice' = 'call',
-    tutorId?: 'denise' | 'charline' | 'vivienne' | 'eloise'
+    tutorId?: 'henri' | 'denise' | 'charline' | 'vivienne' | 'eloise',
+    question?: string
   ) => {
+    if (question?.trim()) setTutorInitialQuestion(question.trim());
     setTutorInitialAction(action);
     if (tutorId) setTutorInitialPersona(tutorId);
     if (!isAuthenticated) {
@@ -1546,8 +1548,8 @@ export default function App() {
           onAskTutor={(question) => {
             handleOpenTutor(question);
           }}
-          onCallTutor={(action, tutorId) => {
-            handleCallTutor(action, tutorId);
+          onCallTutor={(action, tutorId, question) => {
+            handleCallTutor(action, tutorId, question);
           }}
         />
       )}

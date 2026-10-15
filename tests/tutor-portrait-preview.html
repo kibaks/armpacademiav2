@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="fr"><meta charset="utf-8"><title>Contrôle des portraits des tuteurs</title>
+<style>body{font:16px system-ui;background:#132c36;color:white;margin:24px}main{display:flex;gap:24px;flex-wrap:wrap}section{width:340px}figure{margin:0;height:472px}figure>div{width:100%;height:100%}canvas{width:100%;height:100%;object-fit:contain}button{padding:12px;margin-bottom:20px}</style>
+<h1>Portraits continus des tuteurs</h1><p>Contrôle visuel local : Henri et la tutrice, au repos ou en écoute.</p>
+<button id="listening">Activer l’écoute</button><main id="root"></main>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { AishaAvatar } from '../src/components/AishaAvatar.tsx';
+const root=createRoot(document.getElementById('root'));let listening=false;
+function draw(){root.render(React.createElement(React.Fragment,null,...[['henri','Professeur Henri'],['denise','Tutrice']].map(([persona,name])=>React.createElement('section',{key:persona},React.createElement('h2',null,name),React.createElement('figure',null,React.createElement(AishaAvatar,{tutorPersona:persona,variant:'studio',motionMode:'subtle',isListening:listening,handGestures:false,showBadge:false}))))));}
+document.getElementById('listening').onclick=()=>{listening=!listening;draw();};draw();
+</script></html>

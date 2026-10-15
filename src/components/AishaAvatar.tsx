@@ -1,6 +1,5 @@
 import type { TutorMotion } from '../../shared/tutorPresentation';
 import React, { useEffect, useRef, useState } from 'react';
-import imgTutrice from '../assets/images/aisha_cutout_foreground.png';
 import imgStudioBg from '../assets/images/studio_static_background.jpg';
 import { speechService, type VoicePersona } from '../utils/speechService';
 import { avatarExpressionEngine } from '../utils/avatarExpressionEngine';
@@ -128,7 +127,7 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
 
     const unregister = avatarExpressionEngine.registerAvatarTarget({
       wav2lipCanvas: wav2lipCanvasRef.current,
-      motionMode, facialExpressions, referencePostures: isStudio || isVisio, handGestures,
+      motionMode, facialExpressions, referencePostures: false, handGestures,
       wav2lipViewport: viewport,
       emotionBadgeEl: emotionBadgeRef.current,
       postureBadgeEl: postureBadgeRef.current,
@@ -175,10 +174,10 @@ export const AishaAvatar: React.FC<AishaAvatarProps> = ({
       <canvas
         role="img" aria-label={tutorPersona === 'henri' ? 'Professeur Henri, tuteur masculin' : 'Tutrice virtuelle'}
         ref={wav2lipCanvasRef}
-        width={isVisio ? 680 : isStudio || dim.w >= 180 ? 600 : 360}
-        height={isVisio ? 640 : isStudio || dim.w >= 180 ? 580 : 380}
+        width={isVisio ? 680 : isStudio ? 656 : dim.w >= 180 ? 600 : 360}
+        height={isVisio ? 640 : isStudio ? 910 : dim.w >= 180 ? 580 : 380}
         className={
-          isVisio
+          isVisio || isStudio
             ? 'relative z-10 w-full h-full block object-contain object-center'
             : 'w-full h-full block object-cover object-top'
         }

@@ -1,3 +1,4 @@
+import { projectTutorHeadPoint } from './tutorPortraitMotion';
 // Real-time audio-driven WebGL portrait renderer with temporal vertex smoothing.
 // The historical filename is retained; this is not the neural Wav2Lip model.
 // - Eliminates all micro-saccades and ghost traces ("aucune saccade ni trace fantôme") during head movements:
@@ -539,35 +540,11 @@ function deformMeshForFrame(frame: AvatarComputedFrame) {
       const ry = ly - HEAD_PIVOT_Y;
       const rz = (ROW_BASE_DEPTH[r] * 0.60 + COL_DEPTH_PROFILE[c] * 0.60) * headWeight;
 
-      // 1. Yaw 3D Rotation (Turn left/right) around Y axis
-      const yawRad = ((frame.turn ?? 0) * 0.68 * Math.PI) / 180.0;
-      const cosY = Math.cos(yawRad);
-      const sinY = Math.sin(yawRad);
-      const x1 = rx * cosY - rz * sinY;
-      const z1 = rx * sinY + rz * cosY;
-      const y1 = ry;
-
-      // 2. Pitch 3D Rotation (Nod up/down) around X axis
-      const pitchRad = ((frame.nod ?? 0) * 0.52 * Math.PI) / 180.0;
-      const cosP = Math.cos(pitchRad);
-      const sinP = Math.sin(pitchRad);
-      const y2 = y1 * cosP + z1 * sinP;
-      const z2 = -y1 * sinP + z1 * cosP;
-      const x2 = x1;
-
-      // 3. Roll 3D Rotation (Tilt inclination) around Z axis
-      const rollRad = tiltRad;
-      const cosR = Math.cos(rollRad);
-      const sinR = Math.sin(rollRad);
-      const x3 = x2 * cosR - y2 * sinR;
-      const y3 = x2 * sinR + y2 * cosR;
-      const z3 = z2;
-
-      // 4. Perspective Projection with Camera Focal Distance F = 1250px
-      const F = 1250.0;
-      const perspScale = F / Math.max(800.0, F - z3);
-      const projX = HEAD_PIVOT_X + x3 * perspScale;
-      const projY = HEAD_PIVOT_Y + y3 * perspScale;
+      // Fixed camera: rotate around the neck without changing head scale.
+      const [projX, projY] = projectTutorHeadPoint(
+        lx, ly, rz, HEAD_PIVOT_X, HEAD_PIVOT_Y,
+        (frame.turn ?? 0) * 0.68, (frame.nod ?? 0) * 0.52, clampedTiltDeg
+      );
 
       const rotDx = projX - lx;
       const rotDy = projY - ly;
