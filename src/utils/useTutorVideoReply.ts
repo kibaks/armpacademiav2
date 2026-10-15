@@ -3,7 +3,7 @@ import { authenticatedFetch } from '../lib/adminApi';
 import { speechService } from './speechService';
 
 export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string };
-type Config = { enabled: boolean; personas: string[] };
+type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number };
 export function useTutorVideoReply(persona: string, active = true) {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
   const config = useRef<Promise<Config> | null>(null);
@@ -11,8 +11,11 @@ export function useTutorVideoReply(persona: string, active = true) {
   const generation = useRef(0);
   const lastRequest = useRef<{ text: string; voice: string } | null>(null);
   const activeRef = useRef(active);
+  const objectUrl = useRef<string | null>(null);
+  const releaseMedia = () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); objectUrl.current = null; };
   activeRef.current = active;
   const stop = useCallback(() => {
+    releaseMedia();
     generation.current++;
     controller.current?.abort();
     controller.current = null;
@@ -27,7 +30,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     config.current = authenticatedFetch('/api/ai/tutor-video/config', { signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]) })
       .then(async response => response.ok ? await response.json() as Config : { enabled: false, personas: [] })
       .catch(() => ({ enabled: false, personas: [] }));
-    return () => { generation.current++; controller.current?.abort(); request.abort(); };
+    return () => { generation.current++; controller.current?.abort(); request.abort(); releaseMedia(); };
   }, [persona, active, stop]);
   useEffect(() => speechService.subscribe(value => {
     if (value.isPlaying) {
@@ -40,12 +43,15 @@ export function useTutorVideoReply(persona: string, active = true) {
   const start = async (text: string, voice: string): Promise<boolean> => {
     if (!activeRef.current) return true;
     speechService.stop();
+    releaseMedia();
     const run = ++generation.current;
     controller.current?.abort();
     setState({ status: 'idle' });
     const settings = await config.current;
     if (run !== generation.current) return true;
     if (!settings?.enabled || !settings.personas.includes(voice)) return false;
+    // Veo is an eight-second excerpt, never silently truncate a full answer.
+    if (settings.provider === 'veo' && (text.length > (settings.maxTextLength || 140) || text.trim().split(/\s+/).length > 22)) return false;
     lastRequest.current = { text, voice };
     const abort = new AbortController();
     controller.current = abort;
@@ -73,8 +79,17 @@ export function useTutorVideoReply(persona: string, active = true) {
         if (!current()) return true;
         if (!statusResponse.ok || result.status === 'FAILED') throw new Error(result.error || 'La vidéo est indisponible.');
         if (result.status === 'COMPLETED') {
-          if (typeof result.videoUrl !== 'string' || !result.videoUrl.startsWith('https://')) throw new Error('Vidéo indisponible.');
-          setState({ status: 'ready', url: result.videoUrl });
+          if (typeof result.videoUrl !== 'string') throw new Error('Vidéo indisponible.');
+          let url = result.videoUrl;
+          if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {
+            const media = await authenticatedFetch(url, { signal });
+            if (!media.ok || !media.headers.get('content-type')?.includes('video/mp4')) throw new Error('Vidéo indisponible.');
+            const blob = await media.blob();
+            if (!current()) return true;
+            objectUrl.current = URL.createObjectURL(blob);
+            url = objectUrl.current;
+          } else if (!url.startsWith('https://')) throw new Error('Vidéo indisponible.');
+          setState({ status: 'ready', url });
           return true;
         }
       }

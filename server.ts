@@ -1,5 +1,5 @@
 import { synthesizePiperTutor, piperConfigured } from './backend/piperTutorSpeech.js';
-import { createSyncTutorVideoRouter } from './backend/syncTutorVideo.js';
+import { createTutorVideoRouter } from './backend/tutorVideo.js';
 import { profileMediaRouter } from './backend/profileMedia.js';
 import { readTutorPresentation } from './backend/tutorPresentation.js';
 import { synthesizeCartesiaTutor } from './backend/cartesiaTutorSpeech.js';
@@ -68,7 +68,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 });
 
 
-app.use('/api/ai/tutor-video', createSyncTutorVideoRouter());
+app.use('/api/ai/tutor-video', createTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
 // Lazy initialize Gemini AI client (supports dynamic API_KEY from paid_model_flow as well as GEMINI_API_KEY)
 let aiClient: GoogleGenAI | null = null;

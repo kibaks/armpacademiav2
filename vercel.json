@@ -30,7 +30,7 @@
   ],
   "functions": {
     "api/index.js": {
-      "includeFiles": "dist/api.mjs"
+      "includeFiles": "{dist/api.mjs,public/assets/tutrice-portrait-v1.jpg}"
     }
   }
 }
