@@ -4,6 +4,7 @@ import concurrent.futures
 import hmac
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -88,8 +89,8 @@ def run_job(job_id):
         status(directory, {'status': 'PROCESSING'})
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(directory / 'input.audio'), '-vn', '-ac', '1', '-ar', '16000', str(directory / 'reply.wav')], check=True, timeout=30, capture_output=True)
         duration = float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(directory / 'reply.wav')], timeout=10))
-        if not 0 < duration <= 120:
-            raise ValueError('Audio duration exceeds limit')
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError('Invalid audio duration')
         if os.environ.get('MUSETALK_REALTIME') == 'true':
             if engine is None:
                 raise RuntimeError('Realtime engine unavailable')
@@ -107,7 +108,7 @@ def run_job(job_id):
         config = directory / 'inference.json'
         config.write_text(json.dumps({'tutor': {'video_path': str(source), 'audio_path': str(directory / 'reply.wav'), 'bbox_shift': 0}}))
         with (directory / 'render.log').open('w') as log:
-            subprocess.run([str(ROOT / 'generate-video'), '--inference_config', str(config), '--result_dir', str(directory / 'results'), '--batch_size', '8'], cwd=ROOT, check=True, timeout=600, stdout=log, stderr=subprocess.STDOUT)
+            subprocess.run([str(ROOT / 'generate-video'), '--inference_config', str(config), '--result_dir', str(directory / 'results'), '--batch_size', '8'], cwd=ROOT, check=True, timeout=max(600, duration * 5 + 60), stdout=log, stderr=subprocess.STDOUT)
         candidates = sorted((directory / 'results').rglob('*.mp4'))
         if not candidates:
             raise ValueError('No output')
@@ -191,11 +192,13 @@ def play(job_id: str, expires: int, token: str):
     value = json.loads((directory / 'status.json').read_text()) if (directory / 'status.json').exists() else {}
     if value.get('status') == 'STREAMING':
         def fragments():
-            deadline = time.monotonic() + 600
+            # An idle timeout detects a stalled renderer without limiting video length.
+            last_data = time.monotonic()
             with result.open('rb') as media:
-                while time.monotonic() < deadline:
+                while time.monotonic() - last_data < 60:
                     chunk = media.read(65536)
                     if chunk:
+                        last_data = time.monotonic()
                         yield chunk
                         continue
                     current = json.loads((directory / 'status.json').read_text()).get('status')

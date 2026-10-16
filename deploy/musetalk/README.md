@@ -113,6 +113,13 @@ use native video preloading; signed playback and byte ranges remain enabled.
 Run `python3 deploy/musetalk/test_source_cache.py` without GPU/API dependencies.
 ## Warm engine and progressive replies
 
+Self-hosted video has no daily account quota and no fixed 120-second duration
+ceiling. `MUSETALK_VIDEO_DAILY_LIMIT` is obsolete and ignored, including existing
+values in Vercel. Historical quota records do not block new jobs. Speech inputs
+retain Piper's 3,000-character per-passage validation, transport size bounds and
+the single-GPU queue capacity; these are technical bounds, not usage quotas.
+Long playback uses an inactivity timeout rather than a maximum stream duration.
+
 Install `realtime_engine.py` beside `academia_api.py` in `/opt/MuseTalk` and set
 `MUSETALK_REALTIME=true` in the private worker environment, then restart only
 when `/health` reports no pending jobs. The single executor loads the models,

@@ -85,14 +85,23 @@ test('MuseTalk submits once, protects generated media and never exposes the work
     assert.equal(partial.headers.get('content-range'), 'bytes 0-2/8');
     assert.equal(partial.headers.get('accept-ranges'), 'bytes');
     assert.equal(await partial.text(), 'mp4');
-    assert.equal((await h.post('Une nouvelle phrase.')).status, 429);
-    assert.deepEqual(h.counts(), { submissions: 1, polls: 2 });
+    assert.equal((await h.post('Une nouvelle phrase.')).status, 202);
+    assert.deepEqual(h.counts(), { submissions: 2, polls: 2 });
   } finally { await h.close(); }
 });
-test('excessive answers cannot overload the GPU', async () => {
+test('invalid speech input is rejected without submitting GPU work', async () => {
   const h = await harness();
-  try { assert.equal((await h.post('mot '.repeat(500))).status, 400); assert.equal(h.counts().submissions, 0); }
+  try { assert.equal((await h.post('mot '.repeat(800))).status, 400); assert.equal(h.counts().submissions, 0); }
   finally { await h.close(); }
+});
+test('self-hosted video ignores the old daily limit and never creates quota records', async () => {
+  const h = await harness();
+  for (let index = 0; index < 8; index++) assert.equal((await h.post(`Réponse numéro ${index}.`)).status, 202);
+  assert.equal(h.counts().submissions, 8);
+  assert.ok(![...h.records.keys()].some(key => key.startsWith('musetalkTutorQuotas/')));
+  const config = await (await h.request(`${h.base}/config`, { headers: { authorization: 'owner' } })).json();
+  assert.equal(config.dailyLimit, null);
+  assert.equal(config.maxDurationSeconds, null);
 });
 test('a playable fragment is returned before completion without caching completion', async () => {
   const h = await harness('STREAMING');

@@ -23,7 +23,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   const remote = (suffix: string, init: RequestInit = {}) => request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) });
   router.use(deps.authenticate || authenticate);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: 'musetalk', personas, maxTextLength: 1800 }));
+  router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: 'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: null }));
   router.post('/', async (req: any, res) => {
     let ref: any, reserved = false;
     try {
@@ -31,26 +31,19 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const { text: raw, persona } = req.body || {};
       if (typeof raw !== 'string' || raw.length > 6000 || !personas.includes(persona)) return res.status(400).json({ error: 'Réponse ou tutrice invalide.' });
       const text = normalizeVideoText(raw);
-      if (!text || text.length > 1800) return res.status(400).json({ error: 'Demandez une réponse plus courte pour la vidéo.' });
+      if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
       const id = createHash('sha256').update(JSON.stringify([uid, text, persona, 'musetalk-v15-realtime-fragments-v5'])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
-      const day = new Date().toISOString().slice(0, 10);
-      const quota = db().collection('musetalkTutorQuotas').doc(createHash('sha256').update(`${uid}:${day}`).digest('hex'));
-      const rawLimit = Number(env.MUSETALK_VIDEO_DAILY_LIMIT || 6);
-      const limit = Number.isSafeInteger(rawLimit) && rawLimit > 0 ? rawLimit : 6;
+      // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {
         const existing = await tx.get(ref);
         if (existing.exists) {
           const job = existing.data();
           return job?.status === 'COMPLETED' && Date.now() - job.createdAt < 86400000 ? 'completed' : 'existing';
         }
-        const usage = (await tx.get(quota)).data();
-        if ((usage?.count || 0) >= limit) return 'limit';
-        tx.set(quota, { uid, day, count: (usage?.count || 0) + 1 });
         tx.set(ref, { uid, status: 'SUBMITTING', createdAt: Date.now() }); return 'new';
       });
-      if (reservation === 'limit') return res.status(429).json({ error: 'Votre limite quotidienne de vidéos est atteinte. L’audio reste disponible.' });
       if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', videoUrl: playbackUrl(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
       reserved = true;

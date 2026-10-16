@@ -40,7 +40,7 @@ class PlaybackTests(unittest.TestCase):
                 producer.join()
                 worker.JOBS = original
 
-    def test_ninety_two_second_narration_reaches_inference(self):
+    def test_narration_longer_than_two_minutes_reaches_inference(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = worker.JOBS
             worker.JOBS = Path(tmp)
@@ -58,7 +58,7 @@ class PlaybackTests(unittest.TestCase):
                 else:
                     Path(args[-1]).write_bytes(b'video')
             try:
-                with patch.object(worker, 'normalized_source', return_value=directory / 'source-25fps.mp4'), patch.object(worker.subprocess, 'run', side_effect=fake_run), patch.object(worker.subprocess, 'check_output', return_value=b'92.45'):
+                with patch.object(worker, 'normalized_source', return_value=directory / 'source-25fps.mp4'), patch.object(worker.subprocess, 'run', side_effect=fake_run), patch.object(worker.subprocess, 'check_output', return_value=b'240.45'):
                     worker.run_job(job)
                 self.assertIn('COMPLETED', (directory / 'status.json').read_text())
                 self.assertTrue(any('generate-video' in str(command[0]) for command in commands))
