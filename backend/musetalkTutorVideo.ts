@@ -33,20 +33,25 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const text = normalizeVideoText(raw);
       if (!text || text.length > 1800) return res.status(400).json({ error: 'Demandez une réponse plus courte pour la vidéo.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, 'musetalk-v15-professional-sync25-v4'])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, 'musetalk-v15-realtime-fragments-v5'])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       const day = new Date().toISOString().slice(0, 10);
       const quota = db().collection('musetalkTutorQuotas').doc(createHash('sha256').update(`${uid}:${day}`).digest('hex'));
       const rawLimit = Number(env.MUSETALK_VIDEO_DAILY_LIMIT || 6);
       const limit = Number.isSafeInteger(rawLimit) && rawLimit > 0 ? rawLimit : 6;
       const reservation = await db().runTransaction(async (tx: any) => {
-        if ((await tx.get(ref)).exists) return 'existing';
+        const existing = await tx.get(ref);
+        if (existing.exists) {
+          const job = existing.data();
+          return job?.status === 'COMPLETED' && Date.now() - job.createdAt < 86400000 ? 'completed' : 'existing';
+        }
         const usage = (await tx.get(quota)).data();
         if ((usage?.count || 0) >= limit) return 'limit';
         tx.set(quota, { uid, day, count: (usage?.count || 0) + 1 });
         tx.set(ref, { uid, status: 'SUBMITTING', createdAt: Date.now() }); return 'new';
       });
       if (reservation === 'limit') return res.status(429).json({ error: 'Votre limite quotidienne de vidéos est atteinte. L’audio reste disponible.' });
+      if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', videoUrl: playbackUrl(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
       reserved = true;
       const audio = await (deps.synthesize ? deps.synthesize(text, persona) : synthesizePiperTutor(text, persona).then(async value => value || await synthesizeCartesiaTutor(text, persona) || await synthesizeElevenTutor(text, persona)));
@@ -69,10 +74,13 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   router.get('/:id', async (req: any, res) => {
     try {
       const entry = await owned(req); if (!entry) return res.sendStatus(404);
+      // Completed jobs are immutable: issue a fresh playback ticket without another worker round trip.
+      if (entry.job.status === 'COMPLETED') return res.json({ status: 'COMPLETED', videoUrl: playbackUrl(req.params.id) });
       const response = await remote(`/jobs/${req.params.id}`);
       if (response.status === 404 && entry.job.status === 'FAILED') return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' });
       if (!response.ok) return res.sendStatus(503);
       const result = await response.json();
+      if (result.status === 'STREAMING') return res.json({ status: 'STREAMING', videoUrl: playbackUrl(req.params.id) });
       if (result.status === 'COMPLETED') {
         await entry.ref.update({ status: 'COMPLETED' });
         // A short-lived read-only ticket enables native streaming and byte ranges.
@@ -86,9 +94,21 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   router.get('/:id/media', async (req: any, res) => {
     try {
       const entry = await owned(req); if (!entry || entry.job.status !== 'COMPLETED') return res.sendStatus(404);
-      const response = await remote(`/jobs/${req.params.id}/media`);
+      const range = req.headers.range;
+      const response = await remote(`/jobs/${req.params.id}/media`, { headers: typeof range === 'string' ? { range } : {} });
+      if (response.status === 416) {
+        const contentRange = response.headers.get('content-range');
+        if (contentRange) res.set('Content-Range', contentRange);
+        return res.sendStatus(416);
+      }
       if (!response.ok || !response.body) return res.sendStatus(503);
-      res.type('video/mp4');
+      res.status(response.status === 206 ? 206 : 200).type('video/mp4');
+      // Preserve byte-range metadata so playback can start and seek without fetching the full file.
+      for (const header of ['accept-ranges', 'content-range', 'content-length']) {
+        const value = response.headers.get(header);
+        if (value) res.set(header, value);
+      }
+      res.flushHeaders();
       const reader = response.body.getReader();
       try { while (true) { const { value, done } = await reader.read(); if (done || res.destroyed) break; if (!res.write(value)) await new Promise<void>(resolve => { const finish = () => { res.off('drain', finish); res.off('close', finish); resolve(); }; res.once('drain', finish); res.once('close', finish); }); } }
       finally { await reader.cancel().catch(() => undefined); }

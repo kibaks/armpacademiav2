@@ -85,7 +85,8 @@ seconds because the worker limit was 90 seconds. The worker now accepts up to
 requeues an explicitly requested failed job. Application polling can recover a
 previously failed record after the worker job has been repaired.
 
-New outputs use 720-pixel height, 20 fps, H.264 CRF 24 / maxrate 850k and mono
+New outputs use 720-pixel height, preserve the normalized 25 fps cadence,
+H.264 CRF 24 / maxrate 850k and mono
 AAC 64k. The presentation uses a versioned light asset (about 278 KB versus
 1.6 MB previously), retaining the original v3 asset for rollback.
 
@@ -96,3 +97,41 @@ buffering in browser memory and the application proxy. Test both valid Range
 requests (206) and invalid/expired tickets (403) with `test_api.py`.
 The TLS gateway uses the `musetalk_private` access-log format with `$uri`,
 excluding query parameters because they contain a temporary playback capability.
+
+## Loading latency
+
+The worker keeps `data/academia/source-25fps.mp4` between jobs instead of
+repeating the same source conversion for every answer. A size/mtime/version
+signature invalidates it when `source.mp4` changes. Conversion is serialized and
+published atomically; job cleanup never removes this shared file.
+
+Completed jobs return a fresh signed playback URL directly from the creation
+request and cached status checks, without polling the GPU worker again. New jobs
+are checked immediately, then every 1.5 seconds while pending. Generated answers
+use native video preloading; signed playback and byte ranges remain enabled.
+
+Run `python3 deploy/musetalk/test_source_cache.py` without GPU/API dependencies.
+## Warm engine and progressive replies
+
+Install `realtime_engine.py` beside `academia_api.py` in `/opt/MuseTalk` and set
+`MUSETALK_REALTIME=true` in the private worker environment, then restart only
+when `/health` reports no pending jobs. The single executor loads the models,
+prepares/caches the avatar once and warms GPU kernels before processing jobs.
+`/health` reports `ready`, `realtime` and `warmupFailed`; wait for readiness.
+Initial preparation is outside the per-answer latency budget and may take tens
+of seconds. Set `MUSETALK_REALTIME=false` to return to the offline renderer.
+
+The source is normalized once to 25 fps and 720p (the output resolution).
+Frames are piped directly to FFmpeg, avoiding PNG writes and per-reply face
+parsing. A single H.264/AAC fragmented MP4 publishes a keyframe every second.
+Status becomes `STREAMING` after the first fragment; authenticated ownership
+checks still issue short-lived signed URLs. The private playback endpoint follows
+the growing file, with proxy buffering disabled. Completed files retain native
+byte-range playback. The application polls rapidly during the first ten seconds
+and starts the same audio/video stream before generation finishes.
+
+On the H100, an eight-second narration reached HTTP playback in 0.93 seconds
+after audio submission, with full rendering in 4.73 seconds. These measurements
+exclude language-model response time, speech synthesis, queues and client
+network/buffering. Five seconds from the user's question is an objective, not a
+guaranteed SLA. Validate these stages in a real session before claiming it.

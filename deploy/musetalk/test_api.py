@@ -6,12 +6,40 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+import threading
 from unittest.mock import patch
 os.environ['MUSETALK_API_KEY'] = 'unit-test-only-key'
 import academia_api as worker
 from fastapi.testclient import TestClient
 
 class PlaybackTests(unittest.TestCase):
+    def test_fragmented_playback_follows_the_growing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = worker.JOBS
+            worker.JOBS = Path(tmp)
+            job = 'd' * 64
+            directory = worker.JOBS / job
+            directory.mkdir()
+            (directory / 'result.mp4').write_bytes(b'first-fragment')
+            worker.status(directory, {'status': 'STREAMING'})
+            def finish():
+                time.sleep(0.1)
+                with (directory / 'result.mp4').open('ab') as output:
+                    output.write(b'last-fragment')
+                worker.status(directory, {'status': 'COMPLETED'})
+            producer = threading.Thread(target=finish)
+            try:
+                expires = int(time.time()) + 600
+                token = hmac.new(worker.KEY.encode(), f'{job}:{expires}'.encode(), hashlib.sha256).hexdigest()
+                producer.start()
+                response = TestClient(worker.app).get(f'/jobs/{job}/play?expires={expires}&token={token}')
+                self.assertEqual(response.content, b'first-fragmentlast-fragment')
+                self.assertEqual(response.headers['x-accel-buffering'], 'no')
+                self.assertNotIn('content-length', response.headers)
+            finally:
+                producer.join()
+                worker.JOBS = original
+
     def test_ninety_two_second_narration_reaches_inference(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = worker.JOBS
@@ -30,11 +58,10 @@ class PlaybackTests(unittest.TestCase):
                 else:
                     Path(args[-1]).write_bytes(b'video')
             try:
-                with patch.object(worker.subprocess, 'run', side_effect=fake_run), patch.object(worker.subprocess, 'check_output', return_value=b'92.45'):
+                with patch.object(worker, 'normalized_source', return_value=directory / 'source-25fps.mp4'), patch.object(worker.subprocess, 'run', side_effect=fake_run), patch.object(worker.subprocess, 'check_output', return_value=b'92.45'):
                     worker.run_job(job)
                 self.assertIn('COMPLETED', (directory / 'status.json').read_text())
                 self.assertTrue(any('generate-video' in str(command[0]) for command in commands))
-                self.assertTrue(any('fps=25,setpts=PTS-STARTPTS' in command for command in commands))
                 self.assertIn('scale=-2:720,setpts=PTS-STARTPTS', commands[-1])
                 self.assertNotIn('fps=20', ' '.join(commands[-1]))
                 self.assertFalse((directory / 'source-25fps.mp4').exists())

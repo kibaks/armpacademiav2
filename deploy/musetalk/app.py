@@ -13,7 +13,7 @@ import threading
 import time
 
 from fastapi import FastAPI, Header, HTTPException, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 ROOT = Path('/opt/MuseTalk')
@@ -24,6 +24,49 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 lock = threading.Lock()
 pending = set()
+source_lock = threading.Lock()
+engine = None
+engine_error = False
+
+def initialize_engine():
+    global engine, engine_error
+    try:
+        from realtime_engine import RealtimeEngine
+        engine = RealtimeEngine(normalized_source())
+    except Exception:
+        engine_error = True
+        import traceback
+        traceback.print_exc()
+
+@app.on_event('startup')
+def startup():
+    if os.environ.get('MUSETALK_REALTIME') == 'true':
+        pool.submit(initialize_engine)
+
+def normalized_source():
+    """Reuse the source conversion until its input changes; publish atomically."""
+    source = ROOT / 'data/academia/source.mp4'
+    cached = source.with_name('source-25fps.mp4')
+    metadata = source.with_name('source-25fps.json')
+    with source_lock:
+        stat = source.stat()
+        signature = {'size': stat.st_size, 'mtime_ns': stat.st_mtime_ns, 'version': 2}
+        try:
+            if cached.exists() and json.loads(metadata.read_text()) == signature:
+                return cached
+        except (OSError, ValueError):
+            pass
+        temporary = source.with_name('source-25fps.tmp.mp4')
+        try:
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(source), '-an', '-vf', 'fps=25,scale=-2:720,setpts=PTS-STARTPTS', '-c:v', 'libx264', '-crf', '18', '-preset', 'fast', str(temporary)], check=True, timeout=60, capture_output=True)
+            temporary.replace(cached)
+            metadata_tmp = metadata.with_suffix('.tmp')
+            metadata_tmp.write_text(json.dumps(signature))
+            metadata_tmp.replace(metadata)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return cached
+
 
 def authorize(authorization: str = Header(default='')):
     if not hmac.compare_digest(authorization, 'Bearer ' + KEY):
@@ -47,10 +90,20 @@ def run_job(job_id):
         duration = float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(directory / 'reply.wav')], timeout=10))
         if not 0 < duration <= 120:
             raise ValueError('Audio duration exceeds limit')
+        if os.environ.get('MUSETALK_REALTIME') == 'true':
+            if engine is None:
+                raise RuntimeError('Realtime engine unavailable')
+            started = time.monotonic()
+            timing = {}
+            def playable(milliseconds):
+                timing['firstFragmentMs'] = milliseconds
+                status(directory, {'status': 'STREAMING', **timing})
+            engine.render(directory / 'reply.wav', directory / 'result.mp4', playable)
+            status(directory, {'status': 'COMPLETED', **timing, 'renderMs': round((time.monotonic()-started)*1000)})
+            return
         # At 24 fps Whisper context padding rounds up to three features, while
         # the 25 fps model uses two. Normalize before inference, without retiming.
-        source = directory / 'source-25fps.mp4'
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(ROOT / 'data/academia/source.mp4'), '-an', '-vf', 'fps=25,setpts=PTS-STARTPTS', '-c:v', 'libx264', '-crf', '18', '-preset', 'fast', str(source)], check=True, timeout=60, capture_output=True)
+        source = normalized_source()
         config = directory / 'inference.json'
         config.write_text(json.dumps({'tutor': {'video_path': str(source), 'audio_path': str(directory / 'reply.wav'), 'bbox_shift': 0}}))
         with (directory / 'render.log').open('w') as log:
@@ -71,7 +124,6 @@ def run_job(job_id):
     finally:
         # Intermediate frames are large; only retain the final MP4 and job metadata.
         shutil.rmtree(directory / 'results', ignore_errors=True)
-        (directory / 'source-25fps.mp4').unlink(missing_ok=True)
         with lock:
             pending.discard(job_id)
 
@@ -81,7 +133,7 @@ class Job(BaseModel):
 
 @app.get('/health', dependencies=[Depends(authorize)])
 def health():
-    return {'ready': (ROOT / 'models/musetalkV15/unet.pth').exists(), 'provider': 'musetalk', 'pending': len(pending)}
+    return {'ready': engine is not None if os.environ.get('MUSETALK_REALTIME') == 'true' else (ROOT / 'models/musetalkV15/unet.pth').exists(), 'provider': 'musetalk', 'pending': len(pending), 'realtime': engine is not None, 'warmupFailed': engine_error}
 
 @app.post('/jobs', status_code=202, dependencies=[Depends(authorize)])
 def submit(job: Job):
@@ -115,7 +167,7 @@ def get_status(job_id: str):
     if not (directory / 'status.json').exists():
         raise HTTPException(404, 'Not found')
     value = json.loads((directory / 'status.json').read_text())
-    if value['status'] in ('PENDING', 'PROCESSING') and job_id not in pending:
+    if value['status'] in ('PENDING', 'PROCESSING', 'STREAMING') and job_id not in pending:
         return {'status': 'FAILED', 'error': 'Le service a redémarré. Écoutez la réponse en audio.'}
     return value
 
@@ -136,6 +188,25 @@ def play(job_id: str, expires: int, token: str):
     result = directory / 'result.mp4'
     if not result.exists():
         raise HTTPException(404, 'Not found')
+    value = json.loads((directory / 'status.json').read_text()) if (directory / 'status.json').exists() else {}
+    if value.get('status') == 'STREAMING':
+        def fragments():
+            deadline = time.monotonic() + 600
+            with result.open('rb') as media:
+                while time.monotonic() < deadline:
+                    chunk = media.read(65536)
+                    if chunk:
+                        yield chunk
+                        continue
+                    current = json.loads((directory / 'status.json').read_text()).get('status')
+                    if current in ('COMPLETED', 'FAILED'):
+                        # Recheck after status: the encoder may have flushed since read().
+                        tail = media.read()
+                        if tail:
+                            yield tail
+                        break
+                    time.sleep(0.04)
+        return StreamingResponse(fragments(), media_type='video/mp4', headers={'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer', 'X-Accel-Buffering': 'no'})
     return FileResponse(result, media_type='video/mp4', headers={'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer'})
 
 @app.post('/jobs/{job_id}/retry', status_code=202, dependencies=[Depends(authorize)])

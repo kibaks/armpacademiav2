@@ -68,22 +68,12 @@ export function useTutorVideoReply(persona: string, active = true) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'La vidéo est indisponible.');
       let failedPolls = 0;
+      // A cached reply may already be playable in the creation response.
+      let result = data;
+      const pollingStarted = Date.now();
       while (current()) {
-        await new Promise<void>((resolve, reject) => {
-          const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
-          const timer = window.setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, 3500);
-          signal.addEventListener('abort', onAbort, { once: true });
-          if (signal.aborted) onAbort();
-        });
-        let statusResponse: Response;
-        try { statusResponse = await authenticatedFetch(`/api/ai/tutor-video/${encodeURIComponent(data.id)}`, { signal }); }
-        catch (error) { if (current() && ++failedPolls <= 3) continue; throw error; }
-        const result = await statusResponse.json().catch(() => ({}));
-        if (!current()) return true;
-        if (statusResponse.status >= 500 && ++failedPolls <= 3) continue;
-        if (!statusResponse.ok || result.status === 'FAILED') throw new Error(result.error || 'La vidéo est indisponible.');
-        failedPolls = 0;
-        if (result.status === 'COMPLETED') {
+        if (result.status === 'FAILED') throw new Error(result.error || 'La vidéo est indisponible.');
+        if (result.status === 'COMPLETED' || result.status === 'STREAMING') {
           if (typeof result.videoUrl !== 'string') throw new Error('Vidéo indisponible.');
           let url = result.videoUrl;
           if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {
@@ -97,6 +87,24 @@ export function useTutorVideoReply(persona: string, active = true) {
           setState({ status: 'ready', url });
           return true;
         }
+        // Check immediately after creation; only wait between pending status requests.
+        if (result !== data || failedPolls > 0) {
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+            const pollInterval = settings.provider === 'musetalk' ? (Date.now() - pollingStarted < 10000 ? 400 : 1500) : 3500;
+            const timer = window.setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, pollInterval);
+            signal.addEventListener('abort', onAbort, { once: true });
+            if (signal.aborted) onAbort();
+          });
+        }
+        let statusResponse: Response;
+        try { statusResponse = await authenticatedFetch(`/api/ai/tutor-video/${encodeURIComponent(data.id)}`, { signal }); }
+        catch (error) { if (current() && ++failedPolls <= 3) continue; throw error; }
+        result = await statusResponse.json().catch(() => ({}));
+        if (!current()) return true;
+        if (statusResponse.status >= 500 && ++failedPolls <= 3) { result = {}; continue; }
+        if (!statusResponse.ok) throw new Error(result.error || 'La vidéo est indisponible.');
+        failedPolls = 0;
       }
     } catch (error) {
       if (run === generation.current && !abort.signal.aborted) {
