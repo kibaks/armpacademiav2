@@ -383,7 +383,7 @@ export async function getOrInitUserProfile(user: FirebaseUser, fallbackRole: Use
   }
 }
 
-const LOCAL_REGISTERED_USERS_KEY = 'academia_registered_users_v1';
+export const LOCAL_REGISTERED_USERS_KEY = 'academia_registered_users_v1';
 
 export function saveProfileToLocalRegistry(profile: UserProfile): void {
   if (typeof window === 'undefined' || !profile) return;

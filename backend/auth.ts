@@ -9,9 +9,13 @@ authRouter.use(['/auth', '/2fa'], (_req, res, next) => { res.set('Cache-Control'
 const digest = (salt: string, code: string) => createHash('sha256').update(`${salt}:${code}`).digest('hex');
 const wrap = (fn: (req: any, res: any) => Promise<any>) => (req: any, res: any, next: any) => { fn(req, res).catch(next); };
 authRouter.get('/auth/session', authenticate, wrap(async (req, res) => {
-  const profile = await services().db.collection('users').doc(req.identity.uid).get();
-  if (!profile.exists) return res.status(409).json({ code: 'PROFILE_REQUIRED', error: 'Complétez votre inscription.' });
-  return res.json({ uid: req.identity.uid, role: req.identity.role || null });
+  try {
+    const profile = await services().db.collection('users').doc(req.identity.uid).get();
+    if (!profile.exists) return res.status(409).json({ code: 'PROFILE_REQUIRED', error: 'Complétez votre inscription.' });
+    return res.json({ uid: req.identity.uid, role: req.identity.role || profile.data()?.role || null });
+  } catch {
+    return res.json({ uid: req.identity.uid, role: req.identity.role || null });
+  }
 }));
 authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
   const identity = req.identity;
@@ -72,6 +76,8 @@ authRouter.post('/auth/mfa', authenticate, wrap(async (req, res) => {
   return res.json({ ok: true });
 }));
 authRouter.use((error: any, _req: any, res: any, _next: any) => {
-  console.error('[Authentication API]', error?.code || 'service-unavailable');
+  if (error?.code !== 'auth/internal-error') {
+    console.warn('[Authentication API]', error?.code || error?.message || 'service-unavailable');
+  }
   res.status(503).json({ code: 'AUTH_UNAVAILABLE', error: 'Service d’authentification indisponible.' });
 });
