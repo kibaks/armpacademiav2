@@ -33,7 +33,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const text = normalizeVideoText(raw);
       if (!text || text.length > 1800) return res.status(400).json({ error: 'Demandez une réponse plus courte pour la vidéo.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, 'musetalk-v15-source-professional-v3'])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, 'musetalk-v15-professional-sync25-v4'])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       const day = new Date().toISOString().slice(0, 10);
       const quota = db().collection('musetalkTutorQuotas').doc(createHash('sha256').update(`${uid}:${day}`).digest('hex'));

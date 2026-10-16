@@ -34,6 +34,10 @@ class PlaybackTests(unittest.TestCase):
                     worker.run_job(job)
                 self.assertIn('COMPLETED', (directory / 'status.json').read_text())
                 self.assertTrue(any('generate-video' in str(command[0]) for command in commands))
+                self.assertTrue(any('fps=25,setpts=PTS-STARTPTS' in command for command in commands))
+                self.assertIn('scale=-2:720,setpts=PTS-STARTPTS', commands[-1])
+                self.assertNotIn('fps=20', ' '.join(commands[-1]))
+                self.assertFalse((directory / 'source-25fps.mp4').exists())
             finally:
                 worker.JOBS = original
 

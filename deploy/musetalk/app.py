@@ -47,8 +47,12 @@ def run_job(job_id):
         duration = float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(directory / 'reply.wav')], timeout=10))
         if not 0 < duration <= 120:
             raise ValueError('Audio duration exceeds limit')
+        # At 24 fps Whisper context padding rounds up to three features, while
+        # the 25 fps model uses two. Normalize before inference, without retiming.
+        source = directory / 'source-25fps.mp4'
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(ROOT / 'data/academia/source.mp4'), '-an', '-vf', 'fps=25,setpts=PTS-STARTPTS', '-c:v', 'libx264', '-crf', '18', '-preset', 'fast', str(source)], check=True, timeout=60, capture_output=True)
         config = directory / 'inference.json'
-        config.write_text(json.dumps({'tutor': {'video_path': str(ROOT / 'data/academia/source.mp4'), 'audio_path': str(directory / 'reply.wav'), 'bbox_shift': 0}}))
+        config.write_text(json.dumps({'tutor': {'video_path': str(source), 'audio_path': str(directory / 'reply.wav'), 'bbox_shift': 0}}))
         with (directory / 'render.log').open('w') as log:
             subprocess.run([str(ROOT / 'generate-video'), '--inference_config', str(config), '--result_dir', str(directory / 'results'), '--batch_size', '8'], cwd=ROOT, check=True, timeout=600, stdout=log, stderr=subprocess.STDOUT)
         candidates = sorted((directory / 'results').rglob('*.mp4'))
@@ -58,7 +62,7 @@ def run_job(job_id):
         final = next((p for p in candidates if 'reply' in p.name), None)
         if final is None:
             raise ValueError('Final output missing')
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-vf', 'scale=-2:720,fps=20', '-c:v', 'libx264', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-movflags', '+faststart', str(directory / 'result.mp4')], check=True, timeout=90, capture_output=True)
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-vf', 'scale=-2:720,setpts=PTS-STARTPTS', '-c:v', 'libx264', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-movflags', '+faststart', str(directory / 'result.mp4')], check=True, timeout=90, capture_output=True)
         status(directory, {'status': 'COMPLETED'})
     except Exception as error:
         # Retain an internal reason without logging narration text or credentials.
@@ -67,6 +71,7 @@ def run_job(job_id):
     finally:
         # Intermediate frames are large; only retain the final MP4 and job metadata.
         shutil.rmtree(directory / 'results', ignore_errors=True)
+        (directory / 'source-25fps.mp4').unlink(missing_ok=True)
         with lock:
             pending.discard(job_id)
 
