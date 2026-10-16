@@ -24,7 +24,7 @@ Only female tutor personas are enabled; Henri keeps the existing presentation.
 
 Private worker API: POST `/jobs` with `{id: sha256, audio: base64}`, GET
 `/jobs/:id`, GET `/jobs/:id/media`; all require the Bearer key. One GPU task runs
-at a time, with at most two queued. Audio is limited to 4 MB and 90 seconds.
+at a time, with at most two queued. Audio is limited to 4 MB and 120 seconds.
 Intermediate frames are removed after rendering. Jobs older than 24 hours are
 removed on subsequent submission; the application expires their access after 24 hours.
 Do not resubmit ambiguous jobs automatically. Restarted queued jobs are marked failed.
@@ -76,3 +76,23 @@ Henri continues using the existing portrait renderer, with a professional motion
 limit applied at rendering time: restrained head/shoulder movement, frontal gaze,
 discreet smile and no raised hand animation. Speech articulation and blink timing
 are preserved. This is not a newly generated male MP4.
+
+## Lightweight playback and duration repair
+
+Two production narrations were rejected before inference at 91.90 and 92.45
+seconds because the worker limit was 90 seconds. The worker now accepts up to
+120 seconds without truncating the narration. Its private retry endpoint only
+requeues an explicitly requested failed job. Application polling can recover a
+previously failed record after the worker job has been repaired.
+
+New outputs use 720-pixel height, 20 fps, H.264 CRF 24 / maxrate 850k and mono
+AAC 64k. The presentation uses a versioned light asset (about 278 KB versus
+1.6 MB previously), retaining the original v3 asset for rollback.
+
+After an authenticated ownership check, the application issues a 15-minute
+read-only HMAC playback URL. `/jobs/:id/play` validates that ticket; no worker
+key is sent to the browser. Native MP4 byte-range playback avoids full-file
+buffering in browser memory and the application proxy. Test both valid Range
+requests (206) and invalid/expired tickets (403) with `test_api.py`.
+The TLS gateway uses the `musetalk_private` access-log format with `$uri`,
+excluding query parameters because they contain a temporary playback capability.

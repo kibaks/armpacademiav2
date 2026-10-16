@@ -2,6 +2,7 @@
 import base64
 import concurrent.futures
 import hmac
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -44,7 +45,7 @@ def run_job(job_id):
         status(directory, {'status': 'PROCESSING'})
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(directory / 'input.audio'), '-vn', '-ac', '1', '-ar', '16000', str(directory / 'reply.wav')], check=True, timeout=30, capture_output=True)
         duration = float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(directory / 'reply.wav')], timeout=10))
-        if not 0 < duration <= 90:
+        if not 0 < duration <= 120:
             raise ValueError('Audio duration exceeds limit')
         config = directory / 'inference.json'
         config.write_text(json.dumps({'tutor': {'video_path': str(ROOT / 'data/academia/source.mp4'), 'audio_path': str(directory / 'reply.wav'), 'bbox_shift': 0}}))
@@ -57,9 +58,11 @@ def run_job(job_id):
         final = next((p for p in candidates if 'reply' in p.name), None)
         if final is None:
             raise ValueError('Final output missing')
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-c:v', 'libx264', '-crf', '19', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', str(directory / 'result.mp4')], check=True, timeout=90, capture_output=True)
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-vf', 'scale=-2:720,fps=20', '-c:v', 'libx264', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-movflags', '+faststart', str(directory / 'result.mp4')], check=True, timeout=90, capture_output=True)
         status(directory, {'status': 'COMPLETED'})
-    except Exception:
+    except Exception as error:
+        # Retain an internal reason without logging narration text or credentials.
+        (directory / 'failure.json').write_text(json.dumps({'type': type(error).__name__, 'duration': locals().get('duration')}))
         status(directory, {'status': 'FAILED', 'error': 'La vidéo n’a pas pu être générée.'})
     finally:
         # Intermediate frames are large; only retain the final MP4 and job metadata.
@@ -117,3 +120,28 @@ def media(job_id: str):
     if not result.exists():
         raise HTTPException(404, 'Not found')
     return FileResponse(result, media_type='video/mp4', headers={'Cache-Control': 'no-store'})
+
+@app.get('/jobs/{job_id}/play')
+def play(job_id: str, expires: int, token: str):
+    directory = folder(job_id)
+    now = int(time.time())
+    expected = hmac.new(KEY.encode(), f'{job_id}:{expires}'.encode(), hashlib.sha256).hexdigest()
+    if expires < now or expires > now + 930 or len(token) != 64 or not hmac.compare_digest(expected, token):
+        raise HTTPException(403, 'Expired or invalid playback ticket')
+    result = directory / 'result.mp4'
+    if not result.exists():
+        raise HTTPException(404, 'Not found')
+    return FileResponse(result, media_type='video/mp4', headers={'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer'})
+
+@app.post('/jobs/{job_id}/retry', status_code=202, dependencies=[Depends(authorize)])
+def retry(job_id: str):
+    directory = folder(job_id)
+    with lock:
+        if not (directory / 'status.json').exists() or json.loads((directory / 'status.json').read_text()).get('status') != 'FAILED':
+            raise HTTPException(409, 'Only failed jobs may be retried explicitly')
+        if len(pending) >= 3:
+            raise HTTPException(429, 'GPU busy')
+        pending.add(job_id)
+        status(directory, {'status': 'PENDING'})
+        pool.submit(run_job, job_id)
+    return {'id': job_id}

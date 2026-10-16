@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import express from 'express';
+import { createHmac } from 'node:crypto';
 import { createMuseTalkTutorVideoRouter } from '../backend/musetalkTutorVideo';
 async function harness() {
   const records = new Map<string, any>();
@@ -32,7 +33,7 @@ async function harness() {
   await new Promise<void>(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${(server.address() as any).port}/video`;
   const post = (text = 'Bonjour. Comparons les offres.') => fetch(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne' }) });
-  return { base, post, counts: () => ({ submissions, polls }), close: () => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }) };
+  return { base, post, records, counts: () => ({ submissions, polls }), close: () => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }) };
 }
 test('MuseTalk submits once, protects generated media and never exposes the worker credential', async () => {
   const h = await harness();
@@ -42,11 +43,18 @@ test('MuseTalk submits once, protects generated media and never exposes the work
     assert.equal((await fetch(`${h.base}/${id}`, { headers: { authorization: 'other' } })).status, 404);
     const ready = await (await fetch(`${h.base}/${id}`, { headers: { authorization: 'owner' } })).json();
     assert.equal(ready.status, 'COMPLETED'); assert.ok(!JSON.stringify(ready).includes('private-key'));
+    const playback = new URL(ready.videoUrl);
+    assert.equal(playback.origin, 'https://worker.example');
+    assert.equal(playback.pathname, `/musetalk/jobs/${id}/play`);
+    assert.equal(playback.searchParams.get('token'), createHmac('sha256', 'private-key').update(`${id}:${playback.searchParams.get('expires')}`).digest('hex'));
+    h.records.get(`musetalkTutorJobs/${id}`).status = 'FAILED';
+    const recovered = await (await fetch(`${h.base}/${id}`, { headers: { authorization: 'owner' } })).json();
+    assert.equal(recovered.status, 'COMPLETED');
     assert.equal((await fetch(`${h.base}/${id}/media`)).status, 401);
     assert.equal((await fetch(`${h.base}/${id}/media`, { headers: { authorization: 'other' } })).status, 404);
     assert.equal(await (await fetch(`${h.base}/${id}/media`, { headers: { authorization: 'owner' } })).text(), 'mp4-data');
     assert.equal((await h.post('Une nouvelle phrase.')).status, 429);
-    assert.deepEqual(h.counts(), { submissions: 1, polls: 1 });
+    assert.deepEqual(h.counts(), { submissions: 1, polls: 2 });
   } finally { await h.close(); }
 });
 test('excessive answers cannot overload the GPU', async () => {

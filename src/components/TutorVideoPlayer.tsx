@@ -17,7 +17,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, persona, active =
   if (!active || (state.status === 'idle' && !presentation) || audioPlaying) return <>{children}</>;
   return <div className="relative flex h-full w-full min-h-48 flex-col overflow-hidden rounded-2xl bg-slate-950 text-white">
     {(state.status === 'ready' && state.url) || presentation ? <>
-      <video ref={videoRef} key={presentation ? 'professional-presentation-v3' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v3.mp4' : state.url}
+      <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
         poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay={!presentation} playsInline preload="metadata"
         className="min-h-0 flex-1 w-full object-contain" aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
         onPlay={() => speechService.stop()} onError={() => setMediaError(true)} />

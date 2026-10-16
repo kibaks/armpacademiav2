@@ -11,5 +11,5 @@ import { AishaAvatar } from '../src/components/AishaAvatar.tsx';
 import '../src/index.css';
 const root=createRoot(document.getElementById('root'));
 function draw(state={status:'idle'}){root.render(React.createElement(TutorVideoPlayer,{state,persona:'vivienne',onStop:()=>draw(),onAudioOnly:()=>draw()},React.createElement(AishaAvatar,{tutorPersona:'vivienne',variant:'studio',showBadge:false})));}
-for(const [label,state] of [['Présentation professionnelle',{status:'idle'}],['Attente',{status:'loading'}],['Erreur',{status:'error',error:'Essai local : vidéo indisponible.'}],['Réponse MP4',{status:'ready',url:'/assets/tutrice-professionnelle-v3.mp4'}]]){const b=document.createElement('button');b.textContent=label;b.onclick=()=>draw(state);document.getElementById('controls').append(b);}draw();
+for(const [label,state] of [['Présentation professionnelle',{status:'idle'}],['Attente',{status:'loading'}],['Erreur',{status:'error',error:'Essai local : vidéo indisponible.'}],['Réponse MP4',{status:'ready',url:'/assets/tutrice-professionnelle-v4-light.mp4'}]]){const b=document.createElement('button');b.textContent=label;b.onclick=()=>draw(state);document.getElementById('controls').append(b);}draw();
 </script></html>

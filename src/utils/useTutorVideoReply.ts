@@ -67,6 +67,7 @@ export function useTutorVideoReply(persona: string, active = true) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'La vidéo est indisponible.');
+      let failedPolls = 0;
       while (current()) {
         await new Promise<void>((resolve, reject) => {
           const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
@@ -74,10 +75,14 @@ export function useTutorVideoReply(persona: string, active = true) {
           signal.addEventListener('abort', onAbort, { once: true });
           if (signal.aborted) onAbort();
         });
-        const statusResponse = await authenticatedFetch(`/api/ai/tutor-video/${encodeURIComponent(data.id)}`, { signal });
-        const result = await statusResponse.json();
+        let statusResponse: Response;
+        try { statusResponse = await authenticatedFetch(`/api/ai/tutor-video/${encodeURIComponent(data.id)}`, { signal }); }
+        catch (error) { if (current() && ++failedPolls <= 3) continue; throw error; }
+        const result = await statusResponse.json().catch(() => ({}));
         if (!current()) return true;
+        if (statusResponse.status >= 500 && ++failedPolls <= 3) continue;
         if (!statusResponse.ok || result.status === 'FAILED') throw new Error(result.error || 'La vidéo est indisponible.');
+        failedPolls = 0;
         if (result.status === 'COMPLETED') {
           if (typeof result.videoUrl !== 'string') throw new Error('Vidéo indisponible.');
           let url = result.videoUrl;

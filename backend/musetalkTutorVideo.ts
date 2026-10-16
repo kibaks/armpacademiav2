@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { authenticate, services } from './admin.js';
 import { normalizeVideoText } from './syncTutorVideo.js';
@@ -15,6 +15,11 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   let endpoint: URL | null = null;
   try { const url = new URL(env.MUSETALK_API_URL || ''); if (url.protocol === 'https:' && !url.username && !url.password) endpoint = url; } catch { /* not configured */ }
   const configured = () => env.TUTOR_VIDEO_ENABLED === 'true' && !!endpoint && !!env.MUSETALK_API_KEY;
+  const playbackUrl = (id: string) => {
+    const expires = Math.floor(Date.now() / 1000) + 15 * 60;
+    const token = createHmac('sha256', env.MUSETALK_API_KEY!).update(`${id}:${expires}`).digest('hex');
+    return `${endpoint!.href.replace(/\/$/, '')}/jobs/${id}/play?expires=${expires}&token=${token}`;
+  };
   const remote = (suffix: string, init: RequestInit = {}) => request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) });
   router.use(deps.authenticate || authenticate);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -64,13 +69,15 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   router.get('/:id', async (req: any, res) => {
     try {
       const entry = await owned(req); if (!entry) return res.sendStatus(404);
-      if (entry.job.status === 'FAILED') return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' });
       const response = await remote(`/jobs/${req.params.id}`);
+      if (response.status === 404 && entry.job.status === 'FAILED') return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' });
       if (!response.ok) return res.sendStatus(503);
       const result = await response.json();
       if (result.status === 'COMPLETED') {
         await entry.ref.update({ status: 'COMPLETED' });
-        return res.json({ status: 'COMPLETED', videoUrl: `/api/ai/tutor-video/${req.params.id}/media` });
+        // A short-lived read-only ticket enables native streaming and byte ranges.
+        // The worker key stays private; the browser does not buffer an entire MP4.
+        return res.json({ status: 'COMPLETED', videoUrl: playbackUrl(req.params.id) });
       }
       if (result.status === 'FAILED') { await entry.ref.update({ status: 'FAILED' }); return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' }); }
       return res.json({ status: 'PENDING' });
