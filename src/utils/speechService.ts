@@ -517,7 +517,7 @@ class SpeechService {
     forceQueue?: boolean;
     customSentences?: string[];
   };
-  private preferredPersona: NeuralVoicePersona = 'denise';
+  private preferredPersona: NeuralVoicePersona = 'vivienne';
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private cadenceTimer: number | null = null;
   private lastBoundaryCharIndex = 0;
@@ -602,7 +602,7 @@ class SpeechService {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      try { const saved = localStorage.getItem('academia-tutor-persona'); if (saved && saved in TUTOR_VOICES) this.preferredPersona = saved as NeuralVoicePersona; } catch { /* Storage can be unavailable. */ }
+      try { localStorage.setItem('academia-tutor-persona', 'vivienne'); } catch { /* Storage can be unavailable. */ }
       void this.loadVoiceModeDefault();
       const unlockHandler = () => {
         this.unlockAudio();
@@ -654,7 +654,8 @@ class SpeechService {
     this.explicitVoiceMode = mode;
     try { localStorage.setItem(TUTOR_VOICE_MODE_KEY, mode); } catch { /* Browser storage is unavailable. */ }
   }
-  public setVoicePersona(persona: NeuralVoicePersona) {
+  public setVoicePersona(_persona: NeuralVoicePersona) {
+    const persona: NeuralVoicePersona = 'vivienne';
     this.preferredPersona = persona;
     try { localStorage.setItem('academia-tutor-persona', persona); } catch { /* Keep the current in-memory selection. */ }
   }

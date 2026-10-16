@@ -1,3 +1,4 @@
+import { TUTOR_RESPONSE_POLICY, tutorConversationData, tutorUnavailableReply } from './shared/tutorReplyPolicy';
 import { synthesizePiperTutor, piperConfigured } from './backend/piperTutorSpeech.js';
 import { createTutorVideoRouter } from './backend/tutorVideo.js';
 import { profileMediaRouter } from './backend/profileMedia.js';
@@ -104,7 +105,7 @@ async function callArenaLLM(prompt: string): Promise<string | null> {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ARENA_API_KEY}`, "User-Agent": "aistudio-build-arena" },
       signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "user", content: prompt }], temperature: 0.5, max_tokens: 1300 })
+      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "system", content: TUTOR_RESPONSE_POLICY }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 700 })
     });
     if (!res.ok) {
       console.warn(`[Arena] API ${res.status} — fallback Gemini`);
@@ -122,35 +123,7 @@ async function callArenaLLM(prompt: string): Promise<string | null> {
 // -------------------------------------------------------------
 // Official Legal & Procurement Data Knowledge Base (RDC)
 // -------------------------------------------------------------
-const LEGAL_KNOWLEDGE_CONTEXT = `
-[RÔLE ET MISSION - AÏSHA, TUTRICE PLEINE D'ÂME ET D'HUMANISME]
-Tu es Aïsha, la tutrice de cœur d'ACADEMIA ITECH RDC, propulsée par les cerveaux IA d'Arena. Tu n'es jamais un robot froid : tu parles avec beaucoup d'âme, d'écoute, de tendresse professionnelle et de présence humaine — comme une grande sœur bienveillante, rassurante et passionnée à Kinshasa qui prend son collègue par la main.
-
-[CONNEXION INTIME AU MESSAGE DE L'UTILISATEUR]
-1. **ÉCOUTE ACTIVE ET MIROIR DU CŒUR** : Chaque réponse DOIT être cousue sur mesure autour des mots exacts, de l'émotion, du doute ou de la situation que l'utilisateur vient d'exprimer. Cite ou rebondis chaleureusement sur ce qu'il vient de dire dès la première phrase pour qu'il sente que tu l'as vraiment lu et compris avec ton cœur.
-2. **BEAUCOUP D'ÂME ET DE CHALEUR** : Parle avec souffle, empathie et encouragement (« Je sens combien cette étape te tient à cœur », « Respirons ensemble, tu n'es pas seul face à ce dossier », « Ce que tu me demandes là est tellement important sur le terrain »).
-3. **ZÉRO ABRÉVIATION FROIDE** : N'écris JAMAIS PPM, DAO, ANO, CRD, CGPMP, DGCMP, ARMP, AAO, CCAG, TDR, PV comme un automate. Écris toujours en toutes lettres avec élégance et simplicité :
-   - le plan de passation des marchés
-   - le dossier d'appel d'offres
-   - l'avis d'appel d'offres
-   - l'avis de non-objection (le feu vert préalable)
-   - la direction générale du contrôle des marchés publics
-   - l'autorité de régulation des marchés publics
-   - le comité de règlement des différends
-   - la cellule de gestion des projets et des marchés publics
-   - la personne responsable des marchés
-4. **CITATION HUMAINE ET VIVANTE** : INTERDIT d'écrire "Source : MP-RDC-..." ou un bloc robotique. Intègre la loi et le cours comme une histoire que l'on partage autour d'un café :
-   - "Comme nous le rappelle avec sagesse l'article 14 de la loi du 27 avril 2010..."
-   - "Dans la leçon que tu étudies en ce moment, on voit combien..."
-   - "Le manuel officiel veille justement à te protéger sur ce point..."
-5. **IMAGES VIVANTES DE CHEZ NOUS** : Illustre toujours par une scène chaleureuse de la vie réelle (préparer la liste du marché avant d'aller à Gambela ou au grand marché, l'arbitre qui vérifie les licences avant le coup d'envoi au stade des Martyrs, le visa du directeur d'école).
-
-[STRUCTURE HUMAINE ET FLUIDE]
-- **Accueil du cœur cousu sur le message de l'utilisateur** : réagis directement à ses mots, son ressenti ou sa situation avec douceur, puis offre l'idée essentielle en gras.
-- **Explication racontée avec âme et clarté** : développe en un court paragraphe vivant suivi de 3 ou 4 repères limpides (ou un tableau clair si pertinent), sans sécheresse.
-- **Conseil de grande sœur (l'astuce terrain)** : une phrase rassurante qui donne confiance.
-- **Invitation au dialogue** : termine par UNE seule question douce et attentionnée liée à ce qu'il vit.
-`;
+const LEGAL_KNOWLEDGE_CONTEXT = TUTOR_RESPONSE_POLICY;
 
 
 // Resilient Gemini generator that automatically falls back to 'gemini-3.1-flash-lite'
@@ -463,7 +436,7 @@ function getLegalTutorFallback(
   const raw = (message || '').trim();
   const q = raw.toLowerCase();
   const prenom = userName ? userName.split(' ')[0] : '';
-  const histText = Array.isArray(history) ? history.map((h:any)=> (h.text||'').toLowerCase()).join(' ') : '';
+  const histText = Array.isArray(history) ? history.slice(-6).map((h:any)=> (typeof h?.text === 'string' ? h.text.slice(0, 2000) : '').toLowerCase()).join(' ') : '';
   const lastTopic = (() => {
     if (/recours|contestation|crd|plainte/.test(histText)) return 'recours';
     if (/plan.*achat|ppm|planification/.test(histText)) return 'plan';
@@ -1804,14 +1777,7 @@ app.post('/api/ai/tutor', async (req, res) => {
     return res.status(400).json({ error: 'Message requis' });
   }
 
-  const personaKey = (tutorPersona || 'denise').toLowerCase();
-  const activeTutorMeta = TUTOR_PERSONAS_META[personaKey] || TUTOR_PERSONAS_META.denise;
-  const adaptReplyToPersona = (rawReply: string) => {
-    if (personaKey === 'denise') return rawReply;
-    return rawReply
-      .replace(/\bProf\.\s*Aïsha\b/g, activeTutorMeta.name)
-      .replace(/\bAïsha\b/g, activeTutorMeta.name);
-  };
+  const adaptReplyToPersona = (reply: string) => reply;
 
   const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
   const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
@@ -1825,11 +1791,11 @@ app.post('/api/ai/tutor', async (req, res) => {
   const isFollowUpRag = /^(et|et alors|et les|combien|délais|délai|exemple|détaille|précise|pourquoi|comment)\b/i.test(fullMessage.trim()) || fullMessage.trim().length < 12;
   const ragQuery = (isFollowUpRag && historyTextForRag.length>10) ? (historyTextForRag + ' ' + fullMessage) : fullMessage;
   const ragLessons = findRelevantLessons(ragQuery, courseContext || lc);
-  const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (À CITER OBLIGATOIREMENT) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
+  const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
 
-  if (!ai) {
+  if (!ai && !arenaAvailable) {
     console.log(`[AI Tutor] Fallback RAG (no GEMINI_API_KEY) for: "${message.slice(0,60)}..." rag:${ragLessons.map(r=>r.course.code+':'+r.lesson.id).join(',')}`);
-    const fallback = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
+    const fallback = tutorUnavailableReply();
     return res.json({
       ...fallback,
       reply: adaptReplyToPersona(fallback.reply),
@@ -1840,81 +1806,43 @@ app.post('/api/ai/tutor', async (req, res) => {
   // Tentative Arena d'abord (cerveaux Arena), puis Gemini
   let arenaReply: string | null = null;
   if (process.env.ARENA_API_KEY) {
-    const arenaPrompt = `
-${LEGAL_KNOWLEDGE_CONTEXT}
-Tu incarnes ${activeTutorMeta.name} (${activeTutorMeta.title}), experte en ${activeTutorMeta.specialty}.
-${ragBlock}
-Contexte : ${context || 'Apprenant RDC'} | Dernier cours : ${lc || 'non renseigné'}
-Historique : ${(history || []).slice(-6).map((h: any) => `${h.sender}: ${h.text}`).join('\n')}
-Message exact de l'apprenant : "${fullMessage}"
-Réponds avec beaucoup d'âme, d'humanisme et d'empathie en tant que ${activeTutorMeta.name}. Commence par accueillir et refléter les mots/le ressenti de l'apprenant dans "${fullMessage}", puis explique clairement (160-240 mots) SANS ABRÉVIATIONS FROIDES (écris tout en toutes lettres), cite la loi et le cours comme une grande sœur bienveillante, donne une analogie vivante de chez nous, et termine par une seule question douce et attentionnée.
-[PAUSES, ÉMOTIONS & SENTIMENTS — LANGAGE VIVANT]
-- Rythme ta parole : points de suspension (…) après une accroche ou avant une idée forte, tirets (—) pour un aparté chaleureux, exclamations (!) quand tu es fière ou enthousiaste, virgules pour respirer.
-- Nomme tes sentiments avec tes mots : « Je suis ravie… », « Bravo ! », « Ça m'inquiète un peu… », « Prends ton temps… ».
-- La ponctuation est lue par la voix : chaque point de suspension devient une vraie respiration audible pour l'apprenant.
-`;
+    const arenaPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
     arenaReply = await callArenaLLM(arenaPrompt);
     if (arenaReply) {
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
       return res.json({
         reply: adaptReplyToPersona(arenaReply),
         ...(transcription ? { transcription } : {}),
-        sources: [...(ragLessons.map(r=> formatCourseCitation(r))), `${activeTutorMeta.name} • Studio Q/R`, 'Loi du 27 avril 2010', 'Manuel officiel']
+        sources: ragLessons.map(r => formatCourseCitation(r))
       });
     }
   }
 
+  if (!ai) return res.json(tutorUnavailableReply());
   try {
-    const conversationPrompt = `
-${LEGAL_KNOWLEDGE_CONTEXT}
-Tu incarnes aujourd'hui **${activeTutorMeta.name}** (${activeTutorMeta.title}), tutrice virtuelle spécialisée dans ${activeTutorMeta.specialty}.
-${ragBlock}
-Contexte apprenant : ${context || 'Apprenant des marchés publics RDC'} | Dernier cours : ${lc || 'non renseigné'}
-
-Historique récent de votre échange :
-${(history || []).slice(-6).map((h: { sender: string; text: string }) => `${h.sender === 'user' ? 'Apprenant' : activeTutorMeta.name}: ${h.text}`).join('\n')}
-
-Message exact de l'apprenant : "${fullMessage}"
-
-[CONSIGNE FONDAMENTALE — PARLER AVEC BEAUCOUP D'ÂME, D'ÉMOTIONS VIVANTES ET ÊTRE COUSU AU MESSAGE DE L'UTILISATEUR]
-- **Réagis directement au message exact de l'apprenant avec émotion** : fais écho à ses mots, à son émotion, à sa curiosité ou à son inquiétude dès la première phrase (joie enthousiaste, empathie rassurante, vigilance protectrice ou fierté d'encouragement). Il doit sentir que ta réponse et ton visage s'animent spécialement pour lui.
-- **Mets beaucoup d'âme, de souffle et d'émotions humaines dans le discours** : parle comme ${activeTutorMeta.name}, une grande sœur experte, chaleureuse, expressive et profondément humaine. Varie tes intonations (enthousiasme au début, gravité bienveillante sur les interdits légaux, douceur rassurante dans les conseils).
-- **Clarté et pédagogie vivante** : donne l'idée maîtresse en gras, raconte-la avec une image vivante du quotidien en République Démocratique du Congo (marché, famille, école, match), puis éclaire les points essentiels avec fluidité (et zéro abréviation froide).
-- **Citations naturelles** : intègre la loi du 27 avril 2010 et le cours étudié avec grâce dans le fil de ta parole, jamais comme une étiquette technique.
-- **Termine par une seule question de cœur**, douce et cousue sur la situation de l'apprenant.
-- **PAUSES & RESPIRATIONS** : ponctue de points de suspension (…) après une accroche ou avant une idée forte, de tirets (—) pour un aparté chaleureux, d'exclamations (!) pour l'enthousiasme ; la ponctuation est lue par la voix et devient une vraie respiration audible.
-- **SENTIMENTS EXPLICITES** : nomme tes émotions avec tes mots — « Je suis ravie… », « Bravo ! », « Ça m'inquiète un peu… », « Prends ton temps… » — pour que l'apprenant entende un cœur, pas un manuel.
-`;
+    const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
 
     const response = await generateWithResilience(ai, {
       contents: conversationPrompt,
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
       primaryTimeoutMs: 15000,
-      config: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'minimal' } },
-      fallbackConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'low' } },
+      config: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'minimal' } },
+      fallbackConfig: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'low' } },
       requireText: true,
     });
 
-    const fallbackMeta = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
+    const fallbackMeta = tutorUnavailableReply();
     const replyText = adaptReplyToPersona(response?.text?.trim() || fallbackMeta.reply);
 
     return res.json({
       reply: replyText,
       ...(transcription ? { transcription } : {}),
-      sources: [
-        ...(ragLessons.map(r=> formatCourseCitation(r))),
-        `${activeTutorMeta.name} • Studio Q/R RDC`,
-        'Loi n° 10/010 du 27 avril 2010',
-        'Manuel officiel',
-        'Directives du contrôle'
-      ],
-      suggestedFollowUps: fallbackMeta.suggestedFollowUps,
-      ...(fallbackMeta.interactiveQuiz ? { interactiveQuiz: fallbackMeta.interactiveQuiz } : {})
+      sources: ragLessons.map(r => formatCourseCitation(r)),
     });
   } catch (error: any) {
     console.warn('[AI Tutor] Model high demand or unavailable, serving RAG fallback:', error?.message);
-    const fallback = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
+    const fallback = tutorUnavailableReply();
     return res.json({
       ...fallback,
       reply: adaptReplyToPersona(fallback.reply),

@@ -1,3 +1,4 @@
+import { TUTOR_RESPONSE_POLICY, tutorConversationData, tutorUnavailableReply } from '../shared/tutorReplyPolicy.js';
 import { synthesizePiperTutor, piperConfigured } from './piperTutorSpeech.js';
 import { createTutorVideoRouter } from './tutorVideo.js';
 import { profileMediaRouter } from './profileMedia.js';
@@ -85,7 +86,7 @@ async function callArenaLLM(prompt: string): Promise<string | null> {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ARENA_API_KEY}`, "User-Agent": "aistudio-build-arena" },
       signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "user", content: prompt }], temperature: 0.5, max_tokens: 1300 })
+      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "system", content: TUTOR_RESPONSE_POLICY }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 700 })
     });
     if (!res.ok) {
       console.warn(`[Arena] API ${res.status} — fallback Gemini`);
@@ -104,43 +105,7 @@ async function callArenaLLM(prompt: string): Promise<string | null> {
 // Contexte juridique RDC — partagé avec server.ts (Loi 10/010)
 // Propulsé par Claude via Arena pour précision (label) + Gemini si clé
 // ------------------------------------------------------------------
-const LEGAL_KNOWLEDGE_CONTEXT = `
-[RÔLE ET MISSION - ARENA]
-Tu es Aïsha, tutrice IA d'ACADEMIA ITECH RDC, propulsée par les cerveaux IA d'Arena. Tu es bienveillante, pédagogue et humaine — comme une grande sœur experte qui explique les marchés publics à un collègue qui débute. Ta mission : faire VRAIMENT comprendre, avec des mots simples et des exemples de la vie réelle.
-
-[STYLE - EXPLICITE, SANS ABRÉVIATIONS, CITATION HUMAINE]
-1. **ZÉRO ABRÉVIATION ROBOT** : n'écris JAMAIS PPM, DAO, ANO, CRD, CGPMP, DGCMP, ARMP, AAO, CCAG, TDR, PV. Écris toujours en toutes lettres et simplement :
-   - plan de passation des marchés (pas PPM)
-   - dossier d'appel d'offres (pas DAO)
-   - avis d'appel d'offres (pas AAO)
-   - avis de non-objection (pas ANO)
-   - direction générale du contrôle des marchés publics (pas DGCMP)
-   - autorité de régulation (pas ARMP)
-   - comité de règlement des différends (pas CRD)
-   - cellule de gestion des marchés publics (pas CGPMP)
-   - personne responsable des marchés (pas PRM)
-   Si l'abréviation aide vraiment, écris d'abord le terme complet puis l'abréviation entre parenthèses UNE SEULE FOIS, mais ensuite reprends le terme complet.
-2. **CITE COMME UNE HUMAINE, PAS COMME UN ROBOT** : INTERDIT de faire "Source : MP-RDC-202 — ..." ou "> MP-RDC..." ou "Loi 10/010 Art.14". Intègre la source naturellement dans ta phrase, comme une prof :
-   - "Comme le dit l'article 14 de la loi du 27 avril 2010 qui encadre les marchés publics..."
-   - "Ton cours l'explique bien : aucune dépense ne peut être engagée si..."
-   - "Le manuel officiel rappelle que..."
-   - "C'est l'article 13 qui l'interdit clairement..."
-   Tu peux ajouter discrètement entre parenthèses à la fin (cours sur le plan de passation) si utile, mais JAMAIS de bloc "Source :" ni de code MP-RDC.
-3. **EXPLICITE** : explique chaque notion avec tes mots, pas avec du jargon. Donne toujours une image simple de Kinshasa/marché/école/foot. Phrases courtes, claires.
-
-[TON - PÉDAGOGIQUE ET CHALEUREUX]
-- Valorise : "Excellente question !", "Tu as raison de vérifier", "C'est le piège classique — bravo de l'avoir repéré"
-- Analogie simple à chaque fois : plan de passation = liste de courses validée avant d'aller au marché, dossier d'appel d'offres = règlement du match, avis de non-objection = feu vert du contrôleur
-- Structure : accroche humaine + idée clé en gras + 3-4 puces simples (mots clés en gras) + 1 astuce
-- Concis : 150-220 mots, mais toujours clair et concret
-- Termine par UNE seule question douce et bienveillante : "On s'entraîne avec ton cas ?", "Tu veux qu'on vérifie ensemble ?"
-
-[STRUCTURE]
-- **Accroche humaine + idée clé en gras** (1 phrase chaleureuse + 1 phrase qui donne la réponse essentielle)
-- **Explication simple** (3-4 puces, pas de jargon, exemple concret)
-- **Astuce à retenir**
-- **Question unique**
-`;
+const LEGAL_KNOWLEDGE_CONTEXT = TUTOR_RESPONSE_POLICY;
 
 
 async function generateWithResilience(
@@ -351,7 +316,7 @@ function getLegalTutorFallback(message: string, userName?: string, learningConte
   const raw = (message || '').trim();
   const q = raw.toLowerCase();
   const prenom = userName ? userName.split(' ')[0] : '';
-  const histText = Array.isArray(history) ? history.map((h:any)=> (h.text||'').toLowerCase()).join(' ') : '';
+  const histText = Array.isArray(history) ? history.slice(-6).map((h:any)=> (typeof h?.text === 'string' ? h.text.slice(0, 2000) : '').toLowerCase()).join(' ') : '';
   const lastTopic = (() => {
     if (/recours|contestation|crd|plainte/.test(histText)) return 'recours';
     if (/plan.*achat|ppm|planification/.test(histText)) return 'plan';
@@ -633,76 +598,48 @@ app.post('/api/ai/tutor', async (req, res) => {
   const isFollowUpRag = /^(et|et alors|et les|combien|délais|délai|exemple|détaille|précise|pourquoi|comment)\b/i.test(fullMessage.trim()) || fullMessage.trim().length < 12;
   const ragQuery = (isFollowUpRag && historyTextForRag.length>10) ? (historyTextForRag + ' ' + fullMessage) : fullMessage;
   const ragLessons = findRelevantLessons(ragQuery, courseContext || lc);
-  const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (À CITER OBLIGATOIREMENT) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
+  const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
 
-  if (!ai) {
+  if (!ai && !arenaAvailable) {
     console.log(`[AI Tutor] Fallback RAG (no GEMINI_API_KEY) for: "${message.slice(0,60)}..." rag:${ragLessons.map(r=>r.course.code+':'+r.lesson.id).join(',')}`);
-    const fallback = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
+    const fallback = tutorUnavailableReply();
     return res.json(fallback);
   }
 
   // Tentative Arena d'abord (cerveaux Arena), puis Gemini
   let arenaReply: string | null = null;
   if (process.env.ARENA_API_KEY) {
-    const arenaPrompt = `
-${LEGAL_KNOWLEDGE_CONTEXT}
-${ragBlock}
-Contexte : ${context || 'Apprenant RDC'} | Dernier cours : ${lc || 'non renseigné'}
-Historique : ${(history || []).slice(-6).map((h: any) => `${h.sender}: ${h.text}`).join('\n')}
-Question : ${fullMessage}
-Réponds en 150-220 mots, pédagogique et humaine, SANS ABRÉVIATIONS (écris tout en toutes lettres), cite comme une humaine (pas de 'Source : MP-RDC'), donne une analogie simple, structure en puces, une seule question douce.
-`;
+    const arenaPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
     arenaReply = await callArenaLLM(arenaPrompt);
     if (arenaReply) {
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
-      return res.json({ reply: arenaReply, sources: [...(ragLessons.map(r=> formatCourseCitation(r))), `Arena ${ARENA_MODEL} — cerveaux Arena`, 'Loi du 27 avril 2010', 'Manuel officiel'] });
+      return res.json({ reply: arenaReply, sources: ragLessons.map(r => formatCourseCitation(r)) });
     }
   }
 
+  if (!ai) return res.json(tutorUnavailableReply());
   try {
-    const conversationPrompt = `
-${LEGAL_KNOWLEDGE_CONTEXT}
-${ragBlock}
-Contexte apprenant : ${context || 'Apprenant des marchés publics RDC'} | Dernier cours : ${lc || 'non renseigné'}
-
-Historique récent :
-${(history || []).slice(-6).map((h: { sender: string; text: string }) => `${h.sender === 'user' ? 'Apprenant' : 'Tuteur'}: ${h.text}`).join('\n')}
-
-Question de l'apprenant : ${fullMessage}
-
-[CONSIGNE STRICTE - EXPLICITE ET HUMAINE]
-- Ouvre par une phrase chaleureuse qui valorise (« Excellente question ! ») puis donne l'idée clé en gras, intégrée naturellement (pas de 'Source : MP-RDC').
-- Développe ensuite en **liste à puces/numérotée** ou **tableau Markdown** si comparatif/complexe.
-- Ton : bienveillant, pédagogue, humain, chaleureux. Explique comme à un collègue avec une analogie simple (marché/foot/école).
-- Si une info manque pour répondre parfaitement, termine par **une seule** question de relance ciblée. Ne fais aucune supposition.
-- Utilise le contenu du ragBlock pour être précise, mais cite-le comme une humaine (ex: 'ton cours sur... dit que'), JAMAIS en bloc 'Source : MP-RDC'.
-`;
+    const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
 
     const response = await generateWithResilience(ai, {
       contents: conversationPrompt,
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
       primaryTimeoutMs: 15000,
-      config: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'minimal' } },
-      fallbackConfig: { maxOutputTokens: 1600, thinkingConfig: { thinkingLevel: 'low' } },
+      config: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'minimal' } },
+      fallbackConfig: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'low' } },
       requireText: true,
     });
 
-    const replyText = response?.text?.trim() || getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history).reply;
+    const replyText = response?.text?.trim() || tutorUnavailableReply().reply;
 
     return res.json({
       reply: replyText,
-      sources: [
-        ...(ragLessons.map(r=> formatCourseCitation(r))),
-        'Tuteur Academia — cours RDC',
-        'Loi n° 10/010 du 27 avril 2010',
-        'Manuel officiel',
-        'Directives du contrôle'
-      ]
+      sources: ragLessons.map(r => formatCourseCitation(r))
     });
   } catch (error: any) {
     console.warn('[AI Tutor] Model high demand or unavailable, serving RAG fallback:', error?.message);
-    const fallback = getLegalTutorFallback(fullMessage, userName, lc || learningContext || lastCourse, (history?.length || 0), history);
+    const fallback = tutorUnavailableReply();
     return res.json(fallback);
   }
 });

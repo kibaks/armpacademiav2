@@ -126,9 +126,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState>(speechService.getState());
-  const [courseTutorPersona, setCourseTutorPersona] = useState<'henri' | 'vivienne'>(() =>
-    speechService.getVoicePersona() === 'henri' ? 'henri' : 'vivienne');
-  const courseTutorName = courseTutorPersona === 'henri' ? 'Prof. Henri' : 'Prof. Aïsha';
+  const courseTutorPersona = 'vivienne' as const;
+  const courseTutorName = 'Aïsha';
   const [autoReadLessons, setAutoReadLessons] = useState<boolean>(() => {
     try {
       return localStorage.getItem('academia_course_autoread') === 'true';
@@ -1595,17 +1594,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 shrink-0">
-                      <label className="text-xs font-semibold">Tuteur du chapitre
-                        <select value={courseTutorPersona} onChange={event => {
-                          const persona = event.target.value === 'henri' ? 'henri' : 'vivienne';
-                          speechService.stop();
-                          speechService.setVoicePersona(persona);
-                          setCourseTutorPersona(persona);
-                        }} className="mt-1 block w-full rounded-lg bg-slate-900 border border-blue-700 p-2 text-white">
-                          <option value="henri">Prof. Henri</option>
-                          <option value="vivienne">Prof. Aïsha</option>
-                        </select>
-                      </label>
+                      <p className="text-xs font-semibold">Aïsha · Tutrice du chapitre</p>
                       <button
                         onClick={() =>
                           onCallTutor
@@ -1653,7 +1642,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     </div>
                   </div>
 
-                  {courseTutorPersona !== 'henri' && <div className="h-[32rem] max-w-md mx-auto">
+                  {true && <div className="h-[32rem] max-w-md mx-auto">
                     <TutorVideoPlayer persona={courseTutorPersona} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
                       <AishaAvatar tutorPersona={courseTutorPersona} variant="studio" handGestures={false} showBadge={false} />
                     </TutorVideoPlayer>

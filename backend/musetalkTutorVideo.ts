@@ -8,7 +8,7 @@ import { synthesizeElevenTutor } from './elevenTutorSpeech.js';
 
 type Deps = { env?: NodeJS.ProcessEnv; db?: () => any; authenticate?: RequestHandler; fetcher?: typeof fetch;
   synthesize?: (text: string, persona: string) => Promise<{ audioBuffer: Buffer; mimeType: string } | null> };
-const personas = ['denise', 'vivienne', 'charline', 'eloise'];
+const personas = ['vivienne'];
 export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   const router = Router(), env = deps.env || process.env, request = deps.fetcher || fetch;
   const db = () => deps.db?.() || services().db;

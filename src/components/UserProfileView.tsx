@@ -2544,14 +2544,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               <div className="flex items-center justify-between">
                 <h3 className="text-sm sm:text-base font-black flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>Tutrices Virtuelles • Appels & Voices</span>
+                  <span>Aïsha · Votre tutrice</span>
                 </h3>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold">
                   En ligne 24/7
                 </span>
               </div>
               <p className="text-[11px] text-blue-200/90 leading-relaxed">
-                Appelez directement nos 4 tutrices virtuelles en audio/visio ou envoyez-leur un Voice juridique :
+                Échangez avec Aïsha par message, en audio ou en vidéo sur votre cours :
               </p>
               <div className="space-y-2">
                 {VIRTUAL_TUTORS.map((tutor) => (

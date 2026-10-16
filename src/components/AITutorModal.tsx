@@ -336,64 +336,14 @@ export interface VirtualTutorProfile {
   greeting: (firstName: string) => string;
 }
 
-export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [
-  {
-    id: 'henri', name: 'Prof. Henri',
-    title: 'Expert commande publique • Passation & Contrôle',
-    specialty: 'PPM, DAO, contrôle et conformité des marchés',
-    badge: '👨‍🏫 Tuteur masculin', voiceLabel: 'Masculine • Grave & affirmée',
-    desc: 'Timbre rocailleux, posé et autoritaire', accentColor: 'from-slate-700 to-blue-800',
-    greeting: () => 'Bonjour. Je suis le professeur Henri. Nous allons examiner votre question avec méthode et précision. Exposez votre situation : je vous guiderai étape par étape.'
-  },
-  {
-    id: 'vivienne',
-    name: 'Prof. Aïsha',
-    title: 'Directrice Pédagogique • Loi 10/010 & Passation',
-    specialty: 'Procédures globales, PPM, DAO & Seuils',
-    badge: '👩‍🏫 Tutrice Principale',
-    voiceLabel: 'Féminine • Grave & assurée',
-    desc: 'Chaleureuse & charismatique',
-    accentColor: 'from-blue-600 to-indigo-700',
-    greeting: (_firstName: string) =>
-      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
-  },
-  {
-    id: 'charline',
-    name: 'Me. Charline',
-    title: 'Avocate Conseil • Contentieux, CRD & Recours ARMP',
-    specialty: 'Recours gracieux, litiges CRD & sanctions',
-    badge: '⚖️ Tutrice Contentieux',
-    voiceLabel: 'Féminine • Ferme & posée',
-    desc: 'Veloutée & posée',
-    accentColor: 'from-purple-600 to-fuchsia-700',
-    greeting: (_firstName: string) =>
-      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
-  },
-  {
-    id: 'denise',
-    name: 'Dr. Vivienne',
-    title: 'Experte Contrôle a priori • DGCMP, ANO & Gré à gré',
-    specialty: 'Seuils DGCMP, Avis de Non-Objection & Avenants',
-    badge: '🏛️ Tutrice Contrôle DGCMP',
-    voiceLabel: 'Féminine • Grave & institutionnelle',
-    desc: 'Institutionnelle & sereine',
-    accentColor: 'from-emerald-600 to-teal-700',
-    greeting: (_firstName: string) =>
-      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
-  },
-  {
-    id: 'eloise',
-    name: 'Insp. Ariane',
-    title: 'Inspectrice Audit • Exécution, Garanties & Contenu Local',
-    specialty: 'Cautions, pénalités, réception & sous-traitance 51%',
-    badge: '🔍 Tutrice Audit & Exécution',
-    voiceLabel: 'Féminine • Claire & affirmée',
-    desc: 'Claire & articulée',
-    accentColor: 'from-amber-500 to-orange-600',
-    greeting: (_firstName: string) =>
-      `Bonjour ! Ravie de vous retrouver… Aujourd'hui, nous allons explorer quelques idées ensemble. Regardez bien, écoutez… et n'hésitez jamais à poser vos questions : chaque échange nous aide à mieux comprendre — et à avancer avec confiance !`
-  }
-];
+export const VIRTUAL_TUTORS: VirtualTutorProfile[] = [{
+  id: 'vivienne', name: 'Aïsha',
+  title: 'Tutrice pédagogique en marchés publics',
+  specialty: 'Comprendre les cours et appliquer les procédures',
+  badge: 'Tutrice virtuelle', voiceLabel: 'Voix française',
+  desc: 'Des explications précises, adaptées à votre cours', accentColor: 'from-blue-600 to-indigo-700',
+  greeting: () => 'Bonjour, je suis Aïsha, votre tutrice. Quelle notion du cours souhaitez-vous éclaircir ?'
+}];
 
 const VOICE_OPTIONS: Array<{ id: VoicePersona; label: string; desc: string }> = VIRTUAL_TUTORS.map((t) => ({
   id: t.id,
@@ -710,10 +660,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   // Si un appel direct (audio, visio ou voice) est demandé depuis le bouton flottant ou le lecteur de cours
   useEffect(() => {
     if (!isOpen || !initialAction) return;
-    const targetTutor = initialTutor || selectedVoice;
+    const targetTutor: VoicePersona = 'vivienne';
     if (initialTutor && initialTutor !== selectedVoice) {
-      setSelectedVoice(initialTutor);
-      speechService.setVoicePersona(initialTutor);
+      setSelectedVoice('vivienne');
+      speechService.setVoicePersona('vivienne');
     }
     const act = initialAction;
     onClearInitialAction?.();
@@ -780,7 +730,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     setActiveSpeakingMsgId(null);
   };
 
-  const handleChangeVoice = (v: VoicePersona) => {
+  const handleChangeVoice = (_v: VoicePersona) => {
+    const v: VoicePersona = 'vivienne';
     setSelectedVoice(v);
     speechService.setVoicePersona(v);
     const lastBotMsg = [...messages].reverse().find((m) => m.sender === 'tuteur');
@@ -1047,7 +998,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       clearTimeout(callGreetingTimerRef.current);
       callGreetingTimerRef.current = null;
     }
-    const targetVoice = tutorId || selectedVoice;
+    const targetVoice: VoicePersona = 'vivienne';
     if (tutorId && tutorId !== selectedVoice) {
       setSelectedVoice(tutorId);
       speechService.setVoicePersona(tutorId);
@@ -1077,7 +1028,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       clearTimeout(callGreetingTimerRef.current);
       callGreetingTimerRef.current = null;
     }
-    const targetVoice = tutorId || selectedVoice;
+    const targetVoice: VoicePersona = 'vivienne';
     if (tutorId && tutorId !== selectedVoice) {
       setSelectedVoice(tutorId);
       speechService.setVoicePersona(tutorId);
@@ -1394,8 +1345,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           </div>
         </header>
         <div className="tutor-selection">
-          <label htmlFor="tutor-persona">Votre tuteur</label>
-          <select id="tutor-persona" value={selectedVoice} onChange={e => handleChangeVoice(e.target.value as VoicePersona)}>{VIRTUAL_TUTORS.map(tutor => <option key={tutor.id} value={tutor.id}>{tutor.name} · {tutor.specialty}</option>)}</select>
+          <span className="text-sm font-semibold">Aïsha · Votre tutrice</span>
           {!showStudioStage && (isSpeaking || isVoiceLoading) && <button type="button" onClick={stopSpeaking} className="tutor-stop"><Pause size={14} />Arrêter la lecture</button>}
           <span role="status" className="tutor-status"><i className={isSpeaking ? 'speaking' : ''} />{isVoiceLoading ? 'Préparation de la voix…' : isSpeaking ? 'Lecture en cours' : isLoading ? 'Préparation de la réponse…' : isListening ? 'À votre écoute' : 'Disponible'}</span>
         </div>
