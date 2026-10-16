@@ -41,3 +41,22 @@ Validation: a French 7.94-second H.264/AAC clip was rendered successfully on the
 GPU and a second job completed through the HTTPS API. Automated application tests
 cover duplicate requests, quotas, ownership and private media. Visual quality and
 full in-app playback should also be checked with an authenticated learner session.
+
+## Natural source v2
+
+The source was generated on the same H100 with the official Wan2.2 TI2V-5B
+checkpoint in an independent `/opt/academia-wan/.venv`. MuseTalk dependencies
+are unchanged. Upstream Wan revision: `1ea34ff48f87168174e12956e200b1d908b1c5ff`.
+Reproduction files: `generate-natural-source.sh`, `natural-source-prompt.txt`,
+`requirements-natural-source.txt`. Seed 77183, 121 frames, 50 steps, 24 fps.
+The original portrait is the image input. The generated source is 800 x 1088,
+5.042 seconds. SHA256: `83346de5eb239e8bfc4efca7a73da635ffc889171be41cf1dfa30492088979b4`.
+
+The original limited-motion source is preserved as
+`/opt/MuseTalk/data/academia/source-before-natural-v2.mp4`.
+The new source includes torso, shoulder and head movement; it does not provide
+word-specific semantic gestures. MuseTalk repeats its frame cycle for longer
+narration. An eight-second French H.264/AAC render was checked at multiple
+timestamps, including the side-facing pose. Mouth motion changes with the audio;
+the body motion is inherited from the source. The cache revision is v2 so old
+limited-motion results are not reused for new requests.
