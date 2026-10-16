@@ -13,15 +13,18 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, persona, active =
     setAudioPlaying(value.isPlaying);
     if (value.isPlaying) videoRef.current?.pause();
   }), []);
-  if (!active || state.status === 'idle' || audioPlaying) return <>{children}</>;
+  const presentation = state.status === 'idle' && persona !== 'henri';
+  if (!active || (state.status === 'idle' && !presentation) || audioPlaying) return <>{children}</>;
   return <div className="relative flex h-full w-full min-h-48 flex-col overflow-hidden rounded-2xl bg-slate-950 text-white">
-    {state.status === 'ready' && state.url ? <>
-      <video ref={videoRef} key={state.url} src={state.url}
-        poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay playsInline preload="metadata"
-        className="min-h-0 flex-1 w-full object-contain" aria-label="Réponse vidéo de la tutrice avec sa voix synchronisée"
+    {(state.status === 'ready' && state.url) || presentation ? <>
+      <video ref={videoRef} key={presentation ? 'professional-presentation-v3' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v3.mp4' : state.url}
+        poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay={!presentation} playsInline preload="metadata"
+        className="min-h-0 flex-1 w-full object-contain" aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
         onPlay={() => speechService.stop()} onError={() => setMediaError(true)} />
-        {mediaError && <button type="button" onClick={onAudioOnly} className="min-h-11 px-3 text-sm">Vidéo indisponible — écouter en audio</button>}
-        <button type="button" onClick={onStop} className="min-h-11 px-3 text-sm text-slate-200">Fermer la vidéo</button>
+        {presentation ? <p className="p-2 text-center text-xs text-slate-300">Extrait de présentation · Comparer les offres</p> : <>
+          {mediaError && <button type="button" onClick={onAudioOnly} className="min-h-11 px-3 text-sm">Vidéo indisponible — écouter en audio</button>}
+          <button type="button" onClick={onStop} className="min-h-11 px-3 text-sm text-slate-200">Fermer la vidéo</button>
+        </>}
     </> : <>
       <div className="min-h-0 flex-1 opacity-60">{children}</div>
       <div role="status" aria-live="polite" className="p-3 text-center text-sm">
