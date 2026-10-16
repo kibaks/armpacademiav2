@@ -1,0 +1,11 @@
+[Unit]
+Description=Private MuseTalk tunnel to Academia HTTPS gateway
+After=network-online.target academia-musetalk.service
+
+[Service]
+ExecStart=/usr/bin/ssh -N -T -i /opt/MuseTalk/gateway_ed25519 -o UserKnownHostsFile=/opt/MuseTalk/gateway_known_hosts -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -R 127.0.0.1:8061:127.0.0.1:8061 root@137.184.59.184
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

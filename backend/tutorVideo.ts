@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { createVeoTutorVideoRouter } from './veoTutorVideo.js';
+import { createMuseTalkTutorVideoRouter } from './musetalkTutorVideo.js';
 
-// Veo replaces Sync for new tutor replies. Legacy Sync jobs are not submitted here.
+// Self-hosted MuseTalk replaces cloud video generation for new replies.
 export function createTutorVideoRouter() {
-  return Router().use(createVeoTutorVideoRouter());
+  return Router().use(createMuseTalkTutorVideoRouter());
 }
