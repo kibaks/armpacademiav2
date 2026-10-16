@@ -16,6 +16,17 @@ test('presentation uses safe defaults and never accepts an unknown motion mode',
   assert.deepEqual(normalizeTutorPresentation({ motion: 'unknown', facialExpressions: 'false' }), { motion: 'subtle', facialExpressions: true, handGestures: true, autoSpeak: true });
 });
 
+test('professional presentation keeps the gaze frontal and motion restrained without altering speech or blinks', () => {
+  const frame = { ...stepAvatarExpressionFrame(500, 500, 0.2, true, 0.8, 'open', false, 'pedagogical', true),
+    turn: 20, nod: -20, tilt: 10, gazeX: -10, gazeY: 10, smile: 1, leftHandDy: -30 };
+  const professional = applyTutorMotion(frame, 'expressive', true, false, true);
+  assert.ok(Math.abs(professional.turn) <= 1.2 && Math.abs(professional.nod) <= 2 && Math.abs(professional.tilt) <= 0.7);
+  assert.ok(Math.abs(professional.gazeX) <= 0.5 && Math.abs(professional.gazeY) <= 0.5);
+  assert.equal(professional.leftHandDy, 0); assert.ok(professional.smile <= 0.18);
+  assert.equal(professional.open, frame.open); assert.equal(professional.viseme, frame.viseme);
+  assert.equal(professional.blinkLeft, frame.blinkLeft); assert.equal(frame.turn, 20);
+});
+
 test('hands accompany speech and settle rather than moving continuously at rest', () => {
   let frame = stepAvatarExpressionFrame(500, 500, 0.1, true, 0.6, 'open', false, 'pedagogical', true);
   for (let i = 1; i < 60; i++) frame = stepAvatarExpressionFrame(500 + i * 17, 500 + i * 17, 0.1, true, 0.6, 'open', false, 'pedagogical', true);

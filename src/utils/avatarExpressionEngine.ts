@@ -191,7 +191,7 @@ class AvatarExpressionEngine {
         if (target.wav2lipCanvas) {
           const renderer = getTutorVideoRenderer(target.wav2lipViewport?.tutorPersona);
           const mode = target.motionMode || 'subtle';
-          const visibleFrame = applyTutorMotion(frame, mode, target.facialExpressions !== false, this.reducedMotion);
+          const visibleFrame = applyTutorMotion(frame, mode, target.facialExpressions !== false, this.reducedMotion, target.wav2lipViewport?.tutorPersona === 'henri');
           const key = `${target.wav2lipViewport?.tutorPersona || 'denise'}:${mode}:${target.facialExpressions !== false}`;
           if (previousSurfaceKey !== key) { surface = renderer.renderWarpedFullFrame(visibleFrame); previousSurfaceKey = key; }
           if (surface) renderer.renderToTargetCanvas(target.wav2lipCanvas, target.wav2lipViewport || { x: 245, y: 55, w: 495, h: 585 }, visibleFrame, surface);

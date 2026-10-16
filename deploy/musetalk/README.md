@@ -60,3 +60,19 @@ narration. An eight-second French H.264/AAC render was checked at multiple
 timestamps, including the side-facing pose. Mouth motion changes with the audio;
 the body motion is inherited from the source. The cache revision is v2 so old
 limited-motion results are not reused for new requests.
+
+## Professional source v3
+
+The professional presentation replaces the v2 lateral turns with an upright
+frontal stance, steady eye contact, small nods, relaxed shoulders and hands
+outside the frame. Same isolated Wan installation and portrait; seed 77184,
+121 frames at 24 fps, 50 steps. Reproduction: `professional-source-prompt.txt`
+and `generate-professional-source.sh`.
+Source SHA256: `000e4b9dca4499c2f5e67dedd8db993a545386eaf5701b0822b683acc1a52fde`.
+Keep the v2 source as `/opt/MuseTalk/data/academia/source-natural-v2.mp4` for rollback.
+The application uses a v3 cache key to avoid reusing the more demonstrative v2 video.
+
+Henri continues using the existing portrait renderer, with a professional motion
+limit applied at rendering time: restrained head/shoulder movement, frontal gaze,
+discreet smile and no raised hand animation. Speech articulation and blink timing
+are preserved. This is not a newly generated male MP4.
