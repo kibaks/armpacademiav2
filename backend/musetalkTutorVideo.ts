@@ -73,7 +73,9 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (response.status === 404 && entry.job.status === 'FAILED') return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' });
       if (!response.ok) return res.sendStatus(503);
       const result = await response.json();
-      if (result.status === 'STREAMING') return res.json({ status: 'STREAMING', videoUrl: playbackUrl(req.params.id) });
+      // A growing MP4 has no stable length/range contract. Native players may
+      // treat its current end as the end of the answer. Publish only final files.
+      if (result.status === 'STREAMING') return res.json({ status: 'PENDING' });
       if (result.status === 'COMPLETED') {
         await entry.ref.update({ status: 'COMPLETED' });
         // A short-lived read-only ticket enables native streaming and byte ranges.

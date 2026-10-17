@@ -103,12 +103,12 @@ test('self-hosted video ignores the old daily limit and never creates quota reco
   assert.equal(config.dailyLimit, null);
   assert.equal(config.maxDurationSeconds, null);
 });
-test('a playable fragment is returned before completion without caching completion', async () => {
+test('a growing MP4 is not exposed as playable before finalization', async () => {
   const h = await harness('STREAMING');
   const { id } = await (await h.post()).json();
   const result = await (await h.request(`${h.base}/${id}`, { headers: { authorization: 'owner' } })).json();
-  assert.equal(result.status, 'STREAMING');
-  assert.equal(new URL(result.videoUrl).protocol, 'https:');
+  assert.equal(result.status, 'PENDING');
+  assert.equal(result.videoUrl, undefined);
   assert.notEqual(h.records.get(`musetalkTutorJobs/${id}`).status, 'COMPLETED');
   assert.equal((await h.request(`${h.base}/${id}`, { headers: { authorization: 'other' } })).status, 404);
   assert.equal(h.counts().submissions, 1);
