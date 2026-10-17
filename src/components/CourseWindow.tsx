@@ -136,26 +136,17 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     }
   });
 
-  // Completed Lessons Tracking (synchronisé avec Firestore + localStorage)
-  const [completedLessons, setCompletedLessons] = useState<Set<number>>(() => {
-    try {
-      const fromProfile = currentProfile.completedLessonsByCourse?.[course.id];
-      if (Array.isArray(fromProfile) && fromProfile.length > 0) {
-        return new Set(fromProfile);
-      }
-      const saved = localStorage.getItem(`armp_completed_lessons_${course.id}`);
-      return saved ? new Set(JSON.parse(saved)) : new Set([0]);
-    } catch {
-      return new Set([0]);
-    }
-  });
+  // Only the connected profile can supply completed chapters.
+  const [completedLessons, setCompletedLessons] = useState<Set<number>>(() =>
+    new Set(currentProfile.completedLessonsByCourse?.[course.id] || [])
+  );
 
   // Validation Test per Lesson state (persisted in localStorage)
   const [isValidatingLessonModalOpen, setIsValidatingLessonModalOpen] = useState(false);
   const [validatingLessonIndex, setValidatingLessonIndex] = useState<number>(0);
   const [validatedLessonIndexes, setValidatedLessonIndexes] = useState<Set<number>>(() => {
     try {
-      const saved = localStorage.getItem(`armp_validated_lessons_${course.id}`);
+      const saved = localStorage.getItem(`armp_validated_lessons_${currentProfile.id}_${course.id}`);
       return saved ? new Set<number>(JSON.parse(saved)) : new Set<number>();
     } catch {
       return new Set<number>();
@@ -362,7 +353,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     const pct = Math.min(100, Math.round((arr.length / Math.max(1, safeLessons.length)) * 100));
     setCompletedLessons(next);
     try {
-      localStorage.setItem(`armp_completed_lessons_${course.id}`, JSON.stringify(arr));
+      localStorage.setItem(`armp_completed_lessons_${currentProfile.id}_${course.id}`, JSON.stringify(arr));
     } catch {}
     onUpdateCourseProgress?.(course.id, pct, arr, undefined, nextActiveIndex ?? index);
   };
@@ -387,7 +378,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       const next = new Set(prev);
       next.add(lessonIdx);
       try {
-        localStorage.setItem(`armp_validated_lessons_${course.id}`, JSON.stringify(Array.from(next)));
+        localStorage.setItem(`armp_validated_lessons_${currentProfile.id}_${course.id}`, JSON.stringify(Array.from(next)));
       } catch {}
       return next;
     });

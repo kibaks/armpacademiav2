@@ -1,0 +1,105 @@
+[
+  {
+    "id": "MOD-001",
+    "level": "Fondamental",
+    "targetAudience": [
+      "cgpmp_member",
+      "armp_agent",
+      "dgcmp_agent",
+      "pme",
+      "particulier",
+      "dfat_admin",
+      "formateur"
+    ],
+    "lessons": [
+      {},
+      {},
+      {}
+    ],
+    "chaptersCount": 3
+  },
+  {
+    "id": "MOD-007",
+    "level": "Fondamental",
+    "targetAudience": [
+      "pme",
+      "particulier",
+      "armp_agent",
+      "dfat_admin",
+      "formateur"
+    ],
+    "lessons": [
+      {},
+      {}
+    ],
+    "chaptersCount": 3
+  },
+  {
+    "id": "MOD-014",
+    "level": "Fondamental",
+    "targetAudience": [
+      "pme",
+      "particulier",
+      "cgpmp_member",
+      "dgcmp_agent",
+      "dfat_admin",
+      "formateur"
+    ],
+    "lessons": [
+      {},
+      {},
+      {}
+    ],
+    "chaptersCount": 3
+  },
+  {
+    "id": "MOD-026",
+    "level": "Fondamental",
+    "targetAudience": [
+      "ac_agent",
+      "grande_entreprise",
+      "cgpmp_member",
+      "dfat_admin",
+      "formateur"
+    ],
+    "lessons": [
+      {},
+      {}
+    ],
+    "chaptersCount": 2
+  },
+  {
+    "id": "MOD-030",
+    "level": "Fondamental",
+    "targetAudience": [
+      "societe_civile",
+      "particulier",
+      "armp_agent",
+      "cgpmp_member",
+      "dfat_admin",
+      "formateur"
+    ],
+    "lessons": [
+      {},
+      {}
+    ],
+    "chaptersCount": 2
+  },
+  {
+    "id": "MOD-032",
+    "level": "Fondamental",
+    "targetAudience": [
+      "independant",
+      "particulier",
+      "ac_agent",
+      "dgcmp_agent",
+      "dfat_admin",
+      "formateur"
+    ],
+    "lessons": [
+      {},
+      {}
+    ],
+    "chaptersCount": 2
+  }
+]

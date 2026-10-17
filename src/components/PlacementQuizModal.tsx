@@ -23,7 +23,7 @@ interface PlacementQuizModalProps {
     level: UserProfile['level'],
     score: number,
     validation?: { niveau: NiveauValidation; moduleCode?: string }
-  ) => void;
+  ) => void | Promise<void>;
   onSelectModule: (moduleId: string) => void;
 }
 
@@ -117,7 +117,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       const data = await res.json();
       if (data.questions) {
         // Questions générées : ordre et options aléatoires à chaque passage
-        setQuestions(randomizeQuestions(data.questions));
+        setQuestions(data.questions);
       }
     } catch (err) {
       console.error(err);
@@ -162,7 +162,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
           strengths: [], weaknesses: [], recommendedModuleIds: [] });
         // Affectation du niveau à l'utilisateur connecté : uniquement si le test est réussi
         if (passed) {
-          onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level, levelLabels(peekLevelSettings())), score, {
+          await onUpdateProfileLevel(mapValidationToProfileLevel(activeTest.level, levelLabels(peekLevelSettings())), score, {
             niveau: activeTest.level,
             moduleCode: activeTest.moduleCode,
           });
@@ -171,15 +171,7 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       }
 
       // ---- Quiz IA de positionnement (comportement historique) ----
-      const payloadAnswers = questions.map((q) => {
-        const picked = selectedAnswers[q.id];
-        return {
-          questionId: q.id,
-          question: q.question,
-          pickedIndex: picked,
-          isCorrect: picked === q.correctIndex
-        };
-      });
+      const payloadAnswers = questions.map(q => selectedAnswers[q.id]);
 
       const res = await authenticatedFetch('/api/ai/placement-quiz', {
         method: 'POST',
@@ -192,8 +184,9 @@ export const PlacementQuizModal: React.FC<PlacementQuizModalProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Évaluation impossible.');
+      if (data.passed) await onUpdateProfileLevel(data.level as any, data.score);
       setResult(data);
-      onUpdateProfileLevel(data.level as any, data.score);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Évaluation impossible. Réessayez.');
     } finally {

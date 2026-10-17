@@ -1,3 +1,5 @@
+import { learnerProgressionRouter, readLearningStage } from './backend/learnerProgression.js';
+import { learnerLevelGuidance } from './shared/learnerProgression.js';
 import { generateQwenTutor, qwenTutorConfig } from './backend/qwenTutor.js';
 import { TUTOR_RESPONSE_POLICY, tutorConversationData, tutorUnavailableReply } from './shared/tutorReplyPolicy';
 import { synthesizePiperTutor, piperConfigured } from './backend/piperTutorSpeech.js';
@@ -99,14 +101,14 @@ function getAIClient(): GoogleGenAI | null {
 const ARENA_API_URL = process.env.ARENA_API_URL || "https://api.arena.ai/v1/chat/completions";
 const ARENA_API_KEY = process.env.ARENA_API_KEY;
 const ARENA_MODEL = process.env.ARENA_MODEL || "arena-luna-70b";
-async function callArenaLLM(prompt: string): Promise<string | null> {
+async function callArenaLLM(prompt: string, policy: string = TUTOR_RESPONSE_POLICY): Promise<string | null> {
   if (!ARENA_API_KEY) return null;
   try {
     const res = await fetch(ARENA_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ARENA_API_KEY}`, "User-Agent": "aistudio-build-arena" },
       signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "system", content: TUTOR_RESPONSE_POLICY }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 700 })
+      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "system", content: policy }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 700 })
     });
     if (!res.ok) {
       console.warn(`[Arena] API ${res.status} — fallback Gemini`);
@@ -1780,6 +1782,9 @@ app.post('/api/ai/tutor', async (req, res) => {
 
   const adaptReplyToPersona = (reply: string) => reply;
 
+  const stage = await readLearningStage((req as any).identity.uid).catch(() => null);
+  if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
+  const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
   const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
   const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
   const mediaNote = hasMedia ? ` [Média joint: ${mediaType || 'fichier'} — analyser avec précision juridique]` : '';
@@ -1796,7 +1801,7 @@ app.post('/api/ai/tutor', async (req, res) => {
 
   if (qwenTutorConfig()) {
     try {
-      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock));
+      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage });
       return res.json({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen3-14b', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
     } catch {
       return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen3-14b' });
@@ -1816,8 +1821,8 @@ app.post('/api/ai/tutor', async (req, res) => {
   // Tentative Arena d'abord (cerveaux Arena), puis Gemini
   let arenaReply: string | null = null;
   if (process.env.ARENA_API_KEY) {
-    const arenaPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
-    arenaReply = await callArenaLLM(arenaPrompt);
+    const arenaPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage));
+    arenaReply = await callArenaLLM(arenaPrompt, verifiedTutorPolicy);
     if (arenaReply) {
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
       return res.json({
@@ -1830,15 +1835,15 @@ app.post('/api/ai/tutor', async (req, res) => {
 
   if (!ai) return res.json(tutorUnavailableReply());
   try {
-    const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
+    const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage));
 
     const response = await generateWithResilience(ai, {
       contents: conversationPrompt,
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
       primaryTimeoutMs: 15000,
-      config: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'minimal' } },
-      fallbackConfig: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'low' } },
+      config: { systemInstruction: verifiedTutorPolicy, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'minimal' } },
+      fallbackConfig: { systemInstruction: verifiedTutorPolicy, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'low' } },
       requireText: true,
     });
 
@@ -1922,157 +1927,8 @@ function levelFromScore(score: number, s: LevelSettings = DEFAULT_LEVEL_SETTINGS
   return s.labels.debutant;
 }
 
-app.post('/api/ai/placement-quiz', async (req, res) => {
-  try {
-    const { role, institution, answers } = req.body;
-    const ai = getAIClient();
+app.use('/api', learnerProgressionRouter);
 
-    // If answers provided, evaluate placement level
-    if (answers && Array.isArray(answers)) {
-      if (!ai) {
-        // Fallback calculation — niveau piloté par les seuils paramétrables
-        const correctCount = answers.filter((a: any) => a.isCorrect).length;
-        const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const lvCfg = await loadLevelSettings();
-        const level = levelFromScore(score, lvCfg);
-        return res.json({
-          score,
-          level,
-          diagnostic: `Profil calibré pour ${role || 'Agent'}. Maîtrise constatée sur les concepts de base. Recommandation : Renforcement sur le contrôle a priori DGCMP et l'instruction des recours ARMP.`,
-          recommendedModuleIds: score >= lvCfg.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
-        });
-      }
-
-      const lvNow = await loadLevelSettings();
-      const levelEnum = [lvNow.labels.debutant, lvNow.labels.intermediaire, lvNow.labels.avance, lvNow.labels.expert]
-        .map((v) => JSON.stringify(v))
-        .join(' | ');
-      const evalPrompt = `
-Tu es l'évaluateur pédagogique en chef pour les marchés publics en RDC (ARMP, DGCMP, CGPMP).
-Évalue ces résultats au test de positionnement :
-Rôle: ${role}, Institution: ${institution}
-Réponses : ${JSON.stringify(answers)}
-
-Retourne UNIQUEMENT un objet JSON valide avec cette structure :
-{
-  "score": 75,
-  "level": ${levelEnum},
-  "diagnostic": "Analyse personnalisée des forces et des lacunes observées par rapport à la Loi 10/010 et au Manuel des procédures...",
-  "strengths": ["Force 1", "Force 2"],
-  "weaknesses": ["Lacune 1", "Lacune 2"],
-  "recommendedModuleIds": ["MOD-001", "MOD-002", "MOD-003"]
-}
-`;
-
-      try {
-        const evalResponse = await generateWithResilience(ai, {
-          contents: evalPrompt,
-          primaryModel: 'gemini-3.8-flash',
-          fallbackModel: 'gemini-3.1-flash-lite',
-          config: { responseMimeType: 'application/json' }
-        });
-
-        const parsed = JSON.parse(evalResponse.text || '{}');
-        // Le niveau rendu est toujours recalculé sur les seuils/libellés paramétrables
-        const lvAi = await loadLevelSettings();
-        if (Number.isFinite(+parsed.score)) {
-          parsed.level = levelFromScore(+parsed.score, lvAi);
-        } else {
-          const canon = ['Débutant', 'Intermédiaire', 'Avancé', 'Expert'];
-          const ci = canon.indexOf(String(parsed.level));
-          if (ci >= 0) {
-            parsed.level = [lvAi.labels.debutant, lvAi.labels.intermediaire, lvAi.labels.avance, lvAi.labels.expert][ci];
-          }
-        }
-        return res.json(parsed);
-      } catch (err: any) {
-        console.warn('[Placement Quiz] AI evaluation fallback activated:', err?.message);
-        const correctCount = answers.filter((a: any) => a.isCorrect).length;
-        const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const lvCfg = await loadLevelSettings();
-        const level = levelFromScore(score, lvCfg);
-        return res.json({
-          score,
-          level,
-          diagnostic: `Évaluation complétée pour ${role || 'Agent'}. Connaissances vérifiées sur les principes de la commande publique RDC.`,
-          strengths: ['Principes fondamentaux de transparence', 'Attributions CGPMP'],
-          weaknesses: ['Détails de procédure contentieuse ARMP/CRD', 'Seuils d\'ANO DGCMP'],
-          recommendedModuleIds: score >= lvCfg.avance ? ['MOD-003', 'MOD-005', 'MOD-006'] : ['MOD-001', 'MOD-002', 'MOD-004']
-        });
-      }
-    }
-
-    // Otherwise generate tailored placement questions
-    return res.json({
-      status: 'ready',
-      questions: [
-        {
-          id: 1,
-          question: "Selon la Loi n° 10/010 du 27 avril 2010, quel organe est compétent pour le règlement non juridictionnel des litiges en matière de marchés publics en RDC ?",
-          options: [
-            "La Direction Générale du Contrôle des Marchés Publics (DGCMP)",
-            "Le Comité de Règlement des Différends de l'ARMP (CRD)",
-            "La Cellule de Gestion des Projets et des Marchés Publics (CGPMP)",
-            "L'Inspection Générale des Finances (IGF)"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 78 & Décret n° 10/21"
-        },
-        {
-          id: 2,
-          question: "Quelle est l'obligation préalable imposée à toute autorité contractante avant de lancer un appel d'offres ?",
-          options: [
-            "Demander un prêt bancaire certifié",
-            "Élaborer et faire approuver son Plan de Passation des Marchés (PPM)",
-            "Publier les comptes de l'exercice précédent",
-            "Nommer un médiateur international"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 14"
-        },
-        {
-          id: 3,
-          question: "Quel est le rôle principal de la DGCMP dans la commande publique congolaise ?",
-          options: [
-            "Réguler la formation des auditeurs privés",
-            "Assurer le contrôle a priori des opérations de passation et autoriser les dérogations",
-            "Attribuer directement les marchés aux soumissionnaires",
-            "Rendre des jugements pénaux"
-          ],
-          correctIndex: 1,
-          legalRef: "Décret n° 10/23, Art. 3"
-        },
-        {
-          id: 4,
-          question: "En cas de contestation des résultats de l'évaluation d'un appel d'offres, quel recours préalable le soumissionnaire doit-il exercer ?",
-          options: [
-            "Saisir immédiatement la Cour Constitutionnelle",
-            "Exercer un recours gracieux devant la personne responsable des marchés de l'autorité contractante",
-            "Publier un communiqué de presse d'annulation",
-            "Saisir directement le Tribunal de Commerce"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 77"
-        },
-        {
-          id: 5,
-          question: "Quel principe fondamental garantit que tous les candidats qualifiés reçoivent les mêmes informations et opportunités ?",
-          options: [
-            "Le principe de confidentialité restreinte",
-            "Le principe d'égalité de traitement des candidats",
-            "Le principe de préférence géographique absolue",
-            "Le principe d'arbitrage tacite"
-          ],
-          correctIndex: 1,
-          legalRef: "Loi 10/010, Art. 5"
-        }
-      ]
-    });
-  } catch (error: any) {
-    console.error('Error in /api/ai/placement-quiz:', error);
-    return res.status(500).json({ error: error.message });
-  }
-});
 
 // AI Adaptive Recommendations Endpoint
 app.post('/api/ai/recommendations', async (req, res) => {

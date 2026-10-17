@@ -1,3 +1,5 @@
+import { learnerProgressionRouter, readLearningStage } from './learnerProgression.js';
+import { learnerLevelGuidance } from '../shared/learnerProgression.js';
 import { generateQwenTutor, qwenTutorConfig } from './qwenTutor.js';
 import { TUTOR_RESPONSE_POLICY, tutorConversationData, tutorUnavailableReply } from '../shared/tutorReplyPolicy.js';
 import { synthesizePiperTutor, piperConfigured } from './piperTutorSpeech.js';
@@ -80,14 +82,14 @@ function getAIClient(): GoogleGenAI | null {
 const ARENA_API_URL = process.env.ARENA_API_URL || "https://api.arena.ai/v1/chat/completions";
 const ARENA_API_KEY = process.env.ARENA_API_KEY;
 const ARENA_MODEL = process.env.ARENA_MODEL || "arena-luna-70b";
-async function callArenaLLM(prompt: string): Promise<string | null> {
+async function callArenaLLM(prompt: string, policy: string = TUTOR_RESPONSE_POLICY): Promise<string | null> {
   if (!ARENA_API_KEY) return null;
   try {
     const res = await fetch(ARENA_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ARENA_API_KEY}`, "User-Agent": "aistudio-build-arena" },
       signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "system", content: TUTOR_RESPONSE_POLICY }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 700 })
+      body: JSON.stringify({ model: ARENA_MODEL, messages: [{ role: "system", content: policy }, { role: "user", content: prompt }], temperature: 0.2, max_tokens: 700 })
     });
     if (!res.ok) {
       console.warn(`[Arena] API ${res.status} — fallback Gemini`);
@@ -587,6 +589,9 @@ app.post('/api/ai/tutor', async (req, res) => {
   }
 
   const { history, context, hasMedia, mediaType, userName, learningContext, lastCourse } = req.body;
+  const stage = await readLearningStage((req as any).identity.uid).catch(() => null);
+  if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
+  const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
   const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
   const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
   const mediaNote = hasMedia ? ` [Média joint: ${mediaType || 'fichier'} — analyser avec précision juridique]` : '';
@@ -603,7 +608,7 @@ app.post('/api/ai/tutor', async (req, res) => {
 
   if (qwenTutorConfig()) {
     try {
-      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock));
+      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage });
       return res.json({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen3-14b' });
     } catch {
       return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen3-14b' });
@@ -619,8 +624,8 @@ app.post('/api/ai/tutor', async (req, res) => {
   // Tentative Arena d'abord (cerveaux Arena), puis Gemini
   let arenaReply: string | null = null;
   if (process.env.ARENA_API_KEY) {
-    const arenaPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
-    arenaReply = await callArenaLLM(arenaPrompt);
+    const arenaPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage));
+    arenaReply = await callArenaLLM(arenaPrompt, verifiedTutorPolicy);
     if (arenaReply) {
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
       return res.json({ reply: arenaReply, sources: ragLessons.map(r => formatCourseCitation(r)) });
@@ -629,15 +634,15 @@ app.post('/api/ai/tutor', async (req, res) => {
 
   if (!ai) return res.json(tutorUnavailableReply());
   try {
-    const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock);
+    const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage));
 
     const response = await generateWithResilience(ai, {
       contents: conversationPrompt,
       primaryModel: process.env.GEMINI_TUTOR_MODEL || 'gemini-3.1-flash-lite',
       fallbackModel: 'gemini-3.8-flash',
       primaryTimeoutMs: 15000,
-      config: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'minimal' } },
-      fallbackConfig: { systemInstruction: LEGAL_KNOWLEDGE_CONTEXT, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'low' } },
+      config: { systemInstruction: verifiedTutorPolicy, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'minimal' } },
+      fallbackConfig: { systemInstruction: verifiedTutorPolicy, temperature: 0.2, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: 'low' } },
       requireText: true,
     });
 
@@ -654,41 +659,8 @@ app.post('/api/ai/tutor', async (req, res) => {
   }
 });
 
-app.post('/api/ai/placement-quiz', async (req, res) => {
-  try {
-    const { role, institution, answers } = req.body;
-    const ai = getAIClient();
-    if (answers && Array.isArray(answers)) {
-      if (!ai) {
-        const correctCount = answers.filter((a: any) => a.isCorrect).length;
-        const score = Math.round((correctCount / answers.length) * 100) || 75;
-        const level = score >= 80 ? 'Avancé / Expert' : score >= 60 ? 'Intermédiaire' : 'Fondamental';
-        return res.json({ score, level, diagnostic: `Profil calibré pour ${role || 'Agent'}.`, recommendedModuleIds: score >= 80 ? ['MOD-003', 'MOD-005'] : ['MOD-001', 'MOD-002'] });
-      }
-      const evalPrompt = `Evalue ce test RDC Loi 10/010. Rôle: ${role}, Réponses: ${JSON.stringify(answers)} Retourne JSON {score, level, diagnostic, strengths, weaknesses, recommendedModuleIds}`;
-      try {
-        const r = await generateWithResilience(ai, { contents: evalPrompt, config: { responseMimeType: 'application/json' } });
-        return res.json(JSON.parse(r.text || '{}'));
-      } catch (err: any) {
-        const correctCount = answers.filter((a: any) => a.isCorrect).length;
-        const score = Math.round((correctCount / answers.length) * 100) || 75;
-        return res.json({ score, level: score >= 80 ? 'Avancé' : 'Intermédiaire', diagnostic: 'Évaluation complétée.' });
-      }
-    }
-    return res.json({
-      status: 'ready',
-      questions: [
-        { id: 1, question: "Quel organe règle les litiges non juridictionnels en RDC ?", options: ["DGCMP", "CRD/ARMP", "CGPMP", "IGF"], correctIndex: 1, legalRef: "Loi 10/010, Art. 78" },
-        { id: 2, question: "Obligation préalable avant appel d'offres ?", options: ["Prêt bancaire", "Élaborer PPM", "Publier comptes", "Nommer médiateur"], correctIndex: 1, legalRef: "Loi 10/010, Art. 14" },
-        { id: 3, question: "Rôle principal DGCMP ?", options: ["Réguler auditeurs", "Contrôle a priori et autorisations", "Attribuer marchés", "Jugements pénaux"], correctIndex: 1, legalRef: "Décret 10/23" },
-        { id: 4, question: "Recours préalable en contestation ?", options: ["Cour Constitutionnelle", "Recours gracieux PRM", "Communiqué presse", "Tribunal Commerce"], correctIndex: 1, legalRef: "Art. 77" },
-        { id: 5, question: "Principe d'égalité de traitement ?", options: ["Confidentialité restreinte", "Égalité des candidats", "Préférence géographique", "Arbitrage tacite"], correctIndex: 1, legalRef: "Art. 5" }
-      ]
-    });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
+app.use('/api', learnerProgressionRouter);
+
 
 app.post('/api/ai/recommendations', async (req, res) => {
   try {

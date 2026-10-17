@@ -134,7 +134,7 @@ export function recordCourseReadingInProfile(
   const nowIso = new Date().toISOString();
   const totalLessons = Math.max(1, course.lessons?.length || course.chaptersCount || 1);
   const existingLessons = profile.completedLessonsByCourse?.[course.id] || [];
-  const nextLessons = Array.from(new Set([...existingLessons, lessonIndex]));
+  const nextLessons = Array.from(new Set(existingLessons));
 
   const currentSavedPct = profile.courseProgress?.[course.id] ?? 0;
   const computedPct =
@@ -142,7 +142,7 @@ export function recordCourseReadingInProfile(
       ? overrideProgressPct
       : Math.max(
           currentSavedPct,
-          Math.min(95, Math.max(15, Math.round((nextLessons.length / totalLessons) * 100)))
+          Math.min(95, Math.round((nextLessons.length / totalLessons) * 100))
         );
 
   const lessonObj = course.lessons?.[lessonIndex] || course.lessons?.[0];

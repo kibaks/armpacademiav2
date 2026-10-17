@@ -1,5 +1,7 @@
+import type { LearningStage } from '../shared/learnerProgression';
+import { getLearnerOnboarding } from './utils/learnerOnboarding';
 import { authenticatedFetch } from './lib/adminApi';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Header 
 } from './components/Header';
@@ -335,7 +337,25 @@ export default function App() {
     };
   }, []);
 
-  const currentProfile = profiles[currentRole] || profiles['cgpmp_member'];
+  const storedProfile = profiles[currentRole] || profiles['cgpmp_member'];
+  const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated) { setVerifiedStage(null); return; }
+    const abort = new AbortController();
+    void authenticatedFetch('/api/learning-level', { signal: abort.signal }).then(async response => {
+      if (!response.ok) throw new Error('level-unavailable');
+      const data = await response.json();
+      if (!abort.signal.aborted) setVerifiedStage({ uid: storedProfile.id, stage: data.stage });
+    }).catch(() => { if (!abort.signal.aborted) showToast('Vérification du niveau indisponible. Le parcours d’initiation reste accessible.'); });
+    return () => abort.abort();
+  }, [isAuthenticated, storedProfile.id]);
+  const confirmedStage = verifiedStage?.uid === storedProfile.id ? verifiedStage.stage : 'Initiation';
+  const currentProfile: UserProfile = useMemo(() => ['super_admin', 'dfat_admin', 'formateur'].includes(storedProfile.role) ? storedProfile : {
+    ...storedProfile, niveauValidation: confirmedStage,
+    level: confirmedStage === 'Initiation' ? 'Débutant' : confirmedStage === 'Approfondi' ? 'Intermédiaire' : 'Avancé',
+    levelKey: confirmedStage === 'Initiation' ? 'debutant' : confirmedStage === 'Approfondi' ? 'intermediaire' : 'avance'
+  }, [storedProfile, confirmedStage]);
+  const onboarding = getLearnerOnboarding(currentProfile, courses);
 
   useEffect(() => {
     const uid = currentProfile.id;
@@ -573,6 +593,10 @@ export default function App() {
       setIsAuthModalOpen(true);
       showToast(`Connexion requise pour visualiser le module "${course.title}".`);
     } else {
+      if (onboarding.required && !onboarding.modules.some(module => module.id === course.id)) {
+        showToast('Lisez les modules d’initiation, puis passez le test de niveau.');
+        return;
+      }
       setSelectedCourseForPlayer(course);
       setSubDetailBreadcrumb(`${course.code} • ${course.title}`);
       const updated = recordCourseReadingInProfile(currentProfile, course, 0);
@@ -605,6 +629,10 @@ export default function App() {
       showToast('🔐 Connectez-vous pour passer le test de niveau');
       return;
     }
+    if (onboarding.required && !onboarding.readyForTest) {
+      showToast('Terminez la lecture des modules d’initiation avant le test de niveau.');
+      return;
+    }
     setIsPlacementOpen(true);
   };
 
@@ -614,12 +642,19 @@ export default function App() {
     score: number,
     validation?: { niveau: NiveauValidation; moduleCode?: string }
   ) => {
+    if (onboarding.required && !onboarding.readyForTest) throw new Error('Terminez les modules d’initiation avant le test.');
+    if (!Number.isFinite(score) || score < 0 || score > 100) throw new Error('Score de niveau invalide.');
+    const sessionUid = auth.currentUser?.uid;
+    const verifiedResponse = await authenticatedFetch('/api/learning-level');
+    if (!verifiedResponse.ok) throw new Error('Le résultat ne peut pas être confirmé. Réessayez.');
+    const verifiedResult = await verifiedResponse.json();
+    setVerifiedStage({ uid: currentProfile.id, stage: verifiedResult.stage });
     const lvlCfg = await getLevelSettings();
     const levelKey = levelKeyFromLabel(level, lvlCfg);
     const updated: UserProfile = {
       ...currentProfile,
-      level,
-      levelKey,
+      level: verifiedResult.stage === 'Initiation' ? 'Débutant' : verifiedResult.stage === 'Approfondi' ? 'Intermédiaire' : 'Avancé',
+      levelKey: verifiedResult.stage === 'Initiation' ? 'debutant' : verifiedResult.stage === 'Approfondi' ? 'intermediaire' : 'avance',
       placementScore: score,
       ...(validation
         ? {
@@ -630,6 +665,11 @@ export default function App() {
           }
         : {}),
     };
+    updated.niveauValidation = verifiedResult.stage;
+    // Unlock the curriculum only after the result has been saved to this account.
+    await syncUserProfileToFirestore(updated);
+    if (auth.currentUser?.uid !== sessionUid || sessionUid !== updated.id) return;
+    setIsPlacementOpen(false);
     setProfiles((prev) => ({
       ...prev,
       [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
@@ -639,15 +679,15 @@ export default function App() {
         ? `🎓 Niveau validé : ${validation.niveau}${validation.moduleCode ? ` (${validation.moduleCode})` : ''} — score ${score}%`
         : `Niveau profil actualisé : ${level} (${score}%)`
     );
-    try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Could not sync quiz score to Firestore", e);
-    }
   };
 
   // Module Completion Handler
   const handleCompleteModule = async (courseId: string, score?: number) => {
+    const initiationModule = onboarding.modules.find(course => course.id === courseId);
+    if (onboarding.required && initiationModule && !onboarding.isRead(initiationModule)) {
+      showToast('Lisez et validez chaque chapitre avant de terminer ce module d’initiation.');
+      return;
+    }
     const courseObj = courses.find(c => c.id === courseId);
     const prevCompletedIds = currentProfile.completedCourseIds || [];
     const isNewCompletion = !prevCompletedIds.includes(courseId);
@@ -765,6 +805,7 @@ export default function App() {
       await syncUserProfileToFirestore(updated);
     } catch (e) {
       console.warn("Could not sync course progress to Firestore", e);
+      showToast('La progression n’a pas pu être enregistrée. Vérifiez votre connexion avant de quitter le module.');
     }
   };
 
@@ -948,6 +989,37 @@ export default function App() {
       handleOpenCourse(found);
     }
   };
+
+  // This gate also applies to restored sessions and links opened before login.
+  if (isAuthenticated && onboarding.required) {
+    const initiationCourse = selectedCourseForPlayer && onboarding.modules.find(module => module.id === selectedCourseForPlayer.id);
+    return (
+      <main className="min-h-screen bg-slate-100 text-slate-900 p-6 flex items-center justify-center">
+        {toastMessage && <p role="status" className="fixed bottom-6 left-6 right-6 z-[250] rounded-xl bg-slate-900 p-4 text-center text-white shadow-lg">{toastMessage}</p>}
+        <section aria-labelledby="initiation-title" className="w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-10 shadow-lg">
+          <p className="text-sm font-semibold text-slate-600">Niveau Initiation · Étape {onboarding.readyForTest ? '2' : '1'} sur 2</p>
+          <h1 id="initiation-title" className="mt-3 text-2xl font-bold">{onboarding.readyForTest ? 'Passez votre test de niveau' : 'Commencez par les modules d’initiation'}</h1>
+          <p className="mt-3 text-slate-600">Lisez tous les chapitres des modules ci-dessous, puis passez le test de niveau pour débloquer le niveau approfondi. Votre progression est enregistrée sur votre compte.</p>
+          <p className="mt-4 font-semibold" role="status">{onboarding.modules.length - onboarding.remaining.length} / {onboarding.modules.length} modules lus</p>
+          <ul className="mt-4 space-y-3">
+            {onboarding.modules.map(course => (
+              <li key={course.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
+                <div><p className="font-semibold">{course.title}</p><p className="text-sm text-slate-600">{onboarding.isRead(course) ? 'Lecture terminée' : 'Lecture à terminer'}</p></div>
+                <button className="rounded-lg bg-slate-900 px-4 py-2 text-white focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => handleOpenCourse(course)}>{onboarding.isRead(course) ? 'Relire' : 'Lire le module'}</button>
+              </li>
+            ))}
+          </ul>
+          {onboarding.modules.length === 0 && <p role="alert" className="mt-4 text-amber-800">Aucun module d’initiation n’est disponible pour votre profil. Contactez l’administration pour configurer votre parcours.</p>}
+          <button disabled={!onboarding.readyForTest} onClick={handleOpenPlacement} className="mt-6 w-full rounded-lg bg-amber-400 px-5 py-3 font-bold disabled:bg-slate-200 disabled:text-slate-500 focus-visible:outline-2 focus-visible:outline-offset-2">Passer le test de niveau</button>
+          <button onClick={() => handleOpenTutor()} className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-blue-800 underline">Demander de l’aide à Aïsha</button>
+          <button onClick={handleLogout} className="mt-4 w-full rounded-lg px-4 py-2 underline">Se déconnecter</button>
+        </section>
+        {initiationCourse && <CourseWindow key={`${currentProfile.id}:${initiationCourse.id}`} course={initiationCourse} currentProfile={currentProfile} onClose={() => setSelectedCourseForPlayer(null)} onCompleteModule={handleCompleteModule} onUpdateCourseProgress={handleUpdateCourseProgress} onSaveCourseNote={handleSaveCourseNote} onAskTutor={handleOpenTutor} onCallTutor={handleCallTutor} />}
+        <AITutorModal isOpen={isTutorOpen} onClose={() => setIsTutorOpen(false)} currentProfile={currentProfile} learningContext={tutorLearningContext} initialQuestion={tutorInitialQuestion} onClearInitialQuestion={() => setTutorInitialQuestion(null)} initialAction={tutorInitialAction} initialTutor="vivienne" onClearInitialAction={() => setTutorInitialAction(null)} />
+        <PlacementQuizModal isOpen={isPlacementOpen && onboarding.readyForTest && !initiationCourse} onClose={() => setIsPlacementOpen(false)} currentProfile={currentProfile} onUpdateProfileLevel={handleUpdateProfileLevel} onSelectModule={handleSelectModuleById} />
+      </main>
+    );
+  }
 
   return (
     <div className={`min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-amber-400 selection:text-slate-950 transition-colors duration-200 ${
@@ -1536,6 +1608,7 @@ export default function App() {
 
       {isAuthenticated && selectedCourseForPlayer && (
         <CourseWindow
+          key={`${currentProfile.id}:${selectedCourseForPlayer.id}`}
           course={selectedCourseForPlayer}
           onClose={() => {
             setSelectedCourseForPlayer(null);

@@ -1,3 +1,4 @@
+import { learnerLevelGuidance, type LearningStage } from '../shared/learnerProgression.js';
 import { TUTOR_RESPONSE_POLICY } from '../shared/tutorReplyPolicy.js';
 
 export function qwenTutorConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -11,13 +12,13 @@ export function qwenTutorConfig(env: NodeJS.ProcessEnv = process.env) {
 }
 
 // The gateway only exposes the fixed local tutor model; credentials stay server-side.
-export async function generateQwenTutor(prompt: string, options: { env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
+export async function generateQwenTutor(prompt: string, options: { stage?: LearningStage; env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
   const config = qwenTutorConfig(options.env);
   if (!config) throw new Error('QWEN_NOT_CONFIGURED');
   const response = await (options.fetcher || fetch)(config.url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${config.key}` },
-    body: JSON.stringify({ system: TUTOR_RESPONSE_POLICY, prompt }),
+    body: JSON.stringify({ system: TUTOR_RESPONSE_POLICY + '\n' + learnerLevelGuidance(options.stage || 'Initiation'), prompt }),
     signal: AbortSignal.timeout(45000), redirect: 'error',
   });
   if (!response.ok) throw new Error(`QWEN_HTTP_${response.status}`);

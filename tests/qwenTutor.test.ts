@@ -1,3 +1,4 @@
+import { learnerLevelGuidance } from '../shared/learnerProgression';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generateQwenTutor, qwenTutorConfig } from '../backend/qwenTutor';
@@ -9,7 +10,7 @@ test('Qwen uses the authenticated HTTPS gateway and keeps Aisha policy separate 
     assert.equal(url, 'https://gateway.example/musetalk/chat');
     assert.equal((init!.headers as any).authorization, 'Bearer private-key');
     assert.equal(init!.redirect, 'error');
-    assert.deepEqual(JSON.parse(init!.body as string), { system: TUTOR_RESPONSE_POLICY, prompt: 'Cours et question' });
+    assert.deepEqual(JSON.parse(init!.body as string), { system: TUTOR_RESPONSE_POLICY + '\n' + learnerLevelGuidance('Initiation'), prompt: 'Cours et question' });
     return Response.json({ reply: ' Réponse du cours. ', model: 'academia-tuteur' });
   } });
   assert.equal(reply, 'Réponse du cours.');

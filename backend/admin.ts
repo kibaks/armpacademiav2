@@ -220,6 +220,8 @@ learningRouter.post('/level-tests', authenticate, requireAdmin, wrap(async (req,
   res.json({ ok: true, tests });
 }));
 learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) => {
+  const { requireInitiationReading } = await import('./learnerProgression.js');
+  await requireInitiationReading(req.identity!.uid);
   const db = services().db;
   const ref = db.collection('settings').doc('levelTests');
   const attemptRef = db.collection('levelTestAttempts').doc();
@@ -237,6 +239,6 @@ learningRouter.post('/level-tests/attempt', authenticate, wrap(async (req, res) 
   res.json({ ok: true, attempt });
 }));
 learningRouter.use((error: any, _req: any, res: any, _next: any) => {
-  const bad = ['test-unavailable', 'answers-invalid'].includes(error.message);
+  const bad = ['test-unavailable', 'answers-invalid', 'initiation-incomplete'].includes(error.message);
   res.status(bad ? 400 : 503).json({ error: bad ? 'Test indisponible ou réponses incomplètes.' : 'Service de formation indisponible.' });
 });
