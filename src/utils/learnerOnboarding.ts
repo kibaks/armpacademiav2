@@ -3,7 +3,9 @@ import { filterCoursesByProfile } from './profileCoursePersonalization';
 
 export function getLearnerOnboarding(profile: UserProfile, courses: CourseModule[]) {
   const required = !['super_admin', 'dfat_admin', 'formateur'].includes(profile.role) && !['Approfondi', 'Avancé'].includes(profile.niveauValidation || '');
-  const scopedModules = filterCoursesByProfile(courses, profile).filter(course => course.level === 'Fondamental');
+  const revised = courses.filter(course => course.id.startsWith('INIT-'));
+  const candidates = revised.length ? revised : courses;
+  const scopedModules = filterCoursesByProfile(candidates, profile).filter(course => course.level === 'Fondamental');
   // The common legal foundation also serves profiles without a dedicated initiation module.
   const modules = scopedModules.length ? scopedModules : courses.filter(course => course.id === 'MOD-001' && course.level === 'Fondamental');
   const isRead = (course: CourseModule) => {

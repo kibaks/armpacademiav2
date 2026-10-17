@@ -1,3 +1,4 @@
+import initiationKnowledge from './shared/initiationKnowledge.json' with { type: 'json' };
 import { learnerProgressionRouter, readLearningStage } from './backend/learnerProgression.js';
 import { learnerLevelGuidance } from './shared/learnerProgression.js';
 import { generateQwenTutor, qwenTutorConfig } from './backend/qwenTutor.js';
@@ -334,7 +335,7 @@ const CAS_BANK: Record<string, string> = {
 };
 
 
-function findRelevantLessons(query: string, learningContext?: any): Array<{course:any, lesson:any, score:number}> {
+function findRelevantLessons(query: string, learningContext?: any, initiationOnly = false): Array<{course:any, lesson:any, score:number}> {
   const q = (query||'').toLowerCase();
   if (!q.trim()) return [];
   const expanded = q
@@ -350,7 +351,7 @@ function findRelevantLessons(query: string, learningContext?: any): Array<{cours
   const lcTitle = learningContext ? (typeof learningContext==='string' ? learningContext.split(' | ')[0].replace(/\s*\(.*/, '').toLowerCase() : (learningContext.lastCourseTitle||'').toLowerCase()) : '';
   const lcCode = learningContext && typeof learningContext!=='string' && learningContext.lastCourseCode ? learningContext.lastCourseCode.toLowerCase() : '';
   const scored: any[]=[] ;
-  for (const course of COURSES_KB) {
+  for (const course of (initiationOnly ? initiationKnowledge : [...initiationKnowledge, ...COURSES_KB])) {
     const isLastCourse = lcTitle && course.title.toLowerCase()===lcTitle || (lcCode && course.code.toLowerCase()===lcCode);
     for (const lesson of course.lessons) {
       const courseHay = (course.title+' '+course.code).toLowerCase();
@@ -1796,7 +1797,7 @@ app.post('/api/ai/tutor', async (req, res) => {
   const historyTextForRag = Array.isArray(history) ? history.map((h:any)=> (h.text||'').toLowerCase()).join(' ') : '';
   const isFollowUpRag = /^(et|et alors|et les|combien|délais|délai|exemple|détaille|précise|pourquoi|comment)\b/i.test(fullMessage.trim()) || fullMessage.trim().length < 12;
   const ragQuery = (isFollowUpRag && historyTextForRag.length>10) ? (historyTextForRag + ' ' + fullMessage) : fullMessage;
-  const ragLessons = findRelevantLessons(ragQuery, courseContext || lc);
+  const ragLessons = findRelevantLessons(ragQuery, courseContext || lc, stage === 'Initiation');
   const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
 
   if (qwenTutorConfig()) {

@@ -1,3 +1,4 @@
+import { InitiationMotionStage } from './InitiationMotionStage';
 import { CartoonLessonStage } from './CartoonLessonStage';
 import './CartoonLesson.css';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -163,7 +164,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [voiceMuted, setVoiceMuted] = useState<boolean>(!autoPlayVoice);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
-  const [voicePersona, setVoicePersona] = useState<VoicePersona>(() => speechService.getVoicePersona());
+  const [voicePersona] = useState<VoicePersona>('vivienne');
 
   const [manualWinkUntil] = useState(0);
 
@@ -517,22 +518,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     if (isPlaying && !voiceMuted) startVoiceAtProgress(filmProgress, nextSpeed);
   };
 
-  const handleCycleVoicePersona = () => {
-    speechService.unlockAudio();
-    const personas: VoicePersona[] = ['vivienne', 'henri'];
-    const nextPersona = personas[(personas.indexOf(voicePersona) + 1) % personas.length] || 'vivienne';
-    setVoicePersona(nextPersona);
-    speechService.setVoicePersona(nextPersona);
-    if (isPlaying && !voiceMuted) {
-      speechService.play(calibratedLesson.acts.map((a) => a.text).join(' '), currentLessonAudioId, {
-        speed: playbackSpeed,
-        voice: nextPersona,
-        startSentenceIndex: activeAct.index,
-        customSentences: calibratedLesson.acts.map((a) => a.text),
-      });
-    }
-  };
-
   const [musicEnabled, setMusicEnabled] = useState(() => ambientMusicService.getState().enabled);
 
   useEffect(() => {
@@ -775,7 +760,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         </div>
       </header>
       {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
-        <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && motionEnabled} speaking={isSpeaking} mouthOpenness={isSpeaking ? dampedFace.mouth : 0} viseme={isSpeaking ? effectiveViseme : 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || 'Loi n° 10/010'} sceneCount={calibratedLesson.acts.length} reducedMotion={!motionEnabled} />}
+        course.id.startsWith('INIT-') ? <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled} /> : <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && motionEnabled} speaking={isSpeaking} mouthOpenness={isSpeaking ? dampedFace.mouth : 0} viseme={isSpeaking ? effectiveViseme : 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || 'Loi n° 10/010'} sceneCount={calibratedLesson.acts.length} reducedMotion={!motionEnabled} />}
       <div className="cartoon-player__transport">
         <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
         <div className="cartoon-player__tools">
@@ -788,7 +773,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
           <div className="cartoon-player__tool-group">
             <button type="button" onClick={handleToggleMute} className="cartoon-player__pill" aria-pressed={!voiceMuted} aria-label={voiceMuted ? 'Activer la narration' : 'Couper la narration'}>{voiceMuted ? <VolumeX /> : <Volume2 />}{voiceMuted ? 'Sans voix' : 'Narration'}</button>
             <button type="button" onClick={handleCycleSpeed} className="cartoon-player__pill" aria-label={`Vitesse de lecture : ${playbackSpeed}. Changer la vitesse`}>{playbackSpeed}×</button>
-            <button type="button" onClick={handleCycleVoicePersona} className="cartoon-player__pill" aria-label="Changer la voix du professeur">{voicePersona === 'henri' ? 'Prof. Henri' : 'Prof. Aïsha'}</button>
+            <span className="cartoon-player__pill">Aïsha · Narration</span>
             <button type="button" onClick={() => setMotionEnabled(value => !value)} className="cartoon-player__pill" aria-pressed={!motionEnabled} aria-label="Mouvements réduits"><Sparkles />{motionEnabled ? 'Mouvements' : 'Mouvements réduits'}</button>
             <button type="button" onClick={() => ambientMusicService.toggleEnabled()} className="cartoon-player__icon-button" aria-pressed={musicEnabled} aria-label={musicEnabled ? 'Couper la musique' : 'Activer la musique'}><Music /></button>
           </div>

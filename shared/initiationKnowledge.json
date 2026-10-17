@@ -1,0 +1,362 @@
+[
+  {
+    "code": "INIT-RDC-01",
+    "title": "Comprendre le marché public",
+    "lessons": [
+      {
+        "id": "INIT-1-L1",
+        "title": "Un achat au service des citoyens",
+        "content": "[Scène: dao_calendar] Comprendre : Un marché public organise un achat destiné à répondre à un besoin public. Il relie une autorité contractante à un entrepreneur, un fournisseur ou un prestataire dans un cadre écrit. Le point de départ est le service attendu, pas le fournisseur préféré. | Application terrain : Décrivez le problème, les bénéficiaires et le résultat attendu avant de parler de marques ou de prix.\n\n[Scène: supply_truck] Cas fictif : Une école doit remplacer ses bancs endommagés. Le résultat recherché est de permettre aux élèves de travailler dans de bonnes conditions. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Décrivez le problème, les bénéficiaires et le résultat attendu avant de parler de marques ou de prix. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Un achat au service des citoyens. Un marché public organise un achat destiné à répondre à un besoin public. | Application terrain : Décrivez le problème, les bénéficiaires et le résultat attendu avant de parler de marques ou de prix.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-1-L2",
+        "title": "Travaux, fournitures et services",
+        "content": "[Scène: dao_calendar] Comprendre : Construire ou réhabiliter un ouvrage relève des travaux ; acheter des biens relève des fournitures ; faire réaliser une activité relève des services. Une étude ou une mission de conseil mobilise une expertise intellectuelle. Bien qualifier l’objet aide à préparer le dossier adapté. | Application terrain : Classez chaque besoin selon sa nature et justifiez votre choix. Pour un contrat mixte, faites vérifier sa qualification avant de choisir la procédure.\n\n[Scène: supply_truck] Cas fictif : Réparer la toiture de l’école, livrer ses bancs et réaliser une étude de structure répondent à trois objets différents. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Classez chaque besoin selon sa nature et justifiez votre choix. Pour un contrat mixte, faites vérifier sa qualification avant de choisir la procédure. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Travaux, fournitures et services. Construire ou réhabiliter un ouvrage relève des travaux ; acheter des biens relève des fournitures ; faire réaliser une activité relève des services. | Application terrain : Classez chaque besoin selon sa nature et justifiez votre choix. Pour un contrat mixte, faites vérifier sa qualification avant de choisir la procédure.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-1-L3",
+        "title": "Les principes qui guident les décisions",
+        "content": "[Scène: dao_calendar] Comprendre : L’accès à la commande publique, l’égalité de traitement et la transparence donnent un cadre aux décisions. L’objectif pratique est un achat utile, justifiable et réalisé dans de bonnes conditions, et non une compétition orientée vers une entreprise. | Application terrain : Prévoyez une information cohérente pour tous les candidats et gardez la trace des communications pertinentes.\n\n[Scène: supply_truck] Cas fictif : Deux entreprises demandent la même précision sur les dimensions des bancs. Une réponse réservée à une seule crée une différence d’information. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Prévoyez une information cohérente pour tous les candidats et gardez la trace des communications pertinentes. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Les principes qui guident les décisions. L’accès à la commande publique, l’égalité de traitement et la transparence donnent un cadre aux décisions. | Application terrain : Prévoyez une information cohérente pour tous les candidats et gardez la trace des communications pertinentes.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-02",
+    "title": "Identifier les acteurs et leurs responsabilités",
+    "lessons": [
+      {
+        "id": "INIT-2-L1",
+        "title": "L’autorité contractante et le service utilisateur",
+        "content": "[Scène: dao_calendar] Comprendre : Le service utilisateur décrit le besoin technique et explique son utilité. L’autorité contractante porte l’achat. Les responsabilités de préparation, de décision et d’approbation doivent être identifiées selon les textes et l’organisation applicables. | Application terrain : Dressez une fiche indiquant qui exprime le besoin, prépare le dossier, décide et approuve. Vérifiez les délégations applicables.\n\n[Scène: supply_truck] Cas fictif : Le directeur de l’école explique les besoins des classes ; il ne faut pas en déduire qu’il possède à lui seul tous les pouvoirs de passation et de signature. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Dressez une fiche indiquant qui exprime le besoin, prépare le dossier, décide et approuve. Vérifiez les délégations applicables. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : L’autorité contractante et le service utilisateur. Le service utilisateur décrit le besoin technique et explique son utilité. | Application terrain : Dressez une fiche indiquant qui exprime le besoin, prépare le dossier, décide et approuve. Vérifiez les délégations applicables.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-2-L2",
+        "title": "Passation, contrôle et régulation",
+        "content": "[Scène: dao_calendar] Comprendre : La cellule de gestion des projets et des marchés publics intervient dans la préparation et la conduite des opérations. La Direction générale du contrôle des marchés publics exerce le contrôle prévu par les textes. L’Autorité de régulation des marchés publics assure une fonction distincte de régulation. Ces fonctions ne se confondent pas. | Application terrain : Repérez l’organe compétent pour votre étape et vérifiez les conditions de sa saisine dans la documentation officielle.\n\n[Scène: supply_truck] Cas fictif : Préparer un dossier, contrôler sa régularité et examiner un différend sont des interventions différentes sur le même achat. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Repérez l’organe compétent pour votre étape et vérifiez les conditions de sa saisine dans la documentation officielle. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Passation, contrôle et régulation. La cellule de gestion des projets et des marchés publics intervient dans la préparation et la conduite des opérations. | Application terrain : Repérez l’organe compétent pour votre étape et vérifiez les conditions de sa saisine dans la documentation officielle.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-2-L3",
+        "title": "L’entreprise, l’évaluateur et le responsable du contrat",
+        "content": "[Scène: dao_calendar] Comprendre : L’entreprise prépare son offre et, si elle est retenue, exécute ses engagements. L’évaluateur applique les critères annoncés. Le responsable du suivi constate l’exécution. Chacun doit disposer des informations nécessaires sans empiéter sur les décisions d’un autre intervenant. | Application terrain : Associez chaque tâche à un responsable et à une pièce écrite. Déclarez toute situation pouvant compromettre votre impartialité.\n\n[Scène: supply_truck] Cas fictif : Le fournisseur propose les bancs ; l’équipe d’évaluation analyse les offres ; les personnes désignées vérifient ensuite ce qui a réellement été livré. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Associez chaque tâche à un responsable et à une pièce écrite. Déclarez toute situation pouvant compromettre votre impartialité. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : L’entreprise, l’évaluateur et le responsable du contrat. L’entreprise prépare son offre et, si elle est retenue, exécute ses engagements. | Application terrain : Associez chaque tâche à un responsable et à une pièce écrite. Déclarez toute situation pouvant compromettre votre impartialité.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-03",
+    "title": "Définir le besoin et vérifier le financement",
+    "lessons": [
+      {
+        "id": "INIT-3-L1",
+        "title": "Transformer un problème en besoin précis",
+        "content": "[Scène: dao_calendar] Comprendre : Un besoin exploitable précise l’usage, les quantités, la qualité, les lieux et le calendrier. Il décrit le résultat à atteindre avec des exigences proportionnées. Une formulation vague rend les offres difficiles à comparer et la livraison difficile à contrôler. | Application terrain : Rédigez une fiche de besoin : problème, utilisateurs, quantité, caractéristiques vérifiables, destination et date souhaitée.\n\n[Scène: supply_truck] Cas fictif : Dire « acheter des bancs » ne suffit pas. Il faut préciser les classes concernées, la capacité d’accueil et les caractéristiques fonctionnelles attendues. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Rédigez une fiche de besoin : problème, utilisateurs, quantité, caractéristiques vérifiables, destination et date souhaitée. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Transformer un problème en besoin précis. Un besoin exploitable précise l’usage, les quantités, la qualité, les lieux et le calendrier. | Application terrain : Rédigez une fiche de besoin : problème, utilisateurs, quantité, caractéristiques vérifiables, destination et date souhaitée.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-3-L2",
+        "title": "Estimer sans inventer un prix",
+        "content": "[Scène: dao_calendar] Comprendre : Une estimation s’appuie sur des informations identifiables : achats comparables, données disponibles ou analyse du marché. Elle prend en compte les éléments utiles comme le transport, l’installation et l’entretien. Elle ne constitue ni une offre retenue ni un seuil légal. | Application terrain : Notez les sources de prix, leur date et les coûts inclus. Expliquez les hypothèses au lieu de présenter un montant arbitraire comme une certitude.\n\n[Scène: supply_truck] Cas fictif : Un banc moins cher au départ peut devenir plus coûteux s’il faut payer séparément la livraison dans chaque école et réparer rapidement les assemblages. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Notez les sources de prix, leur date et les coûts inclus. Expliquez les hypothèses au lieu de présenter un montant arbitraire comme une certitude. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Estimer sans inventer un prix. Une estimation s’appuie sur des informations identifiables : achats comparables, données disponibles ou analyse du marché. | Application terrain : Notez les sources de prix, leur date et les coûts inclus. Expliquez les hypothèses au lieu de présenter un montant arbitraire comme une certitude.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-3-L3",
+        "title": "Faire correspondre besoin et ressources",
+        "content": "[Scène: dao_calendar] Comprendre : Un achat planifié doit être rapproché des ressources et autorisations nécessaires. Un besoin réel ne vaut pas à lui seul autorisation de dépense. Les règles budgétaires et le circuit d’engagement applicables doivent être vérifiés avant de prendre un engagement. | Application terrain : Faites confirmer le financement, les autorisations et le calendrier des ressources. Ajustez le projet avec les responsables compétents, sans masquer le coût réel.\n\n[Scène: supply_truck] Cas fictif : L’école souhaite équiper dix classes, mais les ressources confirmées ne couvrent qu’une partie du projet. La préparation doit traiter cet écart ouvertement. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Faites confirmer le financement, les autorisations et le calendrier des ressources. Ajustez le projet avec les responsables compétents, sans masquer le coût réel. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Faire correspondre besoin et ressources. Un achat planifié doit être rapproché des ressources et autorisations nécessaires. | Application terrain : Faites confirmer le financement, les autorisations et le calendrier des ressources. Ajustez le projet avec les responsables compétents, sans masquer le coût réel.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-04",
+    "title": "Planifier et choisir la procédure",
+    "lessons": [
+      {
+        "id": "INIT-4-L1",
+        "title": "Construire le calendrier de l’achat",
+        "content": "[Scène: dao_calendar] Comprendre : La planification relie le besoin au calendrier de préparation, de consultation, d’évaluation et de livraison. Elle doit laisser du temps aux contrôles nécessaires et aux candidats. La date souhaitée de livraison se prépare en remontant les étapes, pas en les supprimant. | Application terrain : Dessinez un calendrier à rebours et faites valider les étapes et les durées par les responsables concernés.\n\n[Scène: supply_truck] Cas fictif : Pour disposer des bancs à la rentrée, il faut prévoir le temps de préparation du dossier, de consultation et de fabrication. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Dessinez un calendrier à rebours et faites valider les étapes et les durées par les responsables concernés. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Construire le calendrier de l’achat. La planification relie le besoin au calendrier de préparation, de consultation, d’évaluation et de livraison. | Application terrain : Dessinez un calendrier à rebours et faites valider les étapes et les durées par les responsables concernés.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-4-L2",
+        "title": "Comprendre les procédures et les seuils",
+        "content": "[Scène: dao_calendar] Comprendre : Le choix de la procédure dépend de l’objet, de l’estimation et des règles applicables. Les procédures dérogatoires ont des conditions propres. Un seuil ne se déduit pas d’un exemple de cours : il faut consulter le texte pertinent et vérifier sa version. | Application terrain : Avant de choisir, relevez l’objet, le montant estimé, le texte applicable, l’autorité compétente et les éventuelles conditions de dérogation.\n\n[Scène: supply_truck] Cas fictif : Une dépense faible et une opération importante ne suivent pas nécessairement le même circuit. Une urgence alléguée ne justifie pas automatiquement une entente directe. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Avant de choisir, relevez l’objet, le montant estimé, le texte applicable, l’autorité compétente et les éventuelles conditions de dérogation. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Comprendre les procédures et les seuils. Le choix de la procédure dépend de l’objet, de l’estimation et des règles applicables. | Application terrain : Avant de choisir, relevez l’objet, le montant estimé, le texte applicable, l’autorité compétente et les éventuelles conditions de dérogation.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-4-L3",
+        "title": "Distinguer allotissement et fractionnement",
+        "content": "[Scène: dao_calendar] Comprendre : L’allotissement organise un achat en ensembles cohérents. Il ne doit pas servir à contourner les règles de procédure ou de contrôle. La cohérence du besoin et la justification de l’organisation retenue doivent rester visibles. | Application terrain : Documentez la logique des lots et faites vérifier le mode de calcul de l’estimation selon les textes applicables.\n\n[Scène: supply_truck] Cas fictif : Prévoir des lots de livraison par zone peut répondre à une contrainte logistique. Diviser artificiellement un même besoin pour éviter une règle poursuit un autre objectif. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Documentez la logique des lots et faites vérifier le mode de calcul de l’estimation selon les textes applicables. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Distinguer allotissement et fractionnement. L’allotissement organise un achat en ensembles cohérents. | Application terrain : Documentez la logique des lots et faites vérifier le mode de calcul de l’estimation selon les textes applicables.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-05",
+    "title": "Préparer un dossier clair et équitable",
+    "lessons": [
+      {
+        "id": "INIT-5-L1",
+        "title": "Écrire des spécifications utiles",
+        "content": "[Scène: dao_calendar] Comprendre : Les spécifications décrivent les caractéristiques et performances recherchées. Elles doivent être compréhensibles et vérifiables, avec un lien réel au besoin. Des exigences inutilement restrictives peuvent écarter des solutions pertinentes. | Application terrain : Remplacez une préférence subjective par une caractéristique mesurable et expliquez son utilité pour l’usage prévu.\n\n[Scène: supply_truck] Cas fictif : Pour les bancs, la solidité, la stabilité, les dimensions et la facilité d’entretien sont plus utiles qu’une préférence personnelle pour un fabricant. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Remplacez une préférence subjective par une caractéristique mesurable et expliquez son utilité pour l’usage prévu. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Écrire des spécifications utiles. Les spécifications décrivent les caractéristiques et performances recherchées. | Application terrain : Remplacez une préférence subjective par une caractéristique mesurable et expliquez son utilité pour l’usage prévu.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-5-L2",
+        "title": "Annoncer les critères avant les offres",
+        "content": "[Scène: dao_calendar] Comprendre : Les exigences de participation, les critères d’évaluation et la méthode de comparaison doivent être compréhensibles dans le dossier. Ils ne se réinventent pas après la réception des offres pour favoriser un résultat. | Application terrain : Relisez chaque critère : à quel besoin répond-il, quelle pièce permet de le vérifier et comment sera-t-il appliqué ?\n\n[Scène: supply_truck] Cas fictif : Si la livraison dans plusieurs écoles est importante, la façon d’évaluer cette capacité doit être définie avant que les candidats préparent leur proposition. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Relisez chaque critère : à quel besoin répond-il, quelle pièce permet de le vérifier et comment sera-t-il appliqué ? | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Annoncer les critères avant les offres. Les exigences de participation, les critères d’évaluation et la méthode de comparaison doivent être compréhensibles dans le dossier. | Application terrain : Relisez chaque critère : à quel besoin répond-il, quelle pièce permet de le vérifier et comment sera-t-il appliqué ?",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-5-L3",
+        "title": "Vérifier les pièces du dossier",
+        "content": "[Scène: dao_calendar] Comprendre : Un dossier cohérent relie les instructions, les spécifications, les formulaires, les règles de comparaison et les conditions contractuelles. Des contradictions entre documents peuvent entraîner des questions, des erreurs ou des différends. | Application terrain : Utilisez une liste de contrôle et les modèles officiels applicables. Faites relire les quantités, destinations, unités et conditions de livraison.\n\n[Scène: supply_truck] Cas fictif : Les spécifications prévoient la livraison dans trois écoles, mais le formulaire de prix ne prévoit qu’une seule destination. Les documents doivent être mis en cohérence. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Utilisez une liste de contrôle et les modèles officiels applicables. Faites relire les quantités, destinations, unités et conditions de livraison. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Vérifier les pièces du dossier. Un dossier cohérent relie les instructions, les spécifications, les formulaires, les règles de comparaison et les conditions contractuelles. | Application terrain : Utilisez une liste de contrôle et les modèles officiels applicables. Faites relire les quantités, destinations, unités et conditions de livraison.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-06",
+    "title": "Préparer une offre en tant qu’entreprise",
+    "lessons": [
+      {
+        "id": "INIT-6-L1",
+        "title": "Décider de participer",
+        "content": "[Scène: dao_calendar] Comprendre : L’entreprise doit comprendre le besoin, les conditions de participation, les documents demandés et ses propres capacités. Répondre à toutes les consultations sans analyse peut mobiliser des ressources sur une offre difficile à exécuter. | Application terrain : Construisez une matrice simple : exigence, capacité disponible, preuve à joindre et point à clarifier.\n\n[Scène: supply_truck] Cas fictif : Une petite entreprise sait fabriquer les bancs, mais doit vérifier si elle peut financer les matières premières et livrer les quantités dans le calendrier annoncé. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Construisez une matrice simple : exigence, capacité disponible, preuve à joindre et point à clarifier. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Décider de participer. L’entreprise doit comprendre le besoin, les conditions de participation, les documents demandés et ses propres capacités. | Application terrain : Construisez une matrice simple : exigence, capacité disponible, preuve à joindre et point à clarifier.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-6-L2",
+        "title": "Monter le dossier sans oublier de pièces",
+        "content": "[Scène: dao_calendar] Comprendre : Une offre se prépare à partir du dossier de consultation, pas d’une liste supposée universelle. Les documents administratifs, techniques et financiers demandés doivent être cohérents et valides pour la consultation concernée. | Application terrain : Attribuez chaque pièce à un responsable et effectuez une relecture finale. Si une exigence est ambiguë, utilisez le canal d’éclaircissement prévu.\n\n[Scène: supply_truck] Cas fictif : Une entreprise présente une bonne solution technique, mais doit également vérifier les signatures, formulaires et justificatifs effectivement demandés. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Attribuez chaque pièce à un responsable et effectuez une relecture finale. Si une exigence est ambiguë, utilisez le canal d’éclaircissement prévu. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Monter le dossier sans oublier de pièces. Une offre se prépare à partir du dossier de consultation, pas d’une liste supposée universelle. | Application terrain : Attribuez chaque pièce à un responsable et effectuez une relecture finale. Si une exigence est ambiguë, utilisez le canal d’éclaircissement prévu.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-6-L3",
+        "title": "Chiffrer et déposer correctement",
+        "content": "[Scène: dao_calendar] Comprendre : Le prix doit correspondre à l’offre technique et aux unités demandées. Les coûts oubliés fragilisent l’exécution. Le dépôt doit respecter les modalités et l’échéance indiquées dans les documents applicables. | Application terrain : Contrôlez les calculs, la monnaie, les prestations incluses et le mode de dépôt. Gardez la preuve de remise lorsque le dispositif le permet.\n\n[Scène: supply_truck] Cas fictif : Le prix des bancs doit être rapproché des quantités, du transport et des prestations incluses. Une somme incohérente avec les lignes du bordereau doit être vérifiée. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Contrôlez les calculs, la monnaie, les prestations incluses et le mode de dépôt. Gardez la preuve de remise lorsque le dispositif le permet. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Chiffrer et déposer correctement. Le prix doit correspondre à l’offre technique et aux unités demandées. | Application terrain : Contrôlez les calculs, la monnaie, les prestations incluses et le mode de dépôt. Gardez la preuve de remise lorsque le dispositif le permet.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-07",
+    "title": "Consulter, recevoir et ouvrir les offres",
+    "lessons": [
+      {
+        "id": "INIT-7-L1",
+        "title": "Informer les candidats",
+        "content": "[Scène: dao_calendar] Comprendre : La publicité et la communication de la consultation permettent aux entreprises de connaître l’opportunité et ses conditions. Les supports et modalités à utiliser sont ceux prévus par le dispositif applicable à l’achat. | Application terrain : Vérifiez la cohérence entre l’avis et le dossier ; conservez la preuve des publications et communications réalisées.\n\n[Scène: supply_truck] Cas fictif : L’avis relatif aux bancs doit permettre de comprendre l’objet de la consultation, où obtenir le dossier et comment participer. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Vérifiez la cohérence entre l’avis et le dossier ; conservez la preuve des publications et communications réalisées. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Informer les candidats. La publicité et la communication de la consultation permettent aux entreprises de connaître l’opportunité et ses conditions. | Application terrain : Vérifiez la cohérence entre l’avis et le dossier ; conservez la preuve des publications et communications réalisées.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-7-L2",
+        "title": "Gérer les questions et modifications",
+        "content": "[Scène: dao_calendar] Comprendre : Les demandes d’éclaircissement doivent suivre le canal prévu. Une réponse ou une modification qui affecte la préparation des offres doit être gérée de façon cohérente pour les participants concernés. | Application terrain : Enregistrez la question, faites valider la réponse et utilisez les modalités de diffusion prévues. Vérifiez si une modification du calendrier est nécessaire.\n\n[Scène: supply_truck] Cas fictif : Un candidat demande si la livraison comprend le déchargement. Cette précision peut modifier le chiffrage d’autres offres. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Enregistrez la question, faites valider la réponse et utilisez les modalités de diffusion prévues. Vérifiez si une modification du calendrier est nécessaire. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Gérer les questions et modifications. Les demandes d’éclaircissement doivent suivre le canal prévu. | Application terrain : Enregistrez la question, faites valider la réponse et utilisez les modalités de diffusion prévues. Vérifiez si une modification du calendrier est nécessaire.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-7-L3",
+        "title": "Séparer réception, ouverture et analyse",
+        "content": "[Scène: dao_calendar] Comprendre : La réception constate la remise des offres. L’ouverture enregistre les éléments prévus par la procédure. L’évaluation analyse ensuite les offres selon les règles du dossier. Ces opérations ne doivent pas être confondues. | Application terrain : Suivez les modalités de réception et d’ouverture, établissez les traces requises et évitez toute annonce prématurée de résultat.\n\n[Scène: supply_truck] Cas fictif : Lire un prix à l’ouverture ne signifie pas que l’entreprise a gagné le marché ou que son offre satisfait toutes les exigences. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Suivez les modalités de réception et d’ouverture, établissez les traces requises et évitez toute annonce prématurée de résultat. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Séparer réception, ouverture et analyse. La réception constate la remise des offres. | Application terrain : Suivez les modalités de réception et d’ouverture, établissez les traces requises et évitez toute annonce prématurée de résultat.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-08",
+    "title": "Évaluer les offres avec méthode",
+    "lessons": [
+      {
+        "id": "INIT-8-L1",
+        "title": "Appliquer la même grille",
+        "content": "[Scène: dao_calendar] Comprendre : Une évaluation explicable utilise les exigences et critères annoncés, avec des constats vérifiables. Les appréciations doivent être rattachées aux pièces de chaque offre et non à la réputation supposée d’un candidat. | Application terrain : Préparez une grille commune avec la référence du critère, la preuve observée, le constat et sa justification.\n\n[Scène: supply_truck] Cas fictif : Pour chaque offre de bancs, l’équipe vérifie les mêmes caractéristiques et utilise les mêmes références du dossier. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Préparez une grille commune avec la référence du critère, la preuve observée, le constat et sa justification. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Appliquer la même grille. Une évaluation explicable utilise les exigences et critères annoncés, avec des constats vérifiables. | Application terrain : Préparez une grille commune avec la référence du critère, la preuve observée, le constat et sa justification.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-8-L2",
+        "title": "Comparer le prix et la conformité",
+        "content": "[Scène: dao_calendar] Comprendre : Le prix affiché ne suffit pas à déterminer le résultat. Il faut appliquer la méthode annoncée et vérifier les conditions pertinentes. Les règles relatives aux corrections et éclaircissements doivent être vérifiées avant toute intervention sur une offre. | Application terrain : Distinguez clairement l’analyse de conformité et la comparaison prévue par le dossier. Ne négociez pas librement en dehors du cadre applicable.\n\n[Scène: supply_truck] Cas fictif : Une proposition moins chère ne répond pas forcément aux dimensions demandées. Une autre semble plus élevée mais inclut les prestations exigées. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Distinguez clairement l’analyse de conformité et la comparaison prévue par le dossier. Ne négociez pas librement en dehors du cadre applicable. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Comparer le prix et la conformité. Le prix affiché ne suffit pas à déterminer le résultat. | Application terrain : Distinguez clairement l’analyse de conformité et la comparaison prévue par le dossier. Ne négociez pas librement en dehors du cadre applicable.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-8-L3",
+        "title": "Rédiger un rapport compréhensible",
+        "content": "[Scène: dao_calendar] Comprendre : Le rapport doit rendre le raisonnement lisible : ce qui a été examiné, les constats, la méthode appliquée et la proposition formulée. Il facilite les décisions, les contrôles et l’explication du résultat. | Application terrain : Reliez chaque conclusion à un critère et à une pièce ; faites relire les calculs et la cohérence de la proposition.\n\n[Scène: supply_truck] Cas fictif : Un tableau de prix seul ne permet pas de comprendre pourquoi une offre de bancs a été écartée pour une caractéristique essentielle. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Reliez chaque conclusion à un critère et à une pièce ; faites relire les calculs et la cohérence de la proposition. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Rédiger un rapport compréhensible. Le rapport doit rendre le raisonnement lisible : ce qui a été examiné, les constats, la méthode appliquée et la proposition formulée. | Application terrain : Reliez chaque conclusion à un critère et à une pièce ; faites relire les calculs et la cohérence de la proposition.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-09",
+    "title": "Comprendre l’attribution et les recours",
+    "lessons": [
+      {
+        "id": "INIT-9-L1",
+        "title": "Distinguer proposition et contrat",
+        "content": "[Scène: dao_calendar] Comprendre : Une proposition d’attribution, une décision et un contrat n’ont pas la même fonction. Les validations, approbations, notifications et formalités applicables doivent être vérifiées avant de présenter l’achat comme définitivement engagé. | Application terrain : Repérez la pièce qui matérialise chaque étape et identifiez la condition autorisant réellement le démarrage.\n\n[Scène: supply_truck] Cas fictif : Une entreprise informée qu’elle est proposée ne doit pas confondre cette étape avec une autorisation certaine de commencer la fabrication. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Repérez la pièce qui matérialise chaque étape et identifiez la condition autorisant réellement le démarrage. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Distinguer proposition et contrat. Une proposition d’attribution, une décision et un contrat n’ont pas la même fonction. | Application terrain : Repérez la pièce qui matérialise chaque étape et identifiez la condition autorisant réellement le démarrage.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-9-L2",
+        "title": "Informer et expliquer le résultat",
+        "content": "[Scène: dao_calendar] Comprendre : Une communication de résultat doit être claire, cohérente avec la décision prise et adaptée aux règles applicables. Elle distingue les informations à communiquer et celles qui restent protégées. | Application terrain : Vérifiez le destinataire, le contenu, le mode de notification et la preuve d’envoi. Ne révélez pas des informations confidentielles sans base.\n\n[Scène: supply_truck] Cas fictif : Une entreprise non retenue cherche à comprendre l’évaluation de sa proposition. L’explication doit s’appuyer sur les éléments communicables du dossier. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Vérifiez le destinataire, le contenu, le mode de notification et la preuve d’envoi. Ne révélez pas des informations confidentielles sans base. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Informer et expliquer le résultat. Une communication de résultat doit être claire, cohérente avec la décision prise et adaptée aux règles applicables. | Application terrain : Vérifiez le destinataire, le contenu, le mode de notification et la preuve d’envoi. Ne révélez pas des informations confidentielles sans base.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-9-L3",
+        "title": "Reconnaître une contestation et agir à temps",
+        "content": "[Scène: dao_calendar] Comprendre : Une contestation se prépare avec les faits, les documents et le circuit compétent. Les voies de recours, délais et effets doivent être vérifiés dans les textes à jour et à partir des dates exactes du dossier. | Application terrain : Identifiez la décision contestée, sa date, le destinataire compétent et la règle applicable. Ne calculez pas un délai à partir d’une supposition.\n\n[Scène: supply_truck] Cas fictif : Un candidat pense qu’un critère non annoncé a été utilisé. Il rassemble le dossier, le résultat reçu et les éléments qui étayent son observation. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Identifiez la décision contestée, sa date, le destinataire compétent et la règle applicable. Ne calculez pas un délai à partir d’une supposition. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Reconnaître une contestation et agir à temps. Une contestation se prépare avec les faits, les documents et le circuit compétent. | Application terrain : Identifiez la décision contestée, sa date, le destinataire compétent et la règle applicable. Ne calculez pas un délai à partir d’une supposition.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-10",
+    "title": "Suivre l’exécution du contrat",
+    "lessons": [
+      {
+        "id": "INIT-10-L1",
+        "title": "Organiser le démarrage",
+        "content": "[Scène: dao_calendar] Comprendre : Le suivi commence par une lecture commune des engagements : livrables, calendrier, responsabilités et conditions de démarrage. Un suivi efficace compare ce qui est prévu à ce qui est réalisé. | Application terrain : Créez une fiche de suivi avec les engagements, échéances contractuelles, responsables et pièces attendues.\n\n[Scène: supply_truck] Cas fictif : Pour les bancs, l’équipe prépare un calendrier de fabrication et de livraison ainsi que les points de contrôle convenus dans le contrat. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Créez une fiche de suivi avec les engagements, échéances contractuelles, responsables et pièces attendues. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Organiser le démarrage. Le suivi commence par une lecture commune des engagements : livrables, calendrier, responsabilités et conditions de démarrage. | Application terrain : Créez une fiche de suivi avec les engagements, échéances contractuelles, responsables et pièces attendues.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-10-L2",
+        "title": "Constater un retard ou une difficulté",
+        "content": "[Scène: dao_calendar] Comprendre : Une difficulté doit être décrite avec des faits et des dates. Les mesures envisageables dépendent du contrat et du cadre applicable ; elles ne se déduisent pas automatiquement de la seule existence d’un retard. | Application terrain : Consignez l’écart, demandez les informations utiles par le circuit prévu et faites examiner les mesures possibles par le responsable compétent.\n\n[Scène: supply_truck] Cas fictif : Le fournisseur annonce un problème de transport. L’équipe compare cette information au calendrier, aux obligations contractuelles et aux justificatifs disponibles. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Consignez l’écart, demandez les informations utiles par le circuit prévu et faites examiner les mesures possibles par le responsable compétent. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Constater un retard ou une difficulté. Une difficulté doit être décrite avec des faits et des dates. | Application terrain : Consignez l’écart, demandez les informations utiles par le circuit prévu et faites examiner les mesures possibles par le responsable compétent.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-10-L3",
+        "title": "Encadrer une modification",
+        "content": "[Scène: dao_calendar] Comprendre : Modifier des quantités, des caractéristiques ou un calendrier peut affecter le contrat. Une demande informelle ne suffit pas à rendre une modification régulière. Les conditions et autorisations applicables doivent être vérifiées. | Application terrain : Décrivez la modification souhaitée, son motif, ses conséquences et les validations requises avant de l’exécuter.\n\n[Scène: supply_truck] Cas fictif : Une école demande des bancs supplémentaires pendant la livraison. Le fournisseur ne doit pas les considérer comme commandés sur la base d’une simple conversation. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Décrivez la modification souhaitée, son motif, ses conséquences et les validations requises avant de l’exécuter. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Encadrer une modification. Modifier des quantités, des caractéristiques ou un calendrier peut affecter le contrat. | Application terrain : Décrivez la modification souhaitée, son motif, ses conséquences et les validations requises avant de l’exécuter.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-11",
+    "title": "Réceptionner, payer et clôturer",
+    "lessons": [
+      {
+        "id": "INIT-11-L1",
+        "title": "Vérifier ce qui a été livré",
+        "content": "[Scène: dao_calendar] Comprendre : La réception confronte les réalisations aux engagements du contrat. Elle s’appuie sur des vérifications et des constats. La présence physique d’un bien ne prouve pas à elle seule sa conformité. | Application terrain : Préparez la liste des contrôles à effectuer, identifiez les personnes habilitées et consignez les résultats selon les modalités prévues.\n\n[Scène: supply_truck] Cas fictif : Les bancs sont comptés, examinés et comparés aux caractéristiques contractuelles. Les défauts observés sont décrits précisément. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Préparez la liste des contrôles à effectuer, identifiez les personnes habilitées et consignez les résultats selon les modalités prévues. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Vérifier ce qui a été livré. La réception confronte les réalisations aux engagements du contrat. | Application terrain : Préparez la liste des contrôles à effectuer, identifiez les personnes habilitées et consignez les résultats selon les modalités prévues.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-11-L2",
+        "title": "Traiter réserves et justificatifs",
+        "content": "[Scène: dao_calendar] Comprendre : Un écart constaté appelle une trace claire et un traitement conforme aux règles du contrat. Les pièces produites doivent décrire la situation réelle, sans certifier une prestation non réalisée. | Application terrain : Précisez chaque réserve, les pièces associées et le suivi attendu. Vérifiez les conditions de levée avant d’attester la conformité.\n\n[Scène: supply_truck] Cas fictif : Deux bancs sont endommagés à la livraison. Le constat indique les éléments concernés et permet de suivre la solution retenue. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Précisez chaque réserve, les pièces associées et le suivi attendu. Vérifiez les conditions de levée avant d’attester la conformité. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Traiter réserves et justificatifs. Un écart constaté appelle une trace claire et un traitement conforme aux règles du contrat. | Application terrain : Précisez chaque réserve, les pièces associées et le suivi attendu. Vérifiez les conditions de levée avant d’attester la conformité.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-11-L3",
+        "title": "Comprendre la chaîne du paiement",
+        "content": "[Scène: dao_calendar] Comprendre : Le paiement s’inscrit dans un circuit de pièces, vérifications et autorisations. Une facture n’établit pas seule que la prestation est conforme. La clôture conserve la preuve de ce qui a été exécuté et payé. | Application terrain : Rassemblez les justificatifs applicables, vérifiez les montants et suivez le dossier auprès du responsable compétent sans inventer une date de paiement.\n\n[Scène: supply_truck] Cas fictif : La facture du fournisseur est rapprochée du contrat, des livraisons constatées et des autres pièces requises pour le paiement. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Rassemblez les justificatifs applicables, vérifiez les montants et suivez le dossier auprès du responsable compétent sans inventer une date de paiement. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Comprendre la chaîne du paiement. Le paiement s’inscrit dans un circuit de pièces, vérifications et autorisations. | Application terrain : Rassemblez les justificatifs applicables, vérifiez les montants et suivez le dossier auprès du responsable compétent sans inventer une date de paiement.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  },
+  {
+    "code": "INIT-RDC-12",
+    "title": "Prévenir les risques et réussir le cas final",
+    "lessons": [
+      {
+        "id": "INIT-12-L1",
+        "title": "Reconnaître un conflit d’intérêts",
+        "content": "[Scène: dao_calendar] Comprendre : Un lien personnel ou un intérêt peut affecter, ou sembler affecter, l’impartialité d’une personne impliquée dans un achat. Le bon réflexe est de rendre la situation visible et de suivre les règles applicables de déclaration et de traitement. | Application terrain : Déclarez le lien par le canal prévu et faites déterminer la mesure appropriée avant de poursuivre votre intervention.\n\n[Scène: supply_truck] Cas fictif : Une personne chargée de l’évaluation découvre qu’un proche dirige une entreprise candidate. Elle ne traite pas la situation en secret. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Déclarez le lien par le canal prévu et faites déterminer la mesure appropriée avant de poursuivre votre intervention. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Reconnaître un conflit d’intérêts. Un lien personnel ou un intérêt peut affecter, ou sembler affecter, l’impartialité d’une personne impliquée dans un achat. | Application terrain : Déclarez le lien par le canal prévu et faites déterminer la mesure appropriée avant de poursuivre votre intervention.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-12-L2",
+        "title": "Conserver un dossier qui explique les décisions",
+        "content": "[Scène: dao_calendar] Comprendre : Un dossier bien organisé permet de retrouver les versions, échanges, décisions et pièces d’exécution. L’archivage et le contrôle gagnent à être préparés pendant le marché plutôt qu’après la perte des documents. | Application terrain : Classez les pièces par étape, date et version ; protégez les accès et conservez les documents selon les règles applicables.\n\n[Scène: supply_truck] Cas fictif : Un contrôleur demande pourquoi une caractéristique a été retenue. La fiche de besoin, les versions du dossier et le rapport d’évaluation permettent de reconstituer le raisonnement. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Classez les pièces par étape, date et version ; protégez les accès et conservez les documents selon les règles applicables. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Conserver un dossier qui explique les décisions. Un dossier bien organisé permet de retrouver les versions, échanges, décisions et pièces d’exécution. | Application terrain : Classez les pièces par étape, date et version ; protégez les accès et conservez les documents selon les règles applicables.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      },
+      {
+        "id": "INIT-12-L3",
+        "title": "Rejouer l’achat de bancs de A à Z",
+        "content": "[Scène: dao_calendar] Comprendre : Le cas final rassemble les acquis : définir le besoin, identifier les acteurs et ressources, préparer la consultation, examiner les offres, formaliser les décisions et suivre la livraison jusqu’à la clôture. Il faut expliquer la logique de chaque étape. | Application terrain : Produisez une fiche de besoin, un calendrier, une grille de comparaison et une liste de pièces de clôture. Expliquez les vérifications officielles encore nécessaires avant une opération réelle.\n\n[Scène: supply_truck] Cas fictif : Dans ce cas fictif, plusieurs écoles ont besoin de bancs. Vous devez organiser le dossier sans inventer de seuil, de délai légal ni de pouvoir de signature. | Application terrain : Relevez les faits du cas et distinguez-les des informations à vérifier.\n\n[Scène: audit_scanner] Le bon réflexe : Produisez une fiche de besoin, un calendrier, une grille de comparaison et une liste de pièces de clôture. Expliquez les vérifications officielles encore nécessaires avant une opération réelle. | Application terrain : Expliquez avec vos mots comment ce réflexe évite une erreur dans le cas présenté.\n\n[Scène: scale_justice] À vous de jouer : Dans le cas des écoles, quelle information manque encore pour agir correctement ? Distinguez ce que vous savez de ce qui doit être vérifié. | Application terrain : Notez une pièce utile et le responsable à consulter.\n\n[Scène: dao_calendar] Synthèse : Rejouer l’achat de bancs de A à Z. Le cas final rassemble les acquis : définir le besoin, identifier les acteurs et ressources, préparer la consultation, examiner les offres, formaliser les décisions et suivre la livraison jusqu’à la clôture. | Application terrain : Produisez une fiche de besoin, un calendrier, une grille de comparaison et une liste de pièces de clôture. Expliquez les vérifications officielles encore nécessaires avant une opération réelle.",
+        "keyArticles": [
+          "Documentation officielle ARMP RDC : https://armp-rdc.cd/category/documentation/"
+        ]
+      }
+    ]
+  }
+]

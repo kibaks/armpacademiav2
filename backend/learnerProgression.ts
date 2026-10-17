@@ -11,9 +11,10 @@ export async function readLearningStage(uid: string) {
 export async function requireInitiationReading(uid: string) {
   if (await readLearningStage(uid) !== 'Initiation') return;
   const db = services().db;
-  const [profile, courses] = await Promise.all([db.collection('users').doc(uid).get(), db.collection('courses').get()]);
+  const profile = await db.collection('users').doc(uid).get();
   const catalog = new Map(initiationCatalog.map(c => [c.id, c as any]));
-  courses.docs.forEach(d => catalog.set(d.id, { ...d.data(), id: d.id }));
+  // The official initiation curriculum is versioned with the app. Legacy course
+  // documents cannot add obsolete chapters to the prerequisite list.
   const state = getLearnerOnboarding({ ...profile.data(), id: uid } as any, Array.from(catalog.values()) as any);
   if (!state.readyForTest) throw new Error('initiation-incomplete');
 }
@@ -32,7 +33,7 @@ learnerProgressionRouter.post('/ai/placement-quiz', async (req: any, res) => {
     const settings = (await db.collection('settings').doc('levels').get()).data();
     const threshold = Number.isInteger(settings?.intermediaire) && settings!.intermediaire > 0 ? settings!.intermediaire : 60;
     const passed = score >= threshold;
-    await db.collection('levelTestAttempts').add({ profileId: req.identity.uid, testId: 'initiation-core-v1', level: 'Initiation', score, correct, passed, date: new Date().toISOString() });
+    await db.collection('levelTestAttempts').add({ profileId: req.identity.uid, testId: 'initiation-core-v2', level: 'Initiation', score, correct, passed, date: new Date().toISOString() });
     const stage = await readLearningStage(req.identity.uid);
     res.json({ score, passed, stage, level: stage === 'Initiation' ? 'Débutant' : stage === 'Approfondi' ? 'Intermédiaire' : 'Avancé', diagnostic: passed ? 'Test réussi : le parcours approfondi est accessible.' : 'Le seuil n’est pas atteint. Reprenez les notions d’initiation, puis réessayez.', strengths: [], weaknesses: [], recommendedModuleIds: [] });
   } catch (error: any) {

@@ -883,6 +883,7 @@ export function buildSynchronizedLessonScreens(
   sceneData: ProfessorSceneData;
   sentences: string[];
 } {
+  const initiation = courseCode.startsWith('INIT-RDC-');
   const safeTitle = lessonTitle || 'Module Marchés Publics RDC';
   const safeContent = lessonContent || '';
   const autoCtx = detectContextualSceneType(safeTitle, safeContent, courseCode || '', lessonIndex);
@@ -1010,10 +1011,10 @@ export function buildSynchronizedLessonScreens(
       `Terminons enfin par la validation pratique et la prise de décision autour de ${naturalTitleSpoken}. `
     ];
 
-    const introPrefix = ELOQUENT_OPENERS[idx] || `${parsed.visualTitle}... `;
+    const introPrefix = initiation ? '' : ELOQUENT_OPENERS[idx] || `${parsed.visualTitle}... `;
     const part1Explanation = `${introPrefix}${explanationText}`;
 
-    const personalizedLeadIn = variation.spokenLeadIn || pillarMeta.leadIn;
+    const personalizedLeadIn = initiation ? 'Le bon réflexe : ' : variation.spokenLeadIn || pillarMeta.leadIn;
     const spokenRuleBody =
       fieldRuleText.length > 1 && !/^[A-Z]{2,}/.test(fieldRuleText)
         ? fieldRuleText.charAt(0).toLowerCase() + fieldRuleText.slice(1)
@@ -1029,7 +1030,7 @@ export function buildSynchronizedLessonScreens(
 
     return {
       screenNumber: idx + 1,
-      shortTabLabel: shortLabel,
+      shortTabLabel: initiation ? ['Comprendre','Cas concret','Agir','À vous','Synthèse'][idx] : shortLabel,
       categoryTag: `${pillarMeta.header} • ${shortRoleTag}`,
       title: parsed.visualTitle,
       explanation: explanationText,
@@ -1037,9 +1038,9 @@ export function buildSynchronizedLessonScreens(
       fieldLeadIn: personalizedLeadIn,
       fieldBoxTitle: `${variation.boxTitle} (${precedence.institutionName.slice(0, 22)})`,
       fieldBannerSubtitle: `${variation.bannerSubtitle}`,
-      legalArticle: artList[idx],
+      legalArticle: initiation ? 'Repère pédagogique · Vérifier les textes applicables' : artList[idx],
       metricLabel: catalogMeta.metricLabel,
-      metricVal: metricVals[idx],
+      metricVal: initiation ? 0 : metricVals[idx],
       accentColor: catalogMeta.color,
       animationId: animId,
       animationCaption: catalogMeta.caption,

@@ -771,7 +771,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       {/* ========================================================================= */}
       {/* 2. FULLSCREEN IMMERSIVE LMS WINDOW (TAKES OVER 100% OF SCREEN)            */}
       {/* ========================================================================= */}
-      <div className={`fixed inset-0 z-[100] w-screen h-screen flex flex-col ${themeStyles.bg} transition-colors duration-200 overflow-hidden`}>
+      <div className={`fixed inset-0 z-[100] w-full h-[100dvh] flex flex-col ${themeStyles.bg} transition-colors duration-200 overflow-hidden`}>
         
         {/* TOP BAR: ARMP INSTITUTIONAL LMS HEADER */}
         <header className="h-14 sm:h-16 bg-slate-900 border-b border-slate-800 text-white flex items-center justify-between px-3 sm:px-5 shrink-0 z-30 shadow-md">

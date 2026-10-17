@@ -172,7 +172,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const extraCustom = parsed
-            .filter((c: CourseModule) => c && c.id && !officialIds.has(c.id))
+            .filter((c: CourseModule) => c && c.id && c.level !== 'Fondamental' && !officialIds.has(c.id))
             .map(normalizeCourseToAnimation);
           return [...officialNormalized, ...extraCustom];
         }
@@ -310,7 +310,7 @@ export default function App() {
         if (courses) {
           const map = new Map<string, CourseModule>();
           COURSES_DATA.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
-          courses.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
+          courses.filter(c => c.level !== 'Fondamental').forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
           setCourses(Array.from(map.values()));
         }
       } catch { if (active()) showToast('Chargement de la session ou des données indisponible. Réessayez.'); }
