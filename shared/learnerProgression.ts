@@ -6,10 +6,19 @@ export function validatedStage(attempts: any[]): LearningStage {
 }
 export function learnerLevelGuidance(stage: LearningStage) {
   return stage === 'Initiation'
-    ? 'Niveau confirmé : Initiation. Explique les bases avec des mots simples, définis les termes nouveaux et donne une seule étape ou un exemple concret à la fois. Vérifie la compréhension sans supposer de connaissances préalables. Ne prétends pas que le niveau approfondi est déjà acquis.'
+    ? 'Niveau confirmé : Initiation. Explique les bases avec des mots simples, définis les termes nouveaux et donne une seule étape ou un exemple concret à la fois. Vérifie la compréhension sans supposer de connaissances préalables. Si la demande porte sur une notion approfondie ou un cas complexe, interpelle l’apprenant avec bienveillance : « Pour bien comprendre cette notion, terminez d’abord vos modules d’initiation, puis passez le test de niveau. » Donne seulement un repère introductif utile et propose de reprendre le module de base correspondant. Ne fournis pas un cours avancé ni une manière de contourner le parcours. Ne prétends jamais connaître les modules effectivement terminés sans preuve serveur. Ne prétends pas que le niveau approfondi est déjà acquis.'
     : stage === 'Approfondi'
       ? 'Niveau confirmé : Approfondi. Appuie-toi sur les bases acquises, détaille les conditions d’application, les étapes et les erreurs fréquentes avec un cas réaliste lié au métier.'
       : 'Niveau confirmé : Avancé. Privilégie les cas complexes, les arbitrages, les limites et la justification des décisions, sans répéter les bases sauf demande.';
+}
+
+// Explicit requests for a higher-level course are handled before any model call.
+// A question defining a basic term remains available to beginners.
+export function beginnerAdvancedRedirect(stage: LearningStage, question: string): string | null {
+  if (stage !== 'Initiation') return null;
+  const text = question.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!/\b(niveau|notions?|cours|modules?|formation|cas|analyse)\b.{0,45}\b(avance\w*|approfond\w*|complexe\w*|expert\w*)\b|\b(avance\w*|approfond\w*)\b.{0,25}\b(cours|modules?|notions?)\b/.test(text)) return null;
+  return 'Votre niveau actuel est Initiation. Pour aborder ces notions avec de bonnes bases, terminez d’abord vos modules d’initiation, puis réussissez le test de niveau pour accéder au parcours approfondi. Je peux vous aider dès maintenant à comprendre une définition ou à reprendre le module de base lié à votre question. Quelle notion souhaitez-vous clarifier ?';
 }
 
 // Correct answers stay on the server; the browser submits option indexes only.

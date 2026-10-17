@@ -1,3 +1,4 @@
+import { InitiationPathway } from './components/InitiationPathway';
 import type { LearningStage } from '../shared/learnerProgression';
 import { getLearnerOnboarding } from './utils/learnerOnboarding';
 import { authenticatedFetch } from './lib/adminApi';
@@ -994,26 +995,9 @@ export default function App() {
   if (isAuthenticated && onboarding.required) {
     const initiationCourse = selectedCourseForPlayer && onboarding.modules.find(module => module.id === selectedCourseForPlayer.id);
     return (
-      <main className="min-h-screen bg-slate-100 text-slate-900 p-6 flex items-center justify-center">
+      <main className="min-h-screen bg-[#f4f7fb] text-slate-900 p-4 sm:p-6">
         {toastMessage && <p role="status" className="fixed bottom-6 left-6 right-6 z-[250] rounded-xl bg-slate-900 p-4 text-center text-white shadow-lg">{toastMessage}</p>}
-        <section aria-labelledby="initiation-title" className="w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-10 shadow-lg">
-          <p className="text-sm font-semibold text-slate-600">Niveau Initiation · Étape {onboarding.readyForTest ? '2' : '1'} sur 2</p>
-          <h1 id="initiation-title" className="mt-3 text-2xl font-bold">{onboarding.readyForTest ? 'Passez votre test de niveau' : 'Commencez par les modules d’initiation'}</h1>
-          <p className="mt-3 text-slate-600">Lisez tous les chapitres des modules ci-dessous, puis passez le test de niveau pour débloquer le niveau approfondi. Votre progression est enregistrée sur votre compte.</p>
-          <p className="mt-4 font-semibold" role="status">{onboarding.modules.length - onboarding.remaining.length} / {onboarding.modules.length} modules lus</p>
-          <ul className="mt-4 space-y-3">
-            {onboarding.modules.map(course => (
-              <li key={course.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
-                <div><p className="font-semibold">{course.title}</p><p className="text-sm text-slate-600">{onboarding.isRead(course) ? 'Lecture terminée' : 'Lecture à terminer'}</p></div>
-                <button className="rounded-lg bg-slate-900 px-4 py-2 text-white focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => handleOpenCourse(course)}>{onboarding.isRead(course) ? 'Relire' : 'Lire le module'}</button>
-              </li>
-            ))}
-          </ul>
-          {onboarding.modules.length === 0 && <p role="alert" className="mt-4 text-amber-800">Aucun module d’initiation n’est disponible pour votre profil. Contactez l’administration pour configurer votre parcours.</p>}
-          <button disabled={!onboarding.readyForTest} onClick={handleOpenPlacement} className="mt-6 w-full rounded-lg bg-amber-400 px-5 py-3 font-bold disabled:bg-slate-200 disabled:text-slate-500 focus-visible:outline-2 focus-visible:outline-offset-2">Passer le test de niveau</button>
-          <button onClick={() => handleOpenTutor()} className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-blue-800 underline">Demander de l’aide à Aïsha</button>
-          <button onClick={handleLogout} className="mt-4 w-full rounded-lg px-4 py-2 underline">Se déconnecter</button>
-        </section>
+        <InitiationPathway modules={onboarding.modules} isRead={onboarding.isRead} ready={onboarding.readyForTest} onOpen={handleOpenCourse} onTest={handleOpenPlacement} onTutor={() => handleOpenTutor()} onLogout={handleLogout} />
         {initiationCourse && <CourseWindow key={`${currentProfile.id}:${initiationCourse.id}`} course={initiationCourse} currentProfile={currentProfile} onClose={() => setSelectedCourseForPlayer(null)} onCompleteModule={handleCompleteModule} onUpdateCourseProgress={handleUpdateCourseProgress} onSaveCourseNote={handleSaveCourseNote} onAskTutor={handleOpenTutor} onCallTutor={handleCallTutor} />}
         <AITutorModal isOpen={isTutorOpen} onClose={() => setIsTutorOpen(false)} currentProfile={currentProfile} learningContext={tutorLearningContext} initialQuestion={tutorInitialQuestion} onClearInitialQuestion={() => setTutorInitialQuestion(null)} initialAction={tutorInitialAction} initialTutor="vivienne" onClearInitialAction={() => setTutorInitialAction(null)} />
         <PlacementQuizModal isOpen={isPlacementOpen && onboarding.readyForTest && !initiationCourse} onClose={() => setIsPlacementOpen(false)} currentProfile={currentProfile} onUpdateProfileLevel={handleUpdateProfileLevel} onSelectModule={handleSelectModuleById} />

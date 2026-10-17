@@ -1,6 +1,6 @@
 # Initiation aux marchés publics : de A à Z
 
-Édition pédagogique du 17 octobre 2026. 12 modules, 36 chapitres. Cas fictif : équiper des écoles en bancs. Les durées comprennent la lecture et les exercices ; elles sont indicatives.
+Édition pédagogique du 17 octobre 2026. 12 modules, 36 chapitres. 36 situations fictives : informatique, santé, travaux routiers, eau, nettoyage, maintenance, formation et mobilier. Les durées comprennent la lecture et les exercices ; elles sont indicatives.
 
 ## 1. Comprendre le marché public
 
@@ -72,11 +72,11 @@
 
 - 1. Reconnaître un conflit d’intérêts
 - 2. Conserver un dossier qui explique les décisions
-- 3. Rejouer l’achat de bancs de A à Z
+- 3. Reconstituer un achat public de A à Z
 
 ## Méthode
 
-Chaque chapitre comprend cinq scènes : comprendre, cas concret, agir, exercice et synthèse. Les scènes utilisent les illustrations, les phrases essentielles et les repères du chapitre. La narration et la transcription conservent les explications complètes. Le test de niveau est corrigé côté serveur.
+Chaque chapitre comprend cinq scènes : comprendre, cas concret, agir, exercice et synthèse. Le rendu varie selon le contenu : définition expliquée, étude de cas, comparaison, responsabilités, chronologie, question guidée et synthèse. Les exemples et les illustrations suivent le contexte de chaque module. Cette présentation s’applique aussi aux cours approfondis, avec leur contenu propre. La narration et la transcription conservent les explications complètes. Le test de niveau est corrigé côté serveur.
 
 ## Sources et vérifications
 

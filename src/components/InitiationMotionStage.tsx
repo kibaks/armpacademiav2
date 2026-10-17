@@ -1,64 +1,59 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ClipboardList, FileCheck2, Users, Building2, Truck, Scale, ShieldCheck, ArrowRight, Check, Lightbulb, School, CircleHelp, Target } from 'lucide-react';
+import { BookOpen, FileSearch, Users, Scale, ClipboardCheck, Building2, Truck, Monitor, Wrench, HeartPulse, Droplets, GraduationCap } from 'lucide-react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { INITIATION_UNITS } from '../data/initiationCurriculum';
-import { sampleLessonStoryboard } from '../utils/motionLessonStoryboard';
+import { sampleLessonStoryboard, paginateLessonText } from '../utils/motionLessonStoryboard';
+import { lessonVisualKind } from '../utils/lessonVisualKind';
 import './InitiationMotionStage.css';
 
-const icons = [Lightbulb, Users, ClipboardList, ClipboardList, FileCheck2, Building2, Users, Scale, FileCheck2, Truck, FileCheck2, ShieldCheck];
-function SchoolIllustration({ progress, still }: { progress: number; still: boolean }) {
-  const p = still ? 1 : Math.min(1, progress * 2);
-  return <svg className="init-motion__school" viewBox="0 0 340 180" role="img" aria-label="Illustration du cas : une école, une livraison et des bancs">
-    <circle cx="286" cy="29" r="19" fill="#ffd274" />
-    <path d="M12 160H331" stroke="#b8c9df" strokeWidth="3" strokeLinecap="round" />
-    <path d="M40 72L130 19L221 72Z" fill="#2258d8" /><rect x="54" y="71" width="153" height="88" rx="5" fill="#fff" stroke="#aec2e5" strokeWidth="2" />
-    <rect x="116" y="104" width="29" height="55" rx="4" fill="#1c345c" />
-    {[73, 162].map(x => <g key={x}><rect x={x} y="91" width="24" height="28" rx="3" fill="#cee5ff" /><path d={`M${x+12} 91v28M${x} 105h24`} stroke="#6c97d8" strokeWidth="2" /></g>)}
-    <motion.g initial={false} animate={{ x: still ? 0 : (1-p)*40 }} transition={{ duration: still ? 0 : .2 }}>
-      <rect x="217" y="102" width="67" height="39" rx="5" fill="#ffbd5a" /><path d="M284 116h24l15 17v17h-39Z" fill="#2960dc" /><path d="M289 121h15l10 12h-25Z" fill="#daedff" /><path d="M212 141h75v9h-75Z" fill="#c78324" /><circle cx="232" cy="151" r="10" fill="#173555" /><circle cx="306" cy="151" r="10" fill="#173555" /><circle cx="232" cy="151" r="4" fill="#cce0fa" /><circle cx="306" cy="151" r="4" fill="#cce0fa" />
-    </motion.g>
-    {[0, 1, 2].map(i => <motion.g key={i} initial={false} animate={{ opacity: still || p > i*.25 ? 1 : 0, y: still || p > i*.25 ? 0 : -14 }} transition={{ duration: still ? 0 : .3 }}>
-      <rect x={67+i*43} y="140" width="31" height="6" rx="2" fill="#ba7840" /><path d={`M${71+i*43} 146v13M${94+i*43} 146v13`} stroke="#6e4a32" strokeWidth="3" />
-    </motion.g>)}
-  </svg>;
+function ContextDrawing({ text }: { text: string }) {
+  const Icon = /santé|hôpital|médical/i.test(text) ? HeartPulse : /eau|forage/i.test(text) ? Droplets : /informat|ordinateur|logiciel/i.test(text) ? Monitor : /route|travaux|réhabilit/i.test(text) ? Wrench : /formation|école|banc/i.test(text) ? GraduationCap : /livr|transport/i.test(text) ? Truck : Building2;
+  const theme = /informat|ordinateur|logiciel/i.test(text) ? 'digital' : /santé|hôpital|médical/i.test(text) ? 'health' : /route|chantier|travaux|réhabilit/i.test(text) ? 'works' : /eau|pompe|forage/i.test(text) ? 'water' : /dossier|rapport|offre|pièce|critère/i.test(text) ? 'files' : null;
+  return <div className="lesson-explainer__drawing" aria-hidden="true">{theme ? <svg className="lesson-context-scene" viewBox="0 0 240 170" width="220" height="156" fill="none">
+    <path d="M12 150H228" stroke="#b8cbe5" strokeWidth="3" strokeLinecap="round" />
+    {theme === 'digital' && <><rect x="39" y="30" width="163" height="99" rx="9" fill="#0c3b7c" /><rect x="47" y="38" width="147" height="82" rx="3" fill="#f7faff" /><path d="M24 131H217L226 146H15Z" fill="#9bb5d8" /><rect x="60" y="54" width="45" height="50" rx="5" fill="#d7e6fa" /><path d="M119 58h59M119 72h44M119 87h54M119 101h32" stroke="#6085b7" strokeWidth="5" strokeLinecap="round" /><circle cx="82" cy="78" r="11" fill="#eab64a" /></>}
+    {theme === 'health' && <><rect x="43" y="39" width="154" height="109" rx="6" fill="#fff" stroke="#9bb5d8" strokeWidth="2" /><rect x="91" y="13" width="57" height="54" rx="10" fill="#0c3b7c" /><path d="M119 25v30M104 40h30" stroke="#fff" strokeWidth="9" /><rect x="104" y="101" width="33" height="47" fill="#c2d9f4" />{[60,155].map(x => <g key={x}><rect x={x} y="81" width="25" height="25" rx="3" fill="#dce9fa" /><path d={'M'+(x+12)+' 81v25M'+x+' 94h25'} stroke="#7196c6" strokeWidth="2" /></g>)}</>}
+    {theme === 'works' && <><path d="M75 148L103 28h35l41 120Z" fill="#7894b8" /><path d="M121 38v18m0 14v18m0 15v22" stroke="#fff4d9" strokeWidth="4" /><path d="M28 124h54l-6-28H39Z" fill="#eab64a" /><path d="M48 96V76h26l14 20" stroke="#0c3b7c" strokeWidth="6" /><circle cx="41" cy="137" r="12" fill="#0c3b7c" /><circle cx="75" cy="137" r="12" fill="#0c3b7c" /><path d="M188 113l13 33h-26Z" fill="#eab64a" /><path d="M182 133h15" stroke="white" strokeWidth="4" /></>}
+    {theme === 'water' && <><rect x="77" y="64" width="45" height="77" rx="6" fill="#0c3b7c" /><path d="M90 64V44h58M112 44l53-22" stroke="#6c91c2" strokeWidth="9" strokeLinecap="round" /><path d="M122 81h41v19" stroke="#0c3b7c" strokeWidth="10" strokeLinejoin="round" /><path d="M163 109s-10 12-10 18a10 10 0 0020 0c0-6-10-18-10-18" fill="#6eb8e5" /><path d="M146 145h50" stroke="#6eb8e5" strokeWidth="5" strokeLinecap="round" /><rect x="62" y="141" width="74" height="8" rx="3" fill="#9bb5d8" /></>}
+    {theme === 'files' && <><rect x="42" y="51" width="127" height="95" rx="8" fill="#eab64a" /><rect x="64" y="25" width="112" height="110" rx="6" fill="white" stroke="#9bb5d8" strokeWidth="2" /><path d="M83 48h71M83 66h55M83 84h63M83 102h36" stroke="#9bb5d8" strokeWidth="5" strokeLinecap="round" /><circle cx="176" cy="113" r="28" fill="#0c3b7c" /><path d="M163 113l9 9 17-20" stroke="#fff" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /></>}
+  </svg> : <Icon size={88} strokeWidth={1.2} />}<span /><span /></div>;
 }
+
+// Advanced scenes use their own content, never the initiation fallback.
 export function InitiationMotionStage({ screen, progress, courseId, lessonIndex, reducedMotion = false }: {
   screen: SingleScreenCardData; progress: number; courseId: string; lessonIndex: number; reducedMotion?: boolean;
 }) {
   const prefersReduced = useReducedMotion();
-  const unitIndex = Number(courseId.replace('INIT-', '')) - 1;
-  const unit = INITIATION_UNITS[unitIndex] || INITIATION_UNITS[0];
-  const chapter = unit.chapters[lessonIndex] || unit.chapters[0];
-  const steps = chapter[4].split('|');
-  const cue = sampleLessonStoryboard(screen, progress);
-  const Icon = screen.screenNumber === 2 ? School : screen.screenNumber === 3 ? Target : screen.screenNumber === 4 ? CircleHelp : screen.screenNumber === 5 ? ShieldCheck : icons[unitIndex] || ClipboardList;
-  const active = Math.min(2, Math.floor(Math.max(0, Math.min(.999, progress)) * 3));
   const still = Boolean(prefersReduced || reducedMotion);
-  return <section className="init-motion" aria-label={`Animation pédagogique : ${chapter[0]}`}>
-    <div className="init-motion__top"><span>LES FONDAMENTAUX</span><span>{String(unitIndex + 1).padStart(2, '0')} / 12</span></div>
-    <div className="init-motion__composition">
-      <div className="init-motion__visual">
-        <div className="init-motion__orbit" aria-hidden="true" />
-        <motion.div className="init-motion__hero" initial={false} animate={{ scale: still ? 1 : .94 + Math.min(progress * 3, 1) * .06, rotate: still ? 0 : -3 + Math.min(progress * 3, 1) * 3 }} transition={{ duration: still ? 0 : .25 }}>
-          {screen.screenNumber === 2 ? <SchoolIllustration progress={progress} still={still} /> : <Icon size={66} strokeWidth={1.35} aria-hidden="true" />}<span>{screen.screenNumber === 2 ? 'Un achat pour les écoles' : ['Comprendre le sujet', '', 'Passer à l’action', 'À vous de réfléchir', 'L’essentiel à retenir'][screen.screenNumber - 1] || unit.title}</span>
-        </motion.div>
-        <ol className="init-motion__steps" aria-label="Les trois repères du chapitre">
-          {steps.map((step, index) => <motion.li key={step} className={index <= active ? 'is-revealed' : ''} initial={false} animate={{ opacity: still || progress >= index * .15 ? 1 : .35, y: still || progress >= index * .15 ? 0 : 18 }} transition={{ duration: still ? 0 : .3 }}>
-            <span className="init-motion__number">{index < active ? <Check size={16} aria-hidden="true" /> : `0${index + 1}`}</span><strong>{step}</strong>{index < 2 && <ArrowRight className="init-motion__arrow" size={18} aria-hidden="true" />}
-          </motion.li>)}
-        </ol>
-        <span className="init-motion__case">CAS FIL ROUGE · ÉQUIPER DES ÉCOLES</span>
-      </div>
-      <div className="init-motion__copy">
-        <span className="init-motion__eyebrow">{cue.phase === 'rule' ? 'LE BON RÉFLEXE' : 'COMPRENDRE POUR AGIR'}</span>
-        <h3>{chapter[0]}</h3>
-        <motion.p key={`${screen.screenNumber}-${cue.phase}-${cue.pageIndex}`} initial={still ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: still ? 0 : .25 }}>
-          {cue.text}
-        </motion.p>
-        <div className="init-motion__meter" aria-hidden="true"><span style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress))})` }} /></div>
-        <small>Une idée · Un exemple · Une action</small>
-      </div>
+  const initiation = courseId.startsWith('INIT-');
+  const unit = initiation ? INITIATION_UNITS[Number(courseId.replace('INIT-', '')) - 1] : undefined;
+  const chapter = unit?.chapters[lessonIndex];
+  const title = chapter?.[0] || screen.title;
+  const selectedKind = lessonVisualKind(title, screen.screenNumber, initiation ? undefined : screen.shortTabLabel);
+  const kind = !chapter && selectedKind === 'timeline' ? 'definition' : selectedKind;
+  const cue = sampleLessonStoryboard(screen, progress);
+  const paragraphs = paginateLessonText(cue.phase === 'rule' ? screen.fieldRule : screen.explanation, 34);
+  const page = Math.min(paragraphs.length - 1, Math.floor(Math.max(0, Math.min(.999, cue.sectionProgress)) * paragraphs.length));
+  const vocabulary = ['besoins', 'planification', 'financement', 'dossier', 'offres', 'évaluation', 'contrat', 'recours', 'garanties', 'paiement', 'réception', 'audit', 'responsabilités', 'transparence', 'concurrence', 'traçabilité'];
+  const source = (title + ' ' + screen.explanation).toLocaleLowerCase('fr');
+  const terms = chapter?.[4].split('|') || vocabulary.filter(term => source.includes(term)).slice(0, 4);
+  const labels = { definition: 'Définition & compréhension', case: 'Situation à examiner', comparison: 'Comprendre la distinction', roles: 'Acteurs & responsabilités', timeline: 'Le déroulement', practice: 'Vérifier sa compréhension', summary: 'Ce qu’il faut retenir' };
+  const enter = (i = 0) => ({ initial: still ? false as const : { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: still ? 0 : .35, delay: still ? 0 : i * .08 } });
+  const explanation = <p key={cue.phase + page}>{paragraphs[page]}</p>;
+  return <section className={'lesson-explainer lesson-explainer--' + kind} aria-label={'Explication pédagogique : ' + title}>
+    <header className="lesson-explainer__header"><span>{initiation ? 'LES FONDAMENTAUX' : 'APPROFONDIR LES MARCHÉS PUBLICS'}</span><span>{labels[kind]}</span></header>
+    <div className="lesson-explainer__body">
+      <motion.h3 key={title} {...enter()}>{title}</motion.h3>
+      {kind === 'definition' && <div className="lesson-explainer__definition"><motion.div {...enter(1)}><BookOpen size={30} /><span>De quoi parle-t-on ?</span>{explanation}<small>{paragraphs.length > 1 ? 'Explication ' + (page + 1) + ' / ' + paragraphs.length : 'Le sens de la notion'}</small></motion.div><aside><ContextDrawing text={screen.explanation} /><strong>Les repères du sujet</strong><div className="lesson-explainer__tags">{terms.map(t => <span key={t}>{t}</span>)}</div></aside></div>}
+      {kind === 'case' && <div className="lesson-explainer__case"><motion.aside {...enter(1)}><ContextDrawing text={screen.explanation} /><span>CAS PÉDAGOGIQUE</span><strong>Observer les faits avant de décider</strong></motion.aside><div><FileSearch size={28} />{explanation}<blockquote>{screen.fieldRule}</blockquote></div></div>}
+      {kind === 'comparison' && <div className="lesson-explainer__comparison"><motion.article {...enter(1)}><Scale size={30} /><span>Comprendre la notion</span>{explanation}</motion.article><motion.article {...enter(2)}><ClipboardCheck size={30} /><span>Ce que cela implique en pratique</span><p>{screen.fieldRule}</p></motion.article></div>}
+      {kind === 'roles' && <div className="lesson-explainer__roles"><div className="lesson-explainer__hub"><Users size={50} /><strong>Des interventions distinctes</strong></div><div className="lesson-explainer__role-list">{terms.map((t,i) => <motion.div key={t} {...enter(i)}><span>{String(i+1).padStart(2,'0')}</span><strong>{t}</strong></motion.div>)}</div><div className="lesson-explainer__full">{explanation}</div></div>}
+      {kind === 'timeline' && <div className="lesson-explainer__timeline"><ol>{terms.map((t,i) => <motion.li key={t} {...enter(i)}><span>{i+1}</span><strong>{t}</strong></motion.li>)}</ol>{explanation}<blockquote>{screen.fieldRule}</blockquote></div>}
+      {kind === 'practice' && <div className="lesson-explainer__practice"><span className="lesson-explainer__question">?</span><div><span>Faites le lien avec votre pratique</span>{explanation}<blockquote>{screen.fieldRule}</blockquote></div></div>}
+      {kind === 'summary' && <div className="lesson-explainer__summary"><ClipboardCheck size={48} />{explanation}<div className="lesson-explainer__tags">{terms.map(t => <span key={t}>{t}</span>)}</div><blockquote>{screen.fieldRule}</blockquote></div>}
+      {kind !== 'summary' && kind !== 'practice' && !cue.text.startsWith('Retenez ces repères') && <motion.footer key={screen.screenNumber + cue.phase + cue.pageIndex} {...enter()}><span>{cue.phase === 'rule' ? 'À mettre en pratique' : 'L’idée essentielle'}</span><p>{cue.text}</p></motion.footer>}
     </div>
+    <div className="lesson-explainer__progress" aria-hidden="true"><span style={{ transform: 'scaleX(' + Math.max(0, Math.min(1, progress)) + ')' }} /></div>
   </section>;
 }

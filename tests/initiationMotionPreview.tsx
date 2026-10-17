@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { buildInitiationModules } from '../src/data/initiationCurriculum';
+import { COURSES_DATA } from '../src/data/coursesData';
+import { InitiationPathway } from '../src/components/InitiationPathway';
 import { buildSynchronizedLessonScreens } from '../src/components/ProfessorFilmScenes';
 import { InitiationMotionStage } from '../src/components/InitiationMotionStage';
-const courses = buildInitiationModules(['']);
+const courses = COURSES_DATA;
 function Preview() {
+  const [pathway, setPathway] = useState(false);
   const [unit, setUnit] = useState(0), [chapter, setChapter] = useState(0), [scene, setScene] = useState(0);
   const [width, setWidth] = useState(1080), [progress, setProgress] = useState(.3), [playing, setPlaying] = useState(false);
   const course = courses[unit], lesson = course.lessons[chapter];
@@ -12,8 +14,9 @@ function Preview() {
   useEffect(() => { if (!playing) return; const timer = window.setInterval(() => setProgress(p => p >= 1 ? 0 : p + .005), 100); return () => window.clearInterval(timer); }, [playing]);
   return <main style={{ padding: '24px 12px', fontFamily: 'system-ui,sans-serif' }}>
     <h1 style={{ maxWidth: 1080, margin: '0 auto 10px', color: '#122743', fontSize: 24 }}>Les marchés publics, de A à Z</h1>
-    <p style={{ maxWidth: 1080, margin: '0 auto 20px', color: '#526780' }}>Aperçu visuel sans narration · 12 modules · 36 chapitres</p>
+    <p style={{ maxWidth: 1080, margin: '0 auto 20px', color: '#526780' }}>Aperçu visuel sans narration · Fondamentaux et notions approfondies</p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, maxWidth: 1080, margin: '0 auto 20px' }}>
+      <button onClick={() => setPathway(v => !v)} style={{ padding: 12 }}>{pathway ? "Voir les explications" : "Voir le parcours débutant"}</button>
       <label>Module <select value={unit} onChange={e => { setUnit(+e.target.value); setChapter(0); }} style={{ padding: 12, maxWidth: 300 }}>{courses.map((c,i) => <option key={c.id} value={i}>{i+1}. {c.title}</option>)}</select></label>
       <label>Chapitre <select value={chapter} onChange={e => setChapter(+e.target.value)} style={{ padding: 12, maxWidth: 260 }}>{course.lessons.map((l,i) => <option key={l.id} value={i}>{l.title}</option>)}</select></label>
       <label>Scène <select value={scene} onChange={e => setScene(+e.target.value)} style={{ padding: 12 }}>{screens.map((s,i) => <option key={i} value={i}>{s.shortTabLabel}</option>)}</select></label>
@@ -22,7 +25,7 @@ function Preview() {
       <label>Progression <input type="range" min="0" max="1" step=".01" value={progress} onChange={e => setProgress(+e.target.value)} /></label>
     </div>
     <div style={{ width, maxWidth: '100%', margin: 'auto', borderRadius: 22, overflow: 'hidden', boxShadow: '0 15px 50px #12274315' }}>
-      <InitiationMotionStage screen={screens[scene]} progress={progress} courseId={course.id} lessonIndex={chapter} />
+      {pathway ? <InitiationPathway modules={courses.filter(c => c.id.startsWith("INIT-"))} isRead={() => false} ready={false} onOpen={course => { setUnit(courses.findIndex(c => c.id === course.id)); setChapter(0); setPathway(false); }} onTest={() => {}} onTutor={() => {}} onLogout={() => {}} /> : <InitiationMotionStage screen={screens[scene]} progress={progress} courseId={course.id} lessonIndex={chapter} />}
     </div>
   </main>;
 }

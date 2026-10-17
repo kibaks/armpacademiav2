@@ -1,5 +1,4 @@
 import { InitiationMotionStage } from './InitiationMotionStage';
-import { CartoonLessonStage } from './CartoonLessonStage';
 import './CartoonLesson.css';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
@@ -28,9 +27,7 @@ import { CourseModule, UserProfile } from '../types';
 import {
   speechService,
   SpeechPlaybackState,
-  VoicePersona,
-  LipViseme,
-  analyzeFrenchPhonemeAt
+  VoicePersona
 } from '../utils/speechService';
 import { ambientMusicService } from '../utils/ambientMusicService';
 import {
@@ -104,7 +101,6 @@ export const ANIMATION_TEMPLATE_META: {
 ];
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-const lerp = (a: number, b: number, t: number) => a + (b - a) * clamp01(t);
 
 interface LessonAct {
   index: number;
@@ -170,29 +166,12 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   // Overall 0..100 progress & per-screen 0..1 progress
   const [filmProgress, setFilmProgress] = useState<number>(0);
-  const [tickCount, setTickCount] = useState<number>(0);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState | null>(null);
   const playbackStateRef = useRef<SpeechPlaybackState | null>(null);
   const [showRawVideo, setShowRawVideo] = useState<boolean>(false);
 
   const smoothProgressRef = useRef<number>(0);
   const lastVoiceStartAtRef = useRef<number>(0);
-
-  // Smoothly damped facial & gesture kinematics ref so Aïsha's movements are fluid and poised
-  const smoothFaceRef = useRef({
-    mouth: 0,
-    smile: 0.72,
-    browLeft: 0.15,
-    browRight: 0.15,
-    eyeSquint: 0.18,
-    gazeX: 0,
-    gazeY: 0,
-    blinkLeft: 0,
-    blinkRight: 0,
-    headTilt: 0,
-    headNod: 0,
-    headTurn: 0
-  });
 
   useEffect(() => {
     setManualSceneOverride(null);
@@ -342,7 +321,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
     const intervalMs = 38;
     const fallbackTotalDurationMs = (75 * 1000) / playbackSpeed;
-    let subTick = 0;
 
     const commitProgressIfChanged = (targetPct: number) => {
       smoothProgressRef.current = targetPct;
@@ -357,10 +335,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     };
 
     const timer = setInterval(() => {
-      subTick = (subTick + 1) % 2;
-      if (subTick === 0) {
-        setTickCount((c) => c + 1);
-      }
       const liveState = speechService.getState();
       playbackStateRef.current = liveState;
       const activeForThisLesson = Boolean(
@@ -579,156 +553,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedScreenIndex?.ts]);
 
-  // ===========================================================================
-  // SYNCHRONIZED LASER POINTER:
-  // Points to the exact visual zone Aïsha is explaining right now!
-  // - Phase Explication (0 -> fieldRuleStartRatio): Line-by-line across the 5-line Explanation Box
-  // - Phase Pratique Terrain (fieldRuleStartRatio -> 1.0): Practical Terrain Box ("En pratique sur le terrain")
-  // ===========================================================================
-  const focusPose = useMemo(() => {
-    const p = actVoiceProgress;
-    const ruleStart = currentScreenCard.fieldRuleStartRatio;
-
-    if (p < ruleStart) {
-      const t = clamp01(p / Math.max(0.1, ruleStart));
-      // Sweeps across each of the 5 explanation lines as Aïsha explains the mechanism!
-      const lineIdx = Math.min(4, Math.floor(t * 5));
-      const lineProgress = t * 5 - lineIdx;
-      return {
-        x: lerp(460, 815, lineProgress),
-        y: 206 + lineIdx * 30,
-        label: `Explication • ${currentScreenCard.shortTabLabel}`
-      };
-    } else {
-      const t = clamp01((p - ruleStart) / Math.max(0.08, 1 - ruleStart));
-      const cleanLeadIn = (currentScreenCard.fieldLeadIn || 'Repère essentiel').replace(/\s*[,:]\s*$/, '');
-      return {
-        x: lerp(460, 815, t),
-        y: lerp(402, 428, t),
-        label: `${cleanLeadIn} (${currentScreenCard.legalArticle})`
-      };
-    }
-  }, [actVoiceProgress, currentScreenCard]);
-
-  // ===========================================================================
-  // REALISTIC, SMOOTHLY DAMPED PHOTOGRAPHIC FACIAL ANIMATION FOR AÏSHA
-  // ===========================================================================
-  const isActivelySpeaking = isSpeaking || (isPlaying && voiceMuted);
-
-  const filmDerivedPhoneme = useMemo(() => {
-    if (!isActivelySpeaking || !activeAct?.text) {
-      return {
-        currentWord: '',
-        mouthOpenness: 0,
-        viseme: 'closed' as LipViseme,
-        eyebrowLift: 0.14,
-        smileIntensity: 0.74
-      };
-    }
-    const charIdx = Math.floor(actVoiceProgress * activeAct.text.length);
-    return analyzeFrenchPhonemeAt(activeAct.text, charIdx, tickCount * 28);
-  }, [isActivelySpeaking, activeAct, actVoiceProgress, tickCount]);
-
-  const targetMouthOpenness = useMemo(() => {
-    if (!isActivelySpeaking) return 0;
-    if (isSpeaking && playbackState?.isPauseBetweenWords) {
-      return 0.0;
-    }
-
-    if (isSpeaking && typeof playbackState?.mouthOpenness === 'number') {
-      if (playbackState.mouthOpenness <= 0.03) return 0.0;
-      return Math.min(0.96, Math.max(0.18, playbackState.mouthOpenness));
-    }
-
-    // Composed, poised French pedagogical rhythm in fallback / muted mode (~3.0 syllables/sec)
-    const calmRhythm = 0.52 + 0.38 * Math.abs(Math.sin(tickCount * 0.18));
-    const wordPauseGate = Math.sin(tickCount * 0.06) < -0.88 ? 0.0 : 1;
-
-    return Math.min(
-      0.92,
-      Math.max(
-        0,
-        (filmDerivedPhoneme.mouthOpenness * 0.55 + 0.45) * calmRhythm * wordPauseGate
-      )
-    );
-  }, [
-    isActivelySpeaking,
-    isSpeaking,
-    playbackState?.mouthOpenness,
-    playbackState?.isPauseBetweenWords,
-    filmDerivedPhoneme.mouthOpenness,
-    tickCount
-  ]);
-
-  const effectiveViseme: LipViseme = useMemo(() => {
-    if (!isActivelySpeaking || targetMouthOpenness < 0.05) return 'closed';
-    if (isSpeaking && playbackState?.viseme && playbackState.viseme !== 'closed') {
-      return playbackState.viseme;
-    }
-    if (filmDerivedPhoneme.viseme !== 'closed') return filmDerivedPhoneme.viseme;
-    const mod = tickCount % 9;
-    if (mod < 3) return 'open';
-    if (mod < 6) return 'wide';
-    return 'round';
-  }, [isActivelySpeaking, isSpeaking, targetMouthOpenness, playbackState?.viseme, filmDerivedPhoneme.viseme, tickCount]);
-
-  // Full 3D Whole-Head Kinematics ("au lieu d'animer seulement la bouche, animer toute la tête") & mouth articulation without winks
-  const dampedFace = useMemo(() => {
-    const prev = smoothFaceRef.current;
-
-    const visemeSmileBoost =
-      effectiveViseme === 'wide' ? 0.18 : effectiveViseme === 'round' ? -0.12 : 0.04;
-    const targetSmile = clamp01(isActivelySpeaking ? 0.65 + visemeSmileBoost : 0.74);
-
-    // Visage droit et non incliné : aucun basculement latéral (targetTilt = 0)
-    const targetTilt = 0;
-
-    const targetNod = isActivelySpeaking
-      ? Math.sin(tickCount * 0.068) * 5.2 +
-        Math.cos(tickCount * 0.039) * 2.8 +
-        targetMouthOpenness * 6.4
-      : Math.sin(tickCount * 0.02) * 1.8;
-
-    const targetTurn = isActivelySpeaking
-      ? Math.sin(tickCount * 0.031) * 2.2
-      : Math.sin(tickCount * 0.014) * 0.8;
-
-    const targetBrowLift = isActivelySpeaking
-      ? -(targetMouthOpenness * 5.4 + Math.max(0, Math.sin(tickCount * 0.085)) * 2.8)
-      : -Math.max(0, Math.sin(tickCount * 0.022)) * 1.1;
-
-    const next = {
-      mouth: prev.mouth + (targetMouthOpenness - prev.mouth) * 0.78,
-      smile: prev.smile + (targetSmile - prev.smile) * 0.24,
-      browLeft: prev.browLeft + (targetBrowLift - prev.browLeft) * 0.28,
-      browRight: prev.browRight + (targetBrowLift - prev.browRight) * 0.28,
-      eyeSquint: 0,
-      gazeX: 0,
-      gazeY: 0,
-      blinkLeft: 0,
-      blinkRight: 0,
-      headTilt: 0,
-      headNod: prev.headNod + (targetNod - prev.headNod) * 0.25,
-      headTurn: prev.headTurn + (targetTurn - prev.headTurn) * 0.22
-    };
-    smoothFaceRef.current = next;
-    return next;
-  }, [
-    tickCount,
-    targetMouthOpenness,
-    isActivelySpeaking,
-    effectiveViseme
-  ]);
-
-  const formatTime = (pct: number) => {
-    const totalSeconds = 65;
-    const currentSec = Math.round(clamp01(pct / 100) * totalSeconds);
-    const mins = Math.floor(currentSec / 60);
-    const secs = currentSec % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const totalFormattedTime = '01:05';
   const uploadedVideoUrl = (lesson as any)?.mediaUrl;
 
   const playerRef = useRef<HTMLDivElement>(null);
@@ -760,7 +584,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         </div>
       </header>
       {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
-        course.id.startsWith('INIT-') ? <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled} /> : <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && motionEnabled} speaking={isSpeaking} mouthOpenness={isSpeaking ? dampedFace.mouth : 0} viseme={isSpeaking ? effectiveViseme : 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || 'Loi n° 10/010'} sceneCount={calibratedLesson.acts.length} reducedMotion={!motionEnabled} />}
+        <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled} />}
       <div className="cartoon-player__transport">
         <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
         <div className="cartoon-player__tools">

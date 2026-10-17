@@ -1,6 +1,6 @@
 import initiationKnowledge from './shared/initiationKnowledge.json' with { type: 'json' };
 import { learnerProgressionRouter, readLearningStage } from './backend/learnerProgression.js';
-import { learnerLevelGuidance } from './shared/learnerProgression.js';
+import { learnerLevelGuidance, beginnerAdvancedRedirect } from './shared/learnerProgression.js';
 import { generateQwenTutor, qwenTutorConfig } from './backend/qwenTutor.js';
 import { TUTOR_RESPONSE_POLICY, tutorConversationData, tutorUnavailableReply } from './shared/tutorReplyPolicy';
 import { synthesizePiperTutor, piperConfigured } from './backend/piperTutorSpeech.js';
@@ -1785,6 +1785,8 @@ app.post('/api/ai/tutor', async (req, res) => {
 
   const stage = await readLearningStage((req as any).identity.uid).catch(() => null);
   if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
+  const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
+  if (learningRedirect) return res.json({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
   const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
   const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
