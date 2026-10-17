@@ -73,6 +73,9 @@ def authorize(authorization: str = Header(default='')):
     if not hmac.compare_digest(authorization, 'Bearer ' + KEY):
         raise HTTPException(401, 'Unauthorized')
 
+from tutor_llm import create_router as create_tutor_llm_router
+app.include_router(create_tutor_llm_router(authorize))
+
 def folder(job_id):
     if not re.fullmatch(r'[a-f0-9]{64}', job_id):
         raise HTTPException(404, 'Not found')

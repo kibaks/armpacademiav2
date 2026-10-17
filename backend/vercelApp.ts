@@ -1,3 +1,4 @@
+import { generateQwenTutor, qwenTutorConfig } from './qwenTutor.js';
 import { TUTOR_RESPONSE_POLICY, tutorConversationData, tutorUnavailableReply } from '../shared/tutorReplyPolicy.js';
 import { synthesizePiperTutor, piperConfigured } from './piperTutorSpeech.js';
 import { createTutorVideoRouter } from './tutorVideo.js';
@@ -599,6 +600,15 @@ app.post('/api/ai/tutor', async (req, res) => {
   const ragQuery = (isFollowUpRag && historyTextForRag.length>10) ? (historyTextForRag + ' ' + fullMessage) : fullMessage;
   const ragLessons = findRelevantLessons(ragQuery, courseContext || lc);
   const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
+
+  if (qwenTutorConfig()) {
+    try {
+      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock));
+      return res.json({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen3-14b' });
+    } catch {
+      return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen3-14b' });
+    }
+  }
 
   if (!ai && !arenaAvailable) {
     console.log(`[AI Tutor] Fallback RAG (no GEMINI_API_KEY) for: "${message.slice(0,60)}..." rag:${ragLessons.map(r=>r.course.code+':'+r.lesson.id).join(',')}`);
