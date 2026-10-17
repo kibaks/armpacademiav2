@@ -997,24 +997,11 @@ export function buildSynchronizedLessonScreens(
         (Math.max(0, lessonIndex) * 5 + idx) % PEDAGOGICAL_TRANSITION_VARIATIONS.length
       ];
 
-    // Natural, warm human transitions so Aïsha speaks with authentic eloquence rather than reading dry titles
-    const naturalTitleSpoken =
-      parsed.visualTitle.length > 1 && !/^[A-Z]{2,}/.test(parsed.visualTitle)
-        ? parsed.visualTitle.charAt(0).toLowerCase() + parsed.visualTitle.slice(1)
-        : parsed.visualTitle;
-
-    const ELOQUENT_OPENERS = [
-      `Bonjour et bienvenue, ${precedence.spokenFullName}, c'est un vrai plaisir de vous retrouver aujourd'hui. Prenons le temps d'explorer ensemble ${naturalTitleSpoken}. `,
-      `Voyez-vous, au cœur du sujet, penchons-nous maintenant pas à pas sur ${naturalTitleSpoken}. `,
-      `Concrètement sur le terrain, regardons de près comment s'applique ${naturalTitleSpoken}. `,
-      `Faisons maintenant le point, avec clarté, sur l'essentiel à retenir concernant ${naturalTitleSpoken}. `,
-      `Terminons enfin par la validation pratique et la prise de décision autour de ${naturalTitleSpoken}. `
-    ];
-
-    const introPrefix = initiation ? '' : ELOQUENT_OPENERS[idx] || `${parsed.visualTitle}... `;
+    // Narration explains the content without repeating its visible heading.
+    const introPrefix = '';
     const part1Explanation = `${introPrefix}${explanationText}`;
 
-    const personalizedLeadIn = initiation ? 'Le bon réflexe : ' : variation.spokenLeadIn || pillarMeta.leadIn;
+    const personalizedLeadIn = '';
     const spokenRuleBody =
       fieldRuleText.length > 1 && !/^[A-Z]{2,}/.test(fieldRuleText)
         ? fieldRuleText.charAt(0).toLowerCase() + fieldRuleText.slice(1)
@@ -1030,7 +1017,7 @@ export function buildSynchronizedLessonScreens(
 
     return {
       screenNumber: idx + 1,
-      shortTabLabel: initiation ? ['Comprendre','Cas concret','Agir','À vous','Synthèse'][idx] : shortLabel,
+      shortTabLabel: initiation ? ['Définition','Exemple','Explication','Compréhension','À retenir'][idx] : shortLabel,
       categoryTag: `${pillarMeta.header} • ${shortRoleTag}`,
       title: parsed.visualTitle,
       explanation: explanationText,

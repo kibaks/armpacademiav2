@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { authenticate, authenticateIdentity, services } from './admin.js';
+import { readInitiationAccess } from './initiationAccess.js';
+import { INITIATION_WINDOW_MS } from '../shared/initiationAccess.js';
 
 import { passwordRouter } from './passwordAuth.js';
 export const authRouter = Router();
@@ -9,13 +11,10 @@ authRouter.use(['/auth', '/2fa'], (_req, res, next) => { res.set('Cache-Control'
 const digest = (salt: string, code: string) => createHash('sha256').update(`${salt}:${code}`).digest('hex');
 const wrap = (fn: (req: any, res: any) => Promise<any>) => (req: any, res: any, next: any) => { fn(req, res).catch(next); };
 authRouter.get('/auth/session', authenticate, wrap(async (req, res) => {
-  try {
-    const profile = await services().db.collection('users').doc(req.identity.uid).get();
-    if (!profile.exists) return res.status(409).json({ code: 'PROFILE_REQUIRED', error: 'Complétez votre inscription.' });
-    return res.json({ uid: req.identity.uid, role: req.identity.role || profile.data()?.role || null });
-  } catch {
-    return res.json({ uid: req.identity.uid, role: req.identity.role || null });
-  }
+  const profile = await services().db.collection('users').doc(req.identity.uid).get();
+  if (!profile.exists) return res.status(409).json({ code: 'PROFILE_REQUIRED', error: 'Complétez votre inscription.' });
+  const initiation = await readInitiationAccess(req.identity);
+  return res.json({ uid: req.identity.uid, role: req.identity.role || null, initiation });
 }));
 authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
   const identity = req.identity;
@@ -28,12 +27,14 @@ authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
   const salt = randomBytes(32).toString('hex');
   const now = Date.now();
   const profile = (await db.collection('users').doc(identity.uid).get()).data();
-  if (!profile?.twoFactorEnabled && req.body?.enroll !== true) return res.status(400).json({ error: 'Demande d’activation de la double authentification requise.' });
+  const access = await readInitiationAccess(identity);
+  const renewal = access.required && access.expired;
+  if (!profile?.twoFactorEnabled && !renewal && req.body?.enroll !== true) return res.status(400).json({ error: 'Demande d’activation de la double authentification requise.' });
   if (req.body?.enroll === true && now / 1000 - identity.auth_time > 300) return res.status(401).json({ code: 'REAUTH_REQUIRED', error: 'Reconnectez-vous avant d’activer la double authentification.' });
   const accepted = await db.runTransaction(async tx => {
     const previous = (await tx.get(ref)).data();
     if (previous && now - previous.sentAt < 60000) return false;
-    tx.set(ref, { salt, hash: digest(salt, code), authTime: identity.auth_time, email: identity.email, expiresAt: now + 600000, sentAt: now, attempts: 0, delivered: false, enroll: !profile?.twoFactorEnabled });
+    tx.set(ref, { salt, hash: digest(salt, code), authTime: identity.auth_time, email: identity.email, expiresAt: now + 600000, sentAt: now, attempts: 0, delivered: false, enroll: !profile?.twoFactorEnabled && !renewal, purpose: renewal ? 'initiation' : 'mfa', renewalFrom: renewal ? access.expiresAt : null });
     return true;
   });
   if (!accepted) return res.status(429).json({ error: 'Attendez une minute avant de demander un nouveau code.' });
@@ -57,11 +58,15 @@ authRouter.post('/2fa/verify', authenticateIdentity, wrap(async (req, res) => {
   const ok = await db.runTransaction(async tx => {
     const challenge = (await tx.get(ref)).data();
     if (!challenge || !challenge.delivered || challenge.authTime !== identity.auth_time || challenge.email !== identity.email || challenge.expiresAt <= Date.now() || challenge.attempts >= 5) return false;
+    const accountRef = db.collection('authAccounts').doc(identity.uid);
+    const account = challenge.purpose === 'initiation' ? (await tx.get(accountRef)).data() : null;
+    if (challenge.purpose === 'initiation' && (account?.initiationExpiresAt !== challenge.renewalFrom || account?.initiationExpiresAt > Date.now())) return false;
     const actual = Buffer.from(digest(challenge.salt, code), 'hex');
     const expected = Buffer.from(challenge.hash, 'hex');
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) { tx.update(ref, { attempts: challenge.attempts + 1 }); return false; }
     // Native proofs are scoped to the application session ID and sign-in timestamp.
     tx.set(db.collection('mfaSessions').doc(String(identity.appSessionId || identity.uid)), { authTime: identity.auth_time, expiresAt: Date.now() + 12 * 3600000 });
+    if (challenge.purpose === 'initiation') tx.set(accountRef, { initiationExpiresAt: Date.now() + INITIATION_WINDOW_MS, initiationRenewedAt: Date.now() }, { merge: true });
     if (challenge.enroll) tx.update(db.collection('users').doc(identity.uid), { twoFactorEnabled: true });
     tx.delete(ref);
     return true;
@@ -76,8 +81,6 @@ authRouter.post('/auth/mfa', authenticate, wrap(async (req, res) => {
   return res.json({ ok: true });
 }));
 authRouter.use((error: any, _req: any, res: any, _next: any) => {
-  if (error?.code !== 'auth/internal-error') {
-    console.warn('[Authentication API]', error?.code || error?.message || 'service-unavailable');
-  }
+  console.error('[Authentication API]', error?.code || 'service-unavailable');
   res.status(503).json({ code: 'AUTH_UNAVAILABLE', error: 'Service d’authentification indisponible.' });
 });

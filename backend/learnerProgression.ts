@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { authenticate, services } from './admin.js';
 import { validatedStage, INITIATION_ASSESSMENT, gradeInitiation } from '../shared/learnerProgression.js';
 import { getLearnerOnboarding } from '../src/utils/learnerOnboarding.js';
+import { readInitiationAccess } from './initiationAccess.js';
 
 export async function readLearningStage(uid: string) {
   const attempts = await services().db.collection('levelTestAttempts').where('profileId', '==', uid).get();
@@ -21,7 +22,7 @@ export async function requireInitiationReading(uid: string) {
 export const learnerProgressionRouter = Router();
 learnerProgressionRouter.use(['/learning-level', '/ai/placement-quiz'], authenticate);
 learnerProgressionRouter.get('/learning-level', async (req: any, res) => {
-  try { res.set('Cache-Control', 'no-store').json({ stage: await readLearningStage(req.identity.uid) }); }
+  try { res.set('Cache-Control', 'no-store').json({ stage: await readLearningStage(req.identity.uid), initiation: await readInitiationAccess(req.identity) }); }
   catch { res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' }); }
 });
 learnerProgressionRouter.post('/ai/placement-quiz', async (req: any, res) => {
@@ -35,6 +36,7 @@ learnerProgressionRouter.post('/ai/placement-quiz', async (req: any, res) => {
     const passed = score >= threshold;
     await db.collection('levelTestAttempts').add({ profileId: req.identity.uid, testId: 'initiation-core-v2', level: 'Initiation', score, correct, passed, date: new Date().toISOString() });
     const stage = await readLearningStage(req.identity.uid);
+    await readInitiationAccess(req.identity);
     res.json({ score, passed, stage, level: stage === 'Initiation' ? 'Débutant' : stage === 'Approfondi' ? 'Intermédiaire' : 'Avancé', diagnostic: passed ? 'Test réussi : le parcours approfondi est accessible.' : 'Le seuil n’est pas atteint. Reprenez les notions d’initiation, puis réessayez.', strengths: [], weaknesses: [], recommendedModuleIds: [] });
   } catch (error: any) {
     const expected = ['initiation-incomplete', 'answers-invalid'].includes(error.message);

@@ -85,6 +85,7 @@ export interface UserProfile {
   website?: string;
   joinDate?: string;
   twoFactorEnabled?: boolean;
+  initiationOtpRequired?: boolean;
   passwordLastChanged?: string;
   privacyCertificates?: 'public' | 'institutions' | 'private';
   showInDirectory?: boolean;

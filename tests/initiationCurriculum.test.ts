@@ -16,6 +16,7 @@ test('initiation covers twelve modules and thirty-six complete, illustrated chap
     assert.equal(module.quiz.length, 3);
     assert.ok(module.targetAudience.includes('ac_agent'));
     assert.ok(module.lessons.every(l => l.content.includes('Cas fictif') && l.content.includes('À vous de jouer')));
+    assert.ok(module.lessons.every(l => !/bon réflexe/i.test(l.content) && l.keyArticles.some(source => /article/i.test(source))));
   }
   assert.deepEqual(metadata.map(m => [m.id, m.lessons.length]), modules.map(m => [m.id, m.lessons.length]));
   assert.deepEqual(knowledge.map(m => m.lessons.map(l => l.content)), modules.map(m => m.lessons.map(l => l.content)));
@@ -33,7 +34,7 @@ test('every authored scene survives narration without fabricated article numbers
     assert.equal(sceneData.screens.length, 5);
     assert.ok(sentences[1].includes('école') || sentences[1].includes('entreprise') || sentences[1].length > 30);
     assert.ok(sceneData.screens.every(s => !/Art\.\s*\d/.test(s.legalArticle)));
-    assert.match(sentences.join(' '), /vérifi|Vérifi/);
+    assert.ok(sentences.every(sentence => !/Le bon réflexe/i.test(sentence)));
   }
 });
 test('correct options rotate without changing the actual answer', () => {

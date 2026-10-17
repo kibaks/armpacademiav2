@@ -40,6 +40,13 @@ try {
   await admin.doc('authSessions/bob-session').set({ uid: 'bob', role: 'particulier', version: 0, expiresAt: now + 60000 });
   const bob = client('bob');
   assert.equal((await getDoc(doc(bob, 'tutorConversations/bob'))).exists(), true);
+  await admin.doc('authAccounts/bob').set({ version: 0, initiationExpiresAt: now - 1, initiationComplete: false });
+  await assert.rejects(getDoc(doc(bob, 'tutorConversations/bob')), e => e.code === 'permission-denied', 'expired initiation blocks direct data access');
+  await assert.rejects(setDoc(doc(bob, 'authAccounts/bob'), { version: 0, initiationComplete: true }), e => e.code === 'permission-denied', 'learner cannot forge initiation clearance');
+  await admin.doc('authAccounts/bob').update({ initiationExpiresAt: now + 60000 });
+  assert.equal((await getDoc(doc(bob, 'tutorConversations/bob'))).exists(), true, 'server-confirmed renewal restores data access');
+  await admin.doc('authAccounts/bob').update({ initiationExpiresAt: now - 1, initiationComplete: true });
+  assert.equal((await getDoc(doc(bob, 'tutorConversations/bob'))).exists(), true, 'server-confirmed graduate is no longer time-limited');
   await assert.rejects(getDoc(doc(bob, 'users/alice')), e => e.code === 'permission-denied');
   await admin.doc('authSessions/bob-session').delete();
   await assert.rejects(getDoc(doc(bob, 'tutorConversations/bob')), e => e.code === 'permission-denied', 'logout revokes direct Firestore reads');

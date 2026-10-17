@@ -4,19 +4,20 @@ import { after, mock, test } from 'node:test';
 import express from 'express';
 import { services, authenticate } from '../backend/admin';
 import { authRouter } from '../backend/auth';
+import { INITIATION_WINDOW_MS } from '../shared/initiationAccess';
 
 const { auth, db } = services();
 const records = new Map<string, any>();
 const ref = (key: string): any => ({ key,
   get: async () => ({ exists: records.has(key), data: () => structuredClone(records.get(key)) }),
-  set: async (value: any) => { records.set(key, structuredClone(value)); },
+  set: async (value: any, options?: any) => { records.set(key, structuredClone(options?.merge ? { ...records.get(key), ...value } : value)); },
   update: async (value: any) => { records.set(key, { ...records.get(key), ...value }); },
   delete: async () => { records.delete(key); },
 });
-mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`) }));
+mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`), where: (field: string, _operator: string, value: any) => ({ get: async () => ({ docs: [...records.entries()].filter(([key, record]) => key.startsWith(name + '/') && record[field] === value).map(([,record]) => ({ data: () => structuredClone(record) })) }) }) }));
 mock.method(db, 'runTransaction', async (callback: any) => {
   const writes: any[] = [];
-  const result = await callback({ get: (r: any) => r.get(), set: (r: any, value: any) => writes.push(() => r.set(value)), update: (r: any, value: any) => writes.push(() => r.update(value)), delete: (r: any) => writes.push(() => r.delete()) });
+  const result = await callback({ get: (r: any) => r.get(), set: (r: any, value: any, options?: any) => writes.push(() => r.set(value, options)), update: (r: any, value: any) => writes.push(() => r.update(value)), delete: (r: any) => writes.push(() => r.delete()) });
   for (const write of writes) await write();
   return result;
 });
@@ -26,7 +27,7 @@ mock.method(auth, 'verifyIdToken', async (token: string, checkRevoked: boolean) 
   if (token === 'expired') throw Object.assign(new Error(), { code: 'auth/id-token-expired' });
   if (token === 'revoked') throw Object.assign(new Error(), { code: 'auth/id-token-revoked' });
   if (token === 'configuration') throw Object.assign(new Error(), { code: 'app/invalid-credential' });
-  return { firebase: { sign_in_provider: 'google.com' }, uid: token, appSessionId: token, email: `${token}@example.com`, auth_time: signInTime };
+  return { firebase: { sign_in_provider: token === 'custom-user' ? 'custom' : 'google.com' }, uid: token, appSessionId: token, role: 'particulier', email: `${token}@example.com`, auth_time: signInTime };
 });
 const originalFetch = globalThis.fetch;
 let sentCode = '';
@@ -42,16 +43,64 @@ mock.method(globalThis, 'fetch', async (url: any, options: any) => {
   return originalFetch(url, options);
 });
 process.env.RESEND_API_KEY = 'test-key-never-sent';
+process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>';
 const app = express(); app.use(express.json()); app.use('/api', authRouter);
 app.get('/api/private', authenticate, (_req, res) => res.json({ ok: true }));
 const server = app.listen(0, '127.0.0.1');
 await new Promise<void>(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${(server.address() as any).port}/api`;
 const request = (path: string, token?: string, body?: any) => {
-  if (token) records.set(`authSessions/${token}`, { uid: token, authTime: signInTime, expiresAt: Date.now() + 60000, version: 0 });
+  if (token) records.set(`authSessions/${token}`, { uid: token, role: 'particulier', authTime: signInTime, expiresAt: Date.now() + 60000, version: 0 });
   return originalFetch(base + path, { method: body === undefined ? 'GET' : 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 };
-after(() => { server.close(); mock.restoreAll(); delete process.env.RESEND_API_KEY; });
+after(() => { server.close(); mock.restoreAll(); delete process.env.RESEND_API_KEY; delete process.env.AUTH_EMAIL_FROM; });
+
+test('the countdown waits for email configuration before starting a new learner window', async () => {
+  records.set('users/pending', { id: 'pending', role: 'particulier' });
+  delete process.env.AUTH_EMAIL_FROM;
+  try {
+    const response = await request('/auth/session', 'pending');
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).initiation.expiresAt, null);
+    assert.equal(records.get('authAccounts/pending')?.initiationExpiresAt, undefined);
+  } finally { process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>'; }
+});
+
+test('five-day initiation deadline survives login, blocks access and renews only with a delivered one-use OTP', async () => {
+  records.set('users/learner', { id: 'learner', role: 'particulier', twoFactorEnabled: false, completedLessonsByCourse: { 'INIT-01': [0,1] } });
+  records.set('authAccounts/learner', { passwordHash: 'preserve-me', version: 0 });
+  const before = Date.now();
+  assert.equal((await request('/auth/session', 'learner')).status, 200);
+  const first = records.get('authAccounts/learner');
+  assert.ok(first.initiationExpiresAt >= before + INITIATION_WINDOW_MS);
+  assert.equal(first.passwordHash, 'preserve-me');
+  signInTime++;
+  await request('/auth/session', 'learner');
+  assert.equal(records.get('authAccounts/learner').initiationExpiresAt, first.initiationExpiresAt);
+  records.set('authAccounts/learner', { ...first, initiationExpiresAt: Date.now() - 1 });
+  const blocked = await request('/private', 'learner');
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).reason, 'INITIATION_EXPIRED');
+  assert.equal((await request('/2fa/send', 'learner', { enroll: false })).status, 200);
+  const code = sentCode;
+  assert.equal((await request('/2fa/verify', 'learner', { code: '000000' })).status, 400);
+  assert.equal((await request('/private', 'learner')).status, 403);
+  assert.equal((await request('/2fa/verify', 'learner', { code })).status, 200);
+  assert.equal((await request('/2fa/verify', 'learner', { code })).status, 400);
+  assert.equal((await request('/private', 'learner')).status, 200);
+  assert.ok(records.get('authAccounts/learner').initiationExpiresAt >= Date.now() + INITIATION_WINDOW_MS - 2000);
+  assert.equal(records.get('users/learner').twoFactorEnabled, false);
+  assert.deepEqual(records.get('users/learner').completedLessonsByCourse, { 'INIT-01': [0,1] });
+  assert.equal(records.get('authAccounts/learner').passwordHash, 'preserve-me');
+});
+test('a verified passing attempt removes the initiation deadline; editable profile levels do not', async () => {
+  records.set('users/graduate', { id: 'graduate', role: 'particulier', niveauValidation: 'Avancé' });
+  records.set('authAccounts/graduate', { initiationExpiresAt: Date.now() - 1 });
+  assert.equal((await request('/private', 'graduate')).status, 403);
+  records.set('levelTestAttempts/pass', { profileId: 'graduate', level: 'Initiation', passed: true });
+  assert.equal((await request('/private', 'graduate')).status, 200);
+  assert.equal(records.get('authAccounts/graduate').initiationComplete, true);
+});
 
 test('expired and revoked JWTs produce 401; configuration failures produce 503', async () => {
   assert.equal((await request('/private')).status, 401);
@@ -60,6 +109,11 @@ test('expired and revoked JWTs produce 401; configuration failures produce 503',
   const failure = await request('/private', 'configuration');
   assert.equal(failure.status, 503);
   assert.equal((await failure.json()).code, 'AUTH_UNAVAILABLE');
+});
+test('signed custom bridge tokens work only with their matching live application session', async () => {
+  assert.equal((await request('/private', 'custom-user')).status, 200);
+  records.set('authSessions/custom-user', { uid: 'someone-else', role: 'particulier', authTime: signInTime, expiresAt: Date.now() + 60000, version: 0 });
+  assert.equal((await originalFetch(base + '/private', { headers: { Authorization: 'Bearer custom-user' } })).status, 401);
 });
 test('MFA is enforced before private access, including restoration of a Firebase session', async () => {
   records.set('users/alice', { twoFactorEnabled: true });

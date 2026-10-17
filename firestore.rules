@@ -28,6 +28,9 @@ service cloud.firestore {
         get(session).data.expiresAt > request.time.toMillis() &&
         get(session).data.version == (exists(account) ? get(account).data.version : 0) &&
         (!exists(account) || !('demoExpiresAt' in get(account).data) || get(account).data.demoExpiresAt > request.time.toMillis()) &&
+        (request.auth.token.role in ['super_admin', 'dfat_admin', 'formateur'] || !exists(account) || !('initiationExpiresAt' in get(account).data) ||
+          ('initiationComplete' in get(account).data && get(account).data.initiationComplete == true) ||
+          get(account).data.initiationExpiresAt > request.time.toMillis()) &&
         (!exists(profile) ||
           ((!('disabled' in get(profile).data) || get(profile).data.disabled != true) &&
            (!('role' in get(profile).data) || get(profile).data.role == request.auth.token.role)));

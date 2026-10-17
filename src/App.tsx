@@ -340,6 +340,7 @@ export default function App() {
 
   const storedProfile = profiles[currentRole] || profiles['cgpmp_member'];
   const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
+  const [initiationDeadline, setInitiationDeadline] = useState<{ uid: string; expiresAt: number } | null>(null);
   useEffect(() => {
     if (!isAuthenticated) { setVerifiedStage(null); return; }
     const abort = new AbortController();
@@ -347,10 +348,18 @@ export default function App() {
       if (!response.ok) throw new Error('level-unavailable');
       const data = await response.json();
       if (!abort.signal.aborted) setVerifiedStage({ uid: storedProfile.id, stage: data.stage });
+      if (!abort.signal.aborted) setInitiationDeadline(data.initiation?.required && typeof data.initiation.expiresAt === 'number' ? { uid: storedProfile.id, expiresAt: data.initiation.expiresAt } : null);
     }).catch(() => { if (!abort.signal.aborted) showToast('Vérification du niveau indisponible. Le parcours d’initiation reste accessible.'); });
     return () => abort.abort();
   }, [isAuthenticated, storedProfile.id]);
   const confirmedStage = verifiedStage?.uid === storedProfile.id ? verifiedStage.stage : 'Initiation';
+  useEffect(() => {
+    if (!isAuthenticated || confirmedStage !== 'Initiation' || initiationDeadline?.uid !== storedProfile.id) return;
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('academia-session-required', { detail: { uid: storedProfile.id, code: 'MFA_REQUIRED' } }));
+    }, Math.max(0, initiationDeadline.expiresAt - Date.now()) + 100);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, confirmedStage, initiationDeadline, storedProfile.id]);
   const currentProfile: UserProfile = useMemo(() => ['super_admin', 'dfat_admin', 'formateur'].includes(storedProfile.role) ? storedProfile : {
     ...storedProfile, niveauValidation: confirmedStage,
     level: confirmedStage === 'Initiation' ? 'Débutant' : confirmedStage === 'Approfondi' ? 'Intermédiaire' : 'Avancé',
@@ -997,7 +1006,7 @@ export default function App() {
     return (
       <main className="min-h-screen bg-[#f4f7fb] text-slate-900 p-4 sm:p-6">
         {toastMessage && <p role="status" className="fixed bottom-6 left-6 right-6 z-[250] rounded-xl bg-slate-900 p-4 text-center text-white shadow-lg">{toastMessage}</p>}
-        <InitiationPathway modules={onboarding.modules} isRead={onboarding.isRead} ready={onboarding.readyForTest} onOpen={handleOpenCourse} onTest={handleOpenPlacement} onTutor={() => handleOpenTutor()} onLogout={handleLogout} />
+        <InitiationPathway modules={onboarding.modules} isRead={onboarding.isRead} ready={onboarding.readyForTest} expiresAt={initiationDeadline?.uid === currentProfile.id ? initiationDeadline.expiresAt : undefined} onOpen={handleOpenCourse} onTest={handleOpenPlacement} onTutor={() => handleOpenTutor()} onLogout={handleLogout} />
         {initiationCourse && <CourseWindow key={`${currentProfile.id}:${initiationCourse.id}`} course={initiationCourse} currentProfile={currentProfile} onClose={() => setSelectedCourseForPlayer(null)} onCompleteModule={handleCompleteModule} onUpdateCourseProgress={handleUpdateCourseProgress} onSaveCourseNote={handleSaveCourseNote} onAskTutor={handleOpenTutor} onCallTutor={handleCallTutor} />}
         <AITutorModal isOpen={isTutorOpen} onClose={() => setIsTutorOpen(false)} currentProfile={currentProfile} learningContext={tutorLearningContext} initialQuestion={tutorInitialQuestion} onClearInitialQuestion={() => setTutorInitialQuestion(null)} initialAction={tutorInitialAction} initialTutor="vivienne" onClearInitialAction={() => setTutorInitialAction(null)} />
         <PlacementQuizModal isOpen={isPlacementOpen && onboarding.readyForTest && !initiationCourse} onClose={() => setIsPlacementOpen(false)} currentProfile={currentProfile} onUpdateProfileLevel={handleUpdateProfileLevel} onSelectModule={handleSelectModuleById} />

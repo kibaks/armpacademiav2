@@ -76,7 +76,7 @@
 
 ## Méthode
 
-Chaque chapitre comprend cinq scènes : comprendre, cas concret, agir, exercice et synthèse. Le rendu varie selon le contenu : définition expliquée, étude de cas, comparaison, responsabilités, chronologie, question guidée et synthèse. Les exemples et les illustrations suivent le contexte de chaque module. Cette présentation s’applique aussi aux cours approfondis, avec leur contenu propre. La narration et la transcription conservent les explications complètes. Le test de niveau est corrigé côté serveur.
+Chaque chapitre comprend une définition, un exemple, une explication du texte, une question de compréhension et une synthèse. Les définitions sont des reformulations pédagogiques accompagnées de références vérifiées à la loi n° 10/010 ou au décret n° 10/22 ; elles sont distinguées des situations fictives. Le rendu varie selon le contenu : définition expliquée, étude de cas, comparaison, responsabilités, chronologie, question guidée et synthèse. Les exemples et les illustrations suivent le contexte de chaque module. Cette présentation s’applique aussi aux cours approfondis, avec leur contenu propre. La narration et la transcription conservent les explications complètes. Le test de niveau est corrigé côté serveur.
 
 ## Sources et vérifications
 

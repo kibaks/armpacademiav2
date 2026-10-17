@@ -980,7 +980,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await authenticatedFetch('/api/2fa/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enroll: !profile.twoFactorEnabled }),
+        body: JSON.stringify({ enroll: !profile.twoFactorEnabled && !profile.initiationOtpRequired }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -1011,8 +1011,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setOtp2FAError(data.error || 'Code incorrect.');
         return;
       }
-      onShowToast?.(`Double authentification validée — Bienvenue ${twoFAProfile.name}.`);
-      const prof = twoFAProfile;
+      onShowToast?.(twoFAProfile.initiationOtpRequired ? 'Accès réactivé pour cinq jours. Votre progression est conservée.' : `Double authentification validée — Bienvenue ${twoFAProfile.name}.`);
+      const prof = auth.currentUser ? await getOrInitUserProfile(auth.currentUser) : twoFAProfile;
       setTwoFAProfile(null);
       setOtp2FA('');
       onLoginSuccess?.(prof);
@@ -1487,7 +1487,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       try {
         const userProfile = await firebaseLoginUser(cleanMail, passwordInput);
         // Authentification à double facteur : code OTP exigé si activé sur le compte
-        if (userProfile.twoFactorEnabled) {
+        if (userProfile.twoFactorEnabled || userProfile.initiationOtpRequired) {
           setIsSubmitting(false);
           await beginTwoFA(userProfile);
           return;
@@ -1522,7 +1522,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
       const actualProfile = googleRes.existingProfile;
-      if (actualProfile.twoFactorEnabled) { await beginTwoFA(actualProfile); return; }
+      if (actualProfile.twoFactorEnabled || actualProfile.initiationOtpRequired) { await beginTwoFA(actualProfile); return; }
       onShowToast?.(`Compte reconnu : Bienvenue ${actualProfile.name}.`);
       onLoginSuccess?.(actualProfile);
       onClose();
@@ -1818,11 +1818,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <div className="space-y-1">
                         <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
                           <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                          <span>Double authentification (2FA)</span>
+                          <span>{twoFAProfile.initiationOtpRequired ? 'Réactiver mon accès Initiation' : 'Double authentification (2FA)'}</span>
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Identifiants reconnus pour <strong className="text-slate-700 dark:text-slate-200">{twoFAProfile.email}</strong>.
                           Saisissez le code à 6 chiffres pour finaliser la connexion.
+                          {twoFAProfile.initiationOtpRequired && ' Votre délai de cinq jours est arrivé à échéance. Le code réactive votre accès sans effacer votre progression.'}
                         </p>
                       </div>
 

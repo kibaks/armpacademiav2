@@ -1,4 +1,5 @@
 import { readTutorPresentation, saveTutorPresentation } from './tutorPresentation.js';
+import { readInitiationAccess } from './initiationAccess.js';
 import { resetLink } from './nativeSession.js';
 import { Router, type Request, type RequestHandler } from 'express';
 import type { DecodedIdToken } from 'firebase-admin/auth';
@@ -14,80 +15,38 @@ export const authenticateIdentity: RequestHandler = async (req: AuthRequest, res
   if (!token && !readCookie(req)) { res.status(401).json({ code: 'AUTH_REQUIRED', error: 'Connexion requise.' }); return; }
   if (readCookie(req) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !allowedOrigin(req)) { res.status(403).json({ error: 'Origine refusée.' }); return; }
   try {
-    if (readCookie(req)) {
-      req.identity = await nativeIdentity(req);
-    } else {
-      let identity: any = null;
-      try {
-        identity = await services().auth.verifyIdToken(token!, false);
-      } catch (tokenErr: any) {
-        // Fallback: decode JWT payload without remote lookup if Firebase Admin encounters internal-error
-        try {
-          const parts = token!.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-            if (payload.sub && (!payload.exp || payload.exp * 1000 > Date.now())) {
-              identity = {
-                uid: payload.sub,
-                email: payload.email,
-                name: payload.name || payload.displayName,
-                role: payload.role || 'particulier',
-                auth_time: payload.auth_time || Math.floor(Date.now() / 1000),
-                firebase: payload.firebase
-              };
-            }
-          }
-        } catch {
-          // ignore
-        }
-        if (!identity) throw tokenErr;
-      }
-      let authTime = identity.auth_time || Math.floor(Date.now() / 1000);
-      if (typeof identity.appSessionId === 'string') {
-        try {
-          const db = services().db;
-          const sessionSnap = await db.collection('authSessions').doc(identity.appSessionId).get();
-          const session = sessionSnap.data();
-          if (session && session.uid === identity.uid && session.expiresAt > Date.now()) {
-            authTime = session.authTime || authTime;
-          }
-        } catch {
-          // DB optional
-        }
-      }
-      req.identity = {
-        uid: identity.uid,
-        email: identity.email,
-        name: identity.name || identity.displayName,
-        role: identity.role || identity.customClaims?.role || 'particulier',
-        auth_time: authTime,
-        appSessionId: identity.appSessionId
-      };
+    if (readCookie(req)) req.identity = await nativeIdentity(req);
+    else {
+      const identity = await services().auth.verifyIdToken(token!, true);
+      // Signed app-bridge tokens and exchanged Google identities must reference
+      // an existing application session; decoding a JWT is never authentication.
+      if (!['google.com', 'custom'].includes(identity.firebase?.sign_in_provider || '') || typeof identity.appSessionId !== 'string' || !/^[\w-]{1,128}$/.test(identity.appSessionId)) throw Object.assign(new Error(), { code: 'auth/invalid-id-token' });
+      const db = services().db;
+      const [sessionSnap, accountSnap] = await Promise.all([db.collection('authSessions').doc(identity.appSessionId).get(), db.collection('authAccounts').doc(identity.uid).get()]);
+      const session = sessionSnap.data();
+      if (!session || session.uid !== identity.uid || session.role !== identity.role || session.expiresAt <= Date.now() || session.version !== (accountSnap.data()?.version || 0) || (accountSnap.data()?.demoExpiresAt && accountSnap.data()!.demoExpiresAt <= Date.now()) || session.authTime !== (identity.appAuthTime || identity.auth_time)) throw Object.assign(new Error(), { code: 'auth/id-token-revoked' });
+      req.identity = { ...identity, auth_time: session.authTime };
     }
   }
   catch (error: any) {
     const invalid = invalidIdentityCodes.has(error?.code);
-    if (error?.code !== 'auth/internal-error') {
-      console.warn('[Authentication]', error?.code || error?.message || 'verification-unavailable');
-    }
+    console.error('[Authentication]', error?.code || 'verification-unavailable');
     res.status(invalid ? 401 : 503).json({ code: invalid ? 'SESSION_INVALID' : 'AUTH_UNAVAILABLE', error: invalid ? 'Session expirée ou révoquée. Reconnectez-vous.' : 'Vérification de session indisponible. Réessayez.' }); return;
   }
   next();
 };
 export async function needsSecondFactor(identity: Identity) {
-  try {
-    const db = services().db;
-    const profile = (await db.collection('users').doc(identity.uid).get()).data();
-    if (!profile?.twoFactorEnabled) return false;
-    const session = (await db.collection('mfaSessions').doc(String(identity.appSessionId || identity.uid)).get()).data();
-    return !session || session.authTime !== identity.auth_time || session.expiresAt <= Date.now();
-  } catch {
-    return false;
-  }
+  const db = services().db;
+  const profile = (await db.collection('users').doc(identity.uid).get()).data();
+  if (!profile?.twoFactorEnabled) return false;
+  const session = (await db.collection('mfaSessions').doc(String(identity.appSessionId || identity.uid)).get()).data();
+  return !session || session.authTime !== identity.auth_time || session.expiresAt <= Date.now();
 }
 export const authenticate: RequestHandler = (req: AuthRequest, res, next) => {
   authenticateIdentity(req, res, async () => {
     try {
+      const access = await readInitiationAccess(req.identity!);
+      if (access.expired) { res.status(403).json({ code: 'MFA_REQUIRED', reason: 'INITIATION_EXPIRED', error: 'Votre période d’initiation de cinq jours est terminée. Validez le code reçu par email pour vous reconnecter.', mfaProfile: { id: req.identity!.uid, email: req.identity!.email || '', name: req.identity!.name || 'Apprenant', role: req.identity!.role || 'particulier', roleTitle: 'Parcours Initiation', initiationOtpRequired: true } }); return; }
       if (await needsSecondFactor(req.identity!)) { res.status(403).json({ code: 'MFA_REQUIRED', error: 'Validez le code de double authentification.', mfaProfile: { id: req.identity!.uid, email: req.identity!.email || '', name: req.identity!.name || 'Utilisateur', role: req.identity!.role || 'particulier', roleTitle: 'Compte personnel', twoFactorEnabled: true } }); return; }
     } catch { res.status(503).json({ code: 'AUTH_UNAVAILABLE', error: 'Vérification de session indisponible.' }); return; }
     next();

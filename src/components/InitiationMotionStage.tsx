@@ -3,6 +3,8 @@ import { motion, useReducedMotion } from 'motion/react';
 import { BookOpen, FileSearch, Users, Scale, ClipboardCheck, Building2, Truck, Monitor, Wrench, HeartPulse, Droplets, GraduationCap } from 'lucide-react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { INITIATION_UNITS } from '../data/initiationCurriculum';
+import { INITIATION_DEFINITIONS, PROCUREMENT_LAW_URL, PROCUREMENT_MANUAL_URL } from '../data/initiationDefinitions';
+import { ArmpLogo } from './ArmpLogo';
 import { sampleLessonStoryboard, paginateLessonText } from '../utils/motionLessonStoryboard';
 import { lessonVisualKind } from '../utils/lessonVisualKind';
 import './InitiationMotionStage.css';
@@ -29,6 +31,7 @@ export function InitiationMotionStage({ screen, progress, courseId, lessonIndex,
   const initiation = courseId.startsWith('INIT-');
   const unit = initiation ? INITIATION_UNITS[Number(courseId.replace('INIT-', '')) - 1] : undefined;
   const chapter = unit?.chapters[lessonIndex];
+  const definition = unit ? INITIATION_DEFINITIONS[Number(courseId.replace('INIT-', '')) - 1]?.[lessonIndex] : undefined;
   const title = chapter?.[0] || screen.title;
   const selectedKind = lessonVisualKind(title, screen.screenNumber, initiation ? undefined : screen.shortTabLabel);
   const kind = !chapter && selectedKind === 'timeline' ? 'definition' : selectedKind;
@@ -42,17 +45,18 @@ export function InitiationMotionStage({ screen, progress, courseId, lessonIndex,
   const enter = (i = 0) => ({ initial: still ? false as const : { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: still ? 0 : .35, delay: still ? 0 : i * .08 } });
   const explanation = <p key={cue.phase + page}>{paragraphs[page]}</p>;
   return <section className={'lesson-explainer lesson-explainer--' + kind} aria-label={'Explication pédagogique : ' + title}>
+    {initiation && <div className="lesson-explainer__brand"><ArmpLogo size="sm" /><span>ACADEMIA<small>Parcours Initiation</small></span></div>}
     <header className="lesson-explainer__header"><span>{initiation ? 'LES FONDAMENTAUX' : 'APPROFONDIR LES MARCHÉS PUBLICS'}</span><span>{labels[kind]}</span></header>
     <div className="lesson-explainer__body">
       <motion.h3 key={title} {...enter()}>{title}</motion.h3>
-      {kind === 'definition' && <div className="lesson-explainer__definition"><motion.div {...enter(1)}><BookOpen size={30} /><span>De quoi parle-t-on ?</span>{explanation}<small>{paragraphs.length > 1 ? 'Explication ' + (page + 1) + ' / ' + paragraphs.length : 'Le sens de la notion'}</small></motion.div><aside><ContextDrawing text={screen.explanation} /><strong>Les repères du sujet</strong><div className="lesson-explainer__tags">{terms.map(t => <span key={t}>{t}</span>)}</div></aside></div>}
+      {kind === 'definition' && <div className="lesson-explainer__definition"><motion.div {...enter(1)}><BookOpen size={30} /><span>{definition?.[0] || 'De quoi parle-t-on ?'}</span>{explanation}<small>{paragraphs.length > 1 ? 'Explication ' + (page + 1) + ' / ' + paragraphs.length : 'Le sens de la notion'}</small></motion.div><aside><ContextDrawing text={screen.explanation} /><strong>Les repères du sujet</strong><div className="lesson-explainer__tags">{terms.map(t => <span key={t}>{t}</span>)}</div></aside></div>}
       {kind === 'case' && <div className="lesson-explainer__case"><motion.aside {...enter(1)}><ContextDrawing text={screen.explanation} /><span>CAS PÉDAGOGIQUE</span><strong>Observer les faits avant de décider</strong></motion.aside><div><FileSearch size={28} />{explanation}<blockquote>{screen.fieldRule}</blockquote></div></div>}
       {kind === 'comparison' && <div className="lesson-explainer__comparison"><motion.article {...enter(1)}><Scale size={30} /><span>Comprendre la notion</span>{explanation}</motion.article><motion.article {...enter(2)}><ClipboardCheck size={30} /><span>Ce que cela implique en pratique</span><p>{screen.fieldRule}</p></motion.article></div>}
       {kind === 'roles' && <div className="lesson-explainer__roles"><div className="lesson-explainer__hub"><Users size={50} /><strong>Des interventions distinctes</strong></div><div className="lesson-explainer__role-list">{terms.map((t,i) => <motion.div key={t} {...enter(i)}><span>{String(i+1).padStart(2,'0')}</span><strong>{t}</strong></motion.div>)}</div><div className="lesson-explainer__full">{explanation}</div></div>}
       {kind === 'timeline' && <div className="lesson-explainer__timeline"><ol>{terms.map((t,i) => <motion.li key={t} {...enter(i)}><span>{i+1}</span><strong>{t}</strong></motion.li>)}</ol>{explanation}<blockquote>{screen.fieldRule}</blockquote></div>}
       {kind === 'practice' && <div className="lesson-explainer__practice"><span className="lesson-explainer__question">?</span><div><span>Faites le lien avec votre pratique</span>{explanation}<blockquote>{screen.fieldRule}</blockquote></div></div>}
       {kind === 'summary' && <div className="lesson-explainer__summary"><ClipboardCheck size={48} />{explanation}<div className="lesson-explainer__tags">{terms.map(t => <span key={t}>{t}</span>)}</div><blockquote>{screen.fieldRule}</blockquote></div>}
-      {kind !== 'summary' && kind !== 'practice' && !cue.text.startsWith('Retenez ces repères') && <motion.footer key={screen.screenNumber + cue.phase + cue.pageIndex} {...enter()}><span>{cue.phase === 'rule' ? 'À mettre en pratique' : 'L’idée essentielle'}</span><p>{cue.text}</p></motion.footer>}
+      {definition && <div className="lesson-explainer__source"><span>Explication pédagogique du texte</span><a href={definition[2].startsWith('Décret') ? PROCUREMENT_MANUAL_URL : PROCUREMENT_LAW_URL} target="_blank" rel="noopener noreferrer">{definition[2]}</a>{definition[2].includes(';') && <a href={PROCUREMENT_MANUAL_URL} target="_blank" rel="noopener noreferrer">Consulter aussi le manuel des procédures</a>}</div>}
     </div>
     <div className="lesson-explainer__progress" aria-hidden="true"><span style={{ transform: 'scaleX(' + Math.max(0, Math.min(1, progress)) + ')' }} /></div>
   </section>;
