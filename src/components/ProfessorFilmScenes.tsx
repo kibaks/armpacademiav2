@@ -997,8 +997,8 @@ export function buildSynchronizedLessonScreens(
         (Math.max(0, lessonIndex) * 5 + idx) % PEDAGOGICAL_TRANSITION_VARIATIONS.length
       ];
 
-    // Narration explains the content without repeating its visible heading.
-    const introPrefix = '';
+    // Teacher transitions guide understanding without reading the visible heading.
+    const introPrefix = ['Commençons par le sens de cette notion. ', 'Observons maintenant la situation présentée. ', 'Expliquons le raisonnement étape par étape. ', 'Prenez un instant pour construire votre réponse. ', 'Rassemblons les points essentiels. '][idx] || '';
     const part1Explanation = `${introPrefix}${explanationText}`;
 
     const personalizedLeadIn = '';
