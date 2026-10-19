@@ -9,7 +9,7 @@ import { sampleLessonStoryboard } from '../utils/motionLessonStoryboard';
 import { contextualLessonPhrases, motionCaptionAt } from '../utils/lessonMotionCues';
 import { INITIATION_MOTION_NOTES } from '../data/initiationMotionNotes';
 import { LessonMotionDiagram } from './LessonMotionDiagram';
-import { lessonVisualKind } from '../utils/lessonVisualKind';
+import { lessonContext } from '../utils/lessonContext';
 import './InitiationMotionStage.css';
 
 function ContextDrawing({ text, progress, still }: { text: string; progress: number; still: boolean }) {
@@ -36,12 +36,12 @@ export function InitiationMotionStage({ screen, progress, courseId, lessonIndex,
   const chapter = unit?.chapters[lessonIndex];
   const definition = unit ? INITIATION_DEFINITIONS[Number(courseId.replace('INIT-', '')) - 1]?.[lessonIndex] : undefined;
   const title = chapter?.[0] || screen.title;
-  const selectedKind = lessonVisualKind(title, screen.screenNumber, initiation ? undefined : screen.shortTabLabel);
-  const kind = !chapter && selectedKind === 'timeline' ? 'definition' : selectedKind;
+  const context = lessonContext(title, screen.explanation, screen.screenNumber, initiation ? undefined : screen.shortTabLabel);
+  const kind = context.kind;
   const cue = sampleLessonStoryboard(screen, progress);
   const vocabulary = ['besoins', 'planification', 'financement', 'dossier', 'offres', 'évaluation', 'contrat', 'recours', 'garanties', 'paiement', 'réception', 'audit', 'responsabilités', 'transparence', 'concurrence', 'traçabilité'];
   const source = (title + ' ' + screen.explanation).toLocaleLowerCase('fr');
-  const terms = chapter?.[4].split('|') || vocabulary.filter(term => source.includes(term)).slice(0, 4);
+  const terms = chapter?.[4].split('|') || (context.terms.length ? context.terms : vocabulary.filter(term => source.includes(term)).slice(0, 4));
   const labels = { definition: 'Définition & compréhension', case: 'Situation à examiner', comparison: 'Comprendre la distinction', roles: 'Acteurs & responsabilités', timeline: 'Le déroulement', practice: 'Vérifier sa compréhension', summary: 'Ce qu’il faut retenir' };
   const enter = (i = 0) => ({ initial: still ? false as const : { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: still ? 0 : .35, delay: still ? 0 : i * .08 } });
   const note = unit ? INITIATION_MOTION_NOTES[Number(courseId.replace('INIT-', '')) - 1]?.[lessonIndex] : undefined;
@@ -57,7 +57,7 @@ export function InitiationMotionStage({ screen, progress, courseId, lessonIndex,
       <motion.h3 key={title} {...enter()}>{title}</motion.h3>
       <div className={'lesson-motion-board lesson-motion-board--' + kind}>
         <div className="lesson-motion-board__visual">
-          {kind === 'case' ? <motion.div initial={false} animate={{ y: still ? 0 : -Math.min(1, progress * 3) * 8 }} transition={{duration:0}}><ContextDrawing text={screen.explanation} progress={progress} still={still} /><span className="lesson-motion-board__case-label">Un cas pour comprendre</span><div className="lesson-motion-board__case-terms">{diagramTerms.map((term,i) => <motion.span key={term} initial={false} animate={{opacity:still || progress >= i*.18 ? 1 : .25, y:still || progress >= i*.18 ? 0 : 12}} transition={{duration:0}}>{term}</motion.span>)}</div></motion.div>
+          {kind === 'case' ? <motion.div initial={false} animate={{ y: still ? 0 : -Math.min(1, progress * 3) * 8 }} transition={{duration:0}}><ContextDrawing text={screen.explanation} progress={progress} still={still} /><span className="lesson-motion-board__case-label">{context.question}</span><div className="lesson-motion-board__case-terms">{diagramTerms.map((term,i) => <motion.span key={term} initial={false} animate={{opacity:still || progress >= i*.18 ? 1 : .25, y:still || progress >= i*.18 ? 0 : 12}} transition={{duration:0}}>{term}</motion.span>)}</div></motion.div>
             : <LessonMotionDiagram kind={kind} labels={diagramTerms} progress={progress} still={still} />}
         </div>
         <div className="lesson-motion-board__message">
