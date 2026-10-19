@@ -1,3 +1,5 @@
+import { StructuredChapterArchitecture } from '../src/components/StructuredChapterArchitecture';
+import type { UserProfile } from '../src/types';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { COURSES_DATA } from '../src/data/coursesData';
@@ -26,7 +28,7 @@ function Preview() {
       <label>Progression <input type="range" min="0" max="1" step=".01" value={progress} onChange={e => setProgress(+e.target.value)} /></label>
     </div>
     <div style={{ width, maxWidth: '100%', margin: 'auto', borderRadius: 22, overflow: 'hidden', boxShadow: '0 15px 50px #12274315' }}>
-      {pathway ? <InitiationPathway modules={courses.filter(c => c.id.startsWith("INIT-"))} isRead={() => false} ready={false} expiresAt={exampleDeadline} enforced={false} onOpen={course => { setUnit(courses.findIndex(c => c.id === course.id)); setChapter(0); setPathway(false); }} onTest={() => {}} onTutor={() => {}} onLogout={() => {}} /> : <InitiationMotionStage screen={screens[scene]} progress={progress} courseId={course.id} lessonIndex={chapter} />}
+      {pathway ? <InitiationPathway modules={courses.filter(c => c.id.startsWith("INIT-"))} isRead={() => false} ready={false} expiresAt={exampleDeadline} enforced={false} onOpen={course => { setUnit(courses.findIndex(c => c.id === course.id)); setChapter(0); setPathway(false); }} onTest={() => {}} onTutor={() => {}} onLogout={() => {}} /> : <><InitiationMotionStage screen={screens[scene]} progress={progress} courseId={course.id} lessonIndex={chapter} /><StructuredChapterArchitecture course={course} lesson={lesson} lessonIndex={chapter} currentProfile={{id:"preview",name:"Apprenant",role:"particulier",roleTitle:"Apprenant",institution:"ARMP Academia"} as UserProfile} activeScreenIndex={scene} onJumpToWhiteboardScreen={setScene} onCompleteChapterAndNext={() => {}} isChapterCompleted={false} isLastChapter={false} /></>}
     </div>
   </main>;
 }

@@ -1,3 +1,4 @@
+import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
 import { InitiationMotionStage } from './InitiationMotionStage';
 import './CartoonLesson.css';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -576,7 +577,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       <header className="cartoon-player__header">
         <div className="cartoon-player__heading">
           <span className="cartoon-player__mark"><GraduationCap size={23} aria-hidden="true" /></span>
-          <div><small>{course.code || 'ACADEMIA'} · COURS ANIMÉ · CHAPITRE {lessonIndex + 1}</small><h2>{safeTitle}</h2></div>
+          <div><small>{course.code || 'ACADEMIA'} · COURS ANIMÉ · CHAPITRE {lessonIndex + 1}</small><h2 title={safeTitle}>{lessonDisplayHeading(safeTitle, course.code || "Cours animé")}</h2></div>
         </div>
         <div className="cartoon-player__header-actions">
           {uploadedVideoUrl && <button type="button" className={`cartoon-player__pill ${showRawVideo ? 'is-active' : ''}`} onClick={() => setShowRawVideo(value => !value)} aria-pressed={showRawVideo} aria-label={showRawVideo ? 'Afficher le cours animé' : 'Afficher la vidéo du cours'}><Video /><span>{showRawVideo ? 'Animation' : 'Vidéo'}</span></button>}
@@ -616,7 +617,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         {requiresValidationTest ? <button type="button" onClick={onOpenValidationTest} className={`cartoon-player__validation ${isLessonValidated ? 'is-validated' : ''}`}>{isLessonValidated ? <CheckCircle2 /> : <ShieldCheck />}{isLessonValidated ? 'Test validé' : 'Valider mes acquis'}</button> : <span className="cartoon-player__chapter-label">Chapitre {lessonIndex + 1} sur {course.lessons?.length || 1}</span>}
         <button type="button" onClick={nextChapter} disabled={!(requiresValidationTest && !isLessonValidated ? onOpenValidationTest : onNextLesson)} className="cartoon-player__play">{requiresValidationTest && !isLessonValidated ? 'Passer le test' : hasNextLesson ? 'Chapitre suivant' : 'Terminer'}<ChevronRight /></button>
       </footer>
-      {profileAdaptation && <div className="cartoon-player__adaptation">{profileAdaptation.profileBadge} · {profileAdaptation.roleSpecificObjective}</div>}
+      {profileAdaptation && <details className="cartoon-player__adaptation"><summary>Objectif adapté à votre profil</summary><p>{profileAdaptation.profileBadge} · {profileAdaptation.roleSpecificObjective}</p></details>}
     </div>
   );
 };

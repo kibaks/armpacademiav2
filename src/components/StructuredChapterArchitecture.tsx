@@ -1,3 +1,4 @@
+import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Play,
@@ -469,7 +470,7 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
       {
         num: 1,
         pillarTag: "1. L'ENJEU DU COURS",
-        title: `Pourquoi maîtriser « ${course.title} » ?`,
+        title: `Les enjeux du module`,
         color: '#D97706',
         cards: [
           { tag: 'CAS TERRAIN', sub: 'Prévenir tout rejet ou blocage de dossier', icon: 'warning_shield' },
@@ -664,7 +665,7 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
               </span>
             </div>
             <h3 className="text-sm sm:text-base font-black text-white">
-              Capsule Vidéo Illustrée : {course.title}
+              {lessonDisplayHeading(course.title, "Résumé du module")}
             </h3>
           </div>
         </div>
@@ -1123,7 +1124,7 @@ export const StructuredChapterArchitecture: React.FC<StructuredChapterArchitectu
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-bold text-white">
-                Visionner la petite vidéo résumant l’intégralité du cours « {course.title} » en 5 étapes clés
+                Retrouver les points clés du module
               </p>
             </div>
           </div>
@@ -1142,7 +1143,9 @@ export const StructuredChapterArchitecture: React.FC<StructuredChapterArchitectu
       {/* ===================================================================== */}
       {/* BARRE DE NAVIGATION DES 5 PILIERS PÉDAGOGIQUES DU CHAPITRE             */}
       {/* ===================================================================== */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/95 p-4 sm:p-5 shadow-xl space-y-5">
+      <details key={course.id + ":" + lessonIndex} className="rounded-3xl border border-slate-800 bg-slate-900/95 p-4 sm:p-5 shadow-xl">
+        <summary className="cursor-pointer text-sm font-bold text-white py-2 focus-visible:outline-2 focus-visible:outline-amber-400">Explications écrites et exercices</summary>
+        <div className="space-y-5 pt-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3.5">
           <div>
             <span className="text-[10px] font-mono font-black uppercase tracking-widest text-amber-400">
@@ -1738,7 +1741,8 @@ export const StructuredChapterArchitecture: React.FC<StructuredChapterArchitectu
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </details>
     </div>
   );
 };

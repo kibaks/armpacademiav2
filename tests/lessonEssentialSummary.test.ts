@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {lessonEssentialSummary} from '../src/utils/lessonEssentialSummary';
+import {lessonEssentialSummary,lessonDisplayHeading} from '../src/utils/lessonEssentialSummary';
 import {buildInitiationModules} from '../src/data/initiationCurriculum';
 import {buildSynchronizedLessonScreens} from '../src/components/ProfessorFilmScenes';
 import {INITIATION_MOTION_NOTES} from '../src/data/initiationMotionNotes';
@@ -11,9 +11,16 @@ test('screen summaries stay concise without cutting conditions or replaying full
   assert.deepEqual(lessonEssentialSummary(long,undefined,fallback),[fallback]);
   assert.deepEqual(lessonEssentialSummary(long,'La décision doit être justifiée.',fallback),['La décision doit être justifiée.']);
   for(const phrase of lessonEssentialSummary('Une facture ne prouve pas la conformité. Le contrôle confronte les pièces. La narration développe le raisonnement.',undefined,fallback)) {
-    assert.ok(phrase.split(/\s+/).length<=24);
+    assert.ok(phrase.split(/\s+/).length<=12);
+    assert.ok(phrase.length<=96);
     assert.ok(!phrase.includes('La narration'));
   }
+});
+test('a single short caption and heading replace large text blocks without cutting a legal sentence',()=>{
+  const phrases=lessonEssentialSummary('Les critères doivent être annoncés. Les offres sont examinées. Chaque constat est justifié.',undefined,'Quels critères appliquer ?');
+  assert.equal(phrases.length,1);
+  assert.equal(lessonDisplayHeading('Garanties, '+Array(30).fill('développement').join(' '),'Engagement'), 'Garanties');
+  assert.equal(lessonDisplayHeading(Array(30).fill('détail').join(' '),'Pièces du dossier'), 'Pièces du dossier');
 });
 test('the screen displays the essential note while the tutor retains the detailed explanation',()=>{
   const course=buildInitiationModules([''])[0], lesson=course.lessons[0];
