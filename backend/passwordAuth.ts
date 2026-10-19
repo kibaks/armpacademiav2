@@ -42,9 +42,13 @@ passwordRouter.post('/auth/profile', wrap(async (req, res) => {
   if (!name || name.length > 120 || !['ac_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier'].includes(role)) return res.status(400).json({ error: 'Nom et rôle public valides requis.' });
   const { auth, db } = services();
   const ref = db.collection('users').doc(identity.uid);
+  const registeredAt = Date.now();
   const created = await db.runTransaction(async tx => {
     if ((await tx.get(ref)).exists) return false;
-    tx.set(ref, { ...profileDetails(req.body.details), id: identity.uid, email: identity.email, name, role, twoFactorEnabled: false, level: 'Non évalué', completedModulesCount: 0, certificationsCount: 0, offlineDownloads: [], joinDate: new Date().toISOString() });
+    const accountRef = db.collection('authAccounts').doc(identity.uid);
+    const account = (await tx.get(accountRef)).data();
+    tx.set(accountRef, { ...account, registeredAt, version: account?.version || 0 });
+    tx.set(ref, { ...profileDetails(req.body.details), id: identity.uid, email: identity.email, name, role, twoFactorEnabled: false, level: 'Non évalué', completedModulesCount: 0, certificationsCount: 0, offlineDownloads: [], joinDate: new Date(registeredAt).toISOString() });
     return true;
   });
   if (!created) return res.status(409).json({ error: 'Le profil existe déjà.' });
@@ -78,9 +82,10 @@ passwordRouter.post('/auth/register', wrap(async (req, res) => {
   try {
     await auth.setCustomUserClaims(user.uid, { role });
     const safe = profileDetails(req.body.details);
+    const registeredAt = Date.now();
     await db.runTransaction(async tx => {
-      tx.set(db.collection('authAccounts').doc(user.uid), { passwordHash: password, version: 1 });
-      tx.set(db.collection('users').doc(user.uid), { ...safe, id: user.uid, email: address, name, role, twoFactorEnabled: false, level: 'Non évalué', completedModulesCount: 0, certificationsCount: 0, offlineDownloads: [], joinDate: new Date().toISOString() });
+      tx.set(db.collection('authAccounts').doc(user.uid), { passwordHash: password, version: 1, registeredAt });
+      tx.set(db.collection('users').doc(user.uid), { ...safe, id: user.uid, email: address, name, role, twoFactorEnabled: false, level: 'Non évalué', completedModulesCount: 0, certificationsCount: 0, offlineDownloads: [], joinDate: new Date(registeredAt).toISOString() });
     });
   } catch (error) { await auth.deleteUser(user.uid); throw error; }
   res.status(201).json(await issueSession(user.uid, 'password', res));

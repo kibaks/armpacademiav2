@@ -12,20 +12,20 @@ process.env.RESEND_API_KEY = 'test-never-sent';
 const { auth, db } = services();
 const records = new Map<string, any>();
 const users = new Map<string, any>();
-const ref = (key: string): any => ({ key, get: async () => ({ exists: records.has(key), data: () => structuredClone(records.get(key)) }), set: async (value: any) => records.set(key, structuredClone(value)), update: async (value: any) => records.set(key, { ...records.get(key), ...value }), delete: async () => records.delete(key) });
-mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`) }));
+const ref = (key: string): any => ({ key, get: async () => ({ exists: records.has(key), data: () => structuredClone(records.get(key)) }), set: async (value: any, options?: any) => records.set(key, structuredClone(options?.merge ? { ...records.get(key), ...value } : value)), update: async (value: any) => records.set(key, { ...records.get(key), ...value }), delete: async () => records.delete(key) });
+mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`), where: (field: string, _op: string, value: any) => ({ get: async () => ({ docs: [...records.entries()].filter(([key,r]) => key.startsWith(name + '/') && r[field] === value).map(([,r]) => ({ data: () => r })) }) }) }));
 mock.method(db, 'runTransaction', async (fn: any) => {
   const writes: any[] = [];
-  const result = await fn({ get: (r: any) => r.get(), set: (r: any, data: any) => writes.push(() => r.set(data)), update: (r: any, data: any) => writes.push(() => r.update(data)), delete: (r: any) => writes.push(() => r.delete()) });
+  const result = await fn({ get: (r: any) => r.get(), set: (r: any, data: any, options?: any) => writes.push(() => r.set(data, options)), update: (r: any, data: any) => writes.push(() => r.update(data)), delete: (r: any) => writes.push(() => r.delete()) });
   for (const write of writes) await write();
   return result;
 });
 mock.method(auth, 'createUser', async (data: any) => {
   assert.equal('password' in data, false, 'Firebase never receives the password');
   if ([...users.values()].some(u => u.email === data.email)) throw Object.assign(new Error(), { code: 'auth/email-already-exists' });
-  const user = { ...data, uid: `uid-${users.size}` }; users.set(user.uid, user); return user;
+  const user = { metadata: { creationTime: new Date().toISOString() }, ...data, uid: `uid-${users.size}` }; users.set(user.uid, user); return user;
 });
-mock.method(auth, 'getUser', async (id: string) => { if (!users.has(id)) throw Object.assign(new Error(), { code: 'auth/user-not-found' }); return users.get(id); });
+mock.method(auth, 'getUser', async (id: string) => { if (!users.has(id)) throw Object.assign(new Error(), { code: 'auth/user-not-found' }); return { metadata: { creationTime: new Date().toISOString() }, ...users.get(id) }; });
 mock.method(auth, 'getUserByEmail', async (email: string) => { const user = [...users.values()].find(u => u.email === email); if (!user) throw Object.assign(new Error(), { code: 'auth/user-not-found' }); return user; });
 mock.method(auth, 'setCustomUserClaims', async (uid: string, claims: any) => { users.get(uid).customClaims = claims; });
 mock.method(auth, 'deleteUser', async (uid: string) => users.delete(uid));
@@ -67,6 +67,7 @@ test('registration issues a signed HttpOnly application JWT and stores only a sa
   assert.equal(payload.sub, uid); assert.equal(typeof payload.sid, 'string');
   assert.equal(records.get(`users/${uid}`).role, 'pme'); assert.equal(records.get(`users/${uid}`).twoFactorEnabled, false);
   assert.equal(records.get(`users/${uid}`).institution, 'Company');
+  assert.equal(records.get(`authAccounts/${uid}`).registeredAt, Date.parse(records.get(`users/${uid}`).joinDate));
   assert.equal(JSON.stringify([...records.values()]).includes(password), false);
   assert.equal((await request('/private', undefined, cookie)).status, 200);
 });

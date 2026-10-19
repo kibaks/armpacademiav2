@@ -990,15 +990,15 @@ export function buildSynchronizedLessonScreens(
 
     // Clean, eloquent & well-paced explanation & practical rule matched to whiteboard drawing speed
     const explanationText = cleanPedagogicalClause(parsed.explanationBody);
-    const fieldRuleText = cleanPedagogicalClause(parsed.terrainRule);
+    const fieldRuleText = parsed.terrainRule === catalogMeta.contextualRule ? '' : cleanPedagogicalClause(parsed.terrainRule);
 
     const variation =
       PEDAGOGICAL_TRANSITION_VARIATIONS[
         (Math.max(0, lessonIndex) * 5 + idx) % PEDAGOGICAL_TRANSITION_VARIATIONS.length
       ];
 
-    // Teacher transitions guide understanding without reading the visible heading.
-    const introPrefix = ['Commençons par le sens de cette notion. ', 'Observons maintenant la situation présentée. ', 'Expliquons le raisonnement étape par étape. ', 'Prenez un instant pour construire votre réponse. ', 'Rassemblons les points essentiels. '][idx] || '';
+    // Start with the authored explanation, without recurring spoken filler.
+    const introPrefix = '';
     const part1Explanation = `${introPrefix}${explanationText}`;
 
     const personalizedLeadIn = '';

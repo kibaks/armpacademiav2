@@ -87,3 +87,9 @@ Chaque chapitre comprend une définition, un exemple, une explication du texte, 
 - [Manuel des procédures publié par ARMP RDC](https://armp-rdc.cd/wp-content/uploads/2022/03/DECRET_10-22_Manuel_de_procedures.pdf)
 
 Les scénarios et exercices sont originaux et fictifs. Ce programme présente les fondamentaux et les vérifications à effectuer ; il ne remplace pas les textes officiels en vigueur ni les documents du marché. Aucun montant réglementaire ou délai légal ne doit être déduit du cas fictif.
+
+## Présentation et compte à rebours
+
+Les illustrations sont propres au sujet : grille des offres, lots, livraison, garantie, relevé financier, balance, inspection, calendrier, acteurs, numérique, besoin, contrat ou avis. Les phrases sont tirées du chapitre et les 36 questions de compréhension sont distinctes. Les introductions et consignes orales répétitives ont été retirées.
+
+Le compte à rebours de cinq jours démarre à l’inscription enregistrée côté serveur. Pour les comptes existants sans cette date, la création Firebase fait référence, jamais une date modifiable du profil. Les reconnexions ne décalent pas l’objectif. Le mode déployé est informatif : aucun blocage automatique. Un futur blocage demanderait INITIATION_ENFORCE_DEADLINE=true et les paramètres RESEND_API_KEY et AUTH_EMAIL_FROM ; le renouvellement OTP reste testé.

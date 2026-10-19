@@ -7,6 +7,7 @@ import { InitiationMotionStage } from '../src/components/InitiationMotionStage';
 const courses = COURSES_DATA;
 function Preview() {
   const [pathway, setPathway] = useState(false);
+  const [exampleDeadline] = useState(() => Date.now() + 3 * 86400000);
   const [unit, setUnit] = useState(0), [chapter, setChapter] = useState(0), [scene, setScene] = useState(0);
   const [width, setWidth] = useState(1080), [progress, setProgress] = useState(.3), [playing, setPlaying] = useState(false);
   const course = courses[unit], lesson = course.lessons[chapter];
@@ -25,7 +26,7 @@ function Preview() {
       <label>Progression <input type="range" min="0" max="1" step=".01" value={progress} onChange={e => setProgress(+e.target.value)} /></label>
     </div>
     <div style={{ width, maxWidth: '100%', margin: 'auto', borderRadius: 22, overflow: 'hidden', boxShadow: '0 15px 50px #12274315' }}>
-      {pathway ? <InitiationPathway modules={courses.filter(c => c.id.startsWith("INIT-"))} isRead={() => false} ready={false} onOpen={course => { setUnit(courses.findIndex(c => c.id === course.id)); setChapter(0); setPathway(false); }} onTest={() => {}} onTutor={() => {}} onLogout={() => {}} /> : <InitiationMotionStage screen={screens[scene]} progress={progress} courseId={course.id} lessonIndex={chapter} />}
+      {pathway ? <InitiationPathway modules={courses.filter(c => c.id.startsWith("INIT-"))} isRead={() => false} ready={false} expiresAt={exampleDeadline} enforced={false} onOpen={course => { setUnit(courses.findIndex(c => c.id === course.id)); setChapter(0); setPathway(false); }} onTest={() => {}} onTutor={() => {}} onLogout={() => {}} /> : <InitiationMotionStage screen={screens[scene]} progress={progress} courseId={course.id} lessonIndex={chapter} />}
     </div>
   </main>;
 }

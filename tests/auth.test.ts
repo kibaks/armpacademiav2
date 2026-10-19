@@ -21,6 +21,7 @@ mock.method(db, 'runTransaction', async (callback: any) => {
   for (const write of writes) await write();
   return result;
 });
+mock.method(auth, 'getUser', async () => ({ metadata: { creationTime: new Date().toISOString() } }));
 let signInTime = Math.floor(Date.now() / 1000);
 mock.method(auth, 'verifyIdToken', async (token: string, checkRevoked: boolean) => {
   assert.equal(checkRevoked, true);
@@ -43,6 +44,7 @@ mock.method(globalThis, 'fetch', async (url: any, options: any) => {
   return originalFetch(url, options);
 });
 process.env.RESEND_API_KEY = 'test-key-never-sent';
+process.env.INITIATION_ENFORCE_DEADLINE = 'true';
 process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>';
 const app = express(); app.use(express.json()); app.use('/api', authRouter);
 app.get('/api/private', authenticate, (_req, res) => res.json({ ok: true }));
@@ -53,17 +55,47 @@ const request = (path: string, token?: string, body?: any) => {
   if (token) records.set(`authSessions/${token}`, { uid: token, role: 'particulier', authTime: signInTime, expiresAt: Date.now() + 60000, version: 0 });
   return originalFetch(base + path, { method: body === undefined ? 'GET' : 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 };
-after(() => { server.close(); mock.restoreAll(); delete process.env.RESEND_API_KEY; delete process.env.AUTH_EMAIL_FROM; });
+after(() => { server.close(); mock.restoreAll(); delete process.env.RESEND_API_KEY; delete process.env.AUTH_EMAIL_FROM; delete process.env.INITIATION_ENFORCE_DEADLINE; });
 
-test('the countdown waits for email configuration before starting a new learner window', async () => {
-  records.set('users/pending', { id: 'pending', role: 'particulier' });
+test('the countdown uses registration even without email configuration and never trusts editable joinDate', async () => {
+  const registeredAt = Date.now() - 2 * 86400000;
+  records.set('users/pending', { id: 'pending', role: 'particulier', joinDate: new Date().toISOString() });
+  records.set('authAccounts/pending', { registeredAt, initiationExpiresAt: Date.now() + INITIATION_WINDOW_MS });
   delete process.env.AUTH_EMAIL_FROM;
   try {
     const response = await request('/auth/session', 'pending');
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).initiation.expiresAt, null);
-    assert.equal(records.get('authAccounts/pending')?.initiationExpiresAt, undefined);
+    assert.equal((await response.json()).initiation.expiresAt, registeredAt + INITIATION_WINDOW_MS);
+    assert.equal(records.get('authAccounts/pending').initiationStartedAt, registeredAt);
+    assert.equal(records.get('authAccounts/pending').initiationExpiresAt, undefined);
   } finally { process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>'; }
+});
+test('countdown-only mode keeps expired learners connected and preserves credentials', async () => {
+  process.env.INITIATION_ENFORCE_DEADLINE = 'false';
+  const registeredAt = Date.now() - INITIATION_WINDOW_MS - 1000;
+  records.set('users/countdown', { id: 'countdown', role: 'particulier' });
+  records.set('authAccounts/countdown', { registeredAt, initiationExpiresAt: registeredAt + INITIATION_WINDOW_MS, passwordHash: 'preserve' });
+  try {
+    const response = await request('/auth/session', 'countdown');
+    assert.equal(response.status, 200);
+    const access = (await response.json()).initiation;
+    assert.equal(access.expiresAt, registeredAt + INITIATION_WINDOW_MS);
+    assert.equal(access.expired, false);
+    assert.equal(access.enforced, false);
+    assert.equal(records.get('authAccounts/countdown').initiationExpiresAt, undefined);
+    assert.equal(records.get('authAccounts/countdown').passwordHash, 'preserve');
+  } finally { process.env.INITIATION_ENFORCE_DEADLINE = 'true'; }
+});
+test('a legacy account derives its immutable registration date from Firebase metadata', async () => {
+  const registeredAt = Date.now() - 3 * 86400000;
+  records.set('users/legacy', { id: 'legacy', role: 'particulier', joinDate: new Date().toISOString() });
+  const getUser = auth.getUser;
+  const temporary = mock.method(auth, 'getUser', async () => ({ metadata: { creationTime: new Date(registeredAt).toISOString() } }));
+  try {
+    const response = await request('/auth/session', 'legacy');
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).initiation.expiresAt, registeredAt + INITIATION_WINDOW_MS);
+  } finally { temporary.mock.restore(); }
 });
 
 test('five-day initiation deadline survives login, blocks access and renews only with a delivered one-use OTP', async () => {
@@ -77,7 +109,7 @@ test('five-day initiation deadline survives login, blocks access and renews only
   signInTime++;
   await request('/auth/session', 'learner');
   assert.equal(records.get('authAccounts/learner').initiationExpiresAt, first.initiationExpiresAt);
-  records.set('authAccounts/learner', { ...first, initiationExpiresAt: Date.now() - 1 });
+  records.set('authAccounts/learner', { ...first, registeredAt: Date.now() - INITIATION_WINDOW_MS - 1000 });
   const blocked = await request('/private', 'learner');
   assert.equal(blocked.status, 403);
   assert.equal((await blocked.json()).reason, 'INITIATION_EXPIRED');
@@ -95,7 +127,7 @@ test('five-day initiation deadline survives login, blocks access and renews only
 });
 test('a verified passing attempt removes the initiation deadline; editable profile levels do not', async () => {
   records.set('users/graduate', { id: 'graduate', role: 'particulier', niveauValidation: 'Avancé' });
-  records.set('authAccounts/graduate', { initiationExpiresAt: Date.now() - 1 });
+  records.set('authAccounts/graduate', { registeredAt: Date.now() - INITIATION_WINDOW_MS - 1000 });
   assert.equal((await request('/private', 'graduate')).status, 403);
   records.set('levelTestAttempts/pass', { profileId: 'graduate', level: 'Initiation', passed: true });
   assert.equal((await request('/private', 'graduate')).status, 200);
