@@ -366,6 +366,13 @@ export default function App() {
     levelKey: confirmedStage === 'Initiation' ? 'debutant' : confirmedStage === 'Approfondi' ? 'intermediaire' : 'avance'
   }, [storedProfile, confirmedStage]);
   const onboarding = getLearnerOnboarding(currentProfile, courses);
+  // Start in initiation on sign-in, without trapping subsequent portal/profile navigation.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (onboarding.required) setActiveTab('initiation');
+    else setActiveTab(tab => tab === 'initiation' ? 'catalogue' : tab);
+  }, [isAuthenticated, currentProfile.id, onboarding.required]);
+
 
   useEffect(() => {
     const uid = currentProfile.id;
@@ -843,6 +850,7 @@ export default function App() {
   // Offline Download Toggle Handler
   const handleToggleOfflineDownload = async (courseId: string) => {
     const exists = currentProfile.offlineDownloads.includes(courseId);
+    if (!exists && onboarding.required && !onboarding.modules.some(module => module.id === courseId)) { showToast('Réussissez le test de niveau avant de télécharger ce module.'); return; }
     const nextDownloads = exists
       ? currentProfile.offlineDownloads.filter((id) => id !== courseId)
       : [...currentProfile.offlineDownloads, courseId];
@@ -1000,19 +1008,6 @@ export default function App() {
     }
   };
 
-  // This gate also applies to restored sessions and links opened before login.
-  if (isAuthenticated && onboarding.required) {
-    const initiationCourse = selectedCourseForPlayer && onboarding.modules.find(module => module.id === selectedCourseForPlayer.id);
-    return (
-      <main className="min-h-screen bg-[#f4f7fb] text-slate-900 p-4 sm:p-6">
-        {toastMessage && <p role="status" className="fixed bottom-6 left-6 right-6 z-[250] rounded-xl bg-slate-900 p-4 text-center text-white shadow-lg">{toastMessage}</p>}
-        <InitiationPathway modules={onboarding.modules} isRead={onboarding.isRead} ready={onboarding.readyForTest} expiresAt={initiationDeadline?.uid === currentProfile.id ? initiationDeadline.expiresAt : undefined} enforced={initiationDeadline?.uid === currentProfile.id && initiationDeadline.enforced} onOpen={handleOpenCourse} onTest={handleOpenPlacement} onTutor={() => handleOpenTutor()} onLogout={handleLogout} />
-        {initiationCourse && <CourseWindow key={`${currentProfile.id}:${initiationCourse.id}`} course={initiationCourse} currentProfile={currentProfile} onClose={() => setSelectedCourseForPlayer(null)} onCompleteModule={handleCompleteModule} onUpdateCourseProgress={handleUpdateCourseProgress} onSaveCourseNote={handleSaveCourseNote} onAskTutor={handleOpenTutor} onCallTutor={handleCallTutor} />}
-        <AITutorModal isOpen={isTutorOpen} onClose={() => setIsTutorOpen(false)} currentProfile={currentProfile} learningContext={tutorLearningContext} initialQuestion={tutorInitialQuestion} onClearInitialQuestion={() => setTutorInitialQuestion(null)} initialAction={tutorInitialAction} initialTutor="vivienne" onClearInitialAction={() => setTutorInitialAction(null)} />
-        <PlacementQuizModal isOpen={isPlacementOpen && onboarding.readyForTest && !initiationCourse} onClose={() => setIsPlacementOpen(false)} currentProfile={currentProfile} onUpdateProfileLevel={handleUpdateProfileLevel} onSelectModule={handleSelectModuleById} />
-      </main>
-    );
-  }
 
   return (
     <div className={`min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-amber-400 selection:text-slate-950 transition-colors duration-200 ${
@@ -1043,6 +1038,8 @@ export default function App() {
           setIsAuthModalOpen(true);
         }}
         onLogout={handleLogout}
+        initiationRequired={isAuthenticated && onboarding.required}
+        onOpenInitiation={() => setActiveTab('initiation')}
         currentProfile={currentProfile}
         allProfiles={profiles}
         onSelectRole={handleRoleChange}
@@ -1073,6 +1070,14 @@ export default function App() {
 
       {/* Main Container Viewport */}
       <main className="flex-1">
+        {isAuthenticated && onboarding.required && activeTab !== 'initiation' && <section aria-label="Votre parcours d’initiation" className="max-w-7xl mx-auto m-4 p-4 rounded-2xl border border-blue-200 bg-blue-50 text-blue-950 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm">Les modules avancés restent verrouillés jusqu’à la réussite du test de niveau.</p>
+          <button className="min-h-11 rounded-xl bg-[#0c3b7c] text-white px-4 py-2 text-sm font-bold" onClick={() => setActiveTab('initiation')}>Reprendre mon initiation</button>
+        </section>}
+        {isAuthenticated && onboarding.required && activeTab === 'initiation' && <div className="p-4 sm:p-6">
+          <InitiationPathway modules={onboarding.modules} isRead={onboarding.isRead} ready={onboarding.readyForTest} expiresAt={initiationDeadline?.uid === currentProfile.id ? initiationDeadline.expiresAt : undefined} enforced={initiationDeadline?.uid === currentProfile.id && initiationDeadline.enforced} showHeader={false} onReturnPortal={() => setActiveTab('accueil')} onOpen={handleOpenCourse} onTest={handleOpenPlacement} onTutor={() => handleOpenTutor()} onLogout={handleLogout} />
+        </div>}
+
         
         {/* TAB 1: ACCUEIL & INSTITUTIONAL PORTAL */}
         {activeTab === 'accueil' && (
@@ -1241,6 +1246,7 @@ export default function App() {
               currentProfile={currentProfile}
               isAuthenticated={isAuthenticated}
               onOpenCoursePlayer={handleOpenCourse}
+              onOpenInitiation={() => setActiveTab('initiation')}
               onRequireAuth={(course?: CourseModule) => {
                 if (course) {
                   setPendingCourseForAuth(course);
@@ -1541,7 +1547,7 @@ export default function App() {
       />
 
       <PlacementQuizModal
-        isOpen={isPlacementOpen}
+        isOpen={isPlacementOpen && (!onboarding.required || onboarding.readyForTest)}
         onClose={() => setIsPlacementOpen(false)}
         currentProfile={currentProfile}
         onUpdateProfileLevel={handleUpdateProfileLevel}
@@ -1599,7 +1605,7 @@ export default function App() {
         }}
       />
 
-      {isAuthenticated && selectedCourseForPlayer && (
+      {isAuthenticated && selectedCourseForPlayer && (!onboarding.required || onboarding.modules.some(module => module.id === selectedCourseForPlayer.id)) && (
         <CourseWindow
           key={`${currentProfile.id}:${selectedCourseForPlayer.id}`}
           course={selectedCourseForPlayer}

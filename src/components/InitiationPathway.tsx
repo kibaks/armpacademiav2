@@ -15,15 +15,16 @@ function InitiationCountdown({ expiresAt, enforced }: { expiresAt: number; enfor
   const days = Math.floor(seconds / 86400), hours = Math.floor(seconds % 86400 / 3600), minutes = Math.floor(seconds % 3600 / 60);
   return <div className="init-path__countdown" role="timer" aria-label="Temps restant pour l’initiation">{seconds ? `${days} j · ${String(hours).padStart(2,'0')} h · ${String(minutes).padStart(2,'0')} min · ${String(seconds % 60).padStart(2,'0')} s` : enforced ? 'Période terminée · Réactivation par code OTP' : 'Délai écoulé · Votre parcours reste accessible'}</div>;
 }
-export function InitiationPathway({ modules, isRead, ready, expiresAt, enforced = false, onOpen, onTest, onTutor, onLogout }: {
+export function InitiationPathway({ modules, isRead, ready, expiresAt, enforced = false, showHeader = true, onReturnPortal, onOpen, onTest, onTutor, onLogout }: {
   modules: CourseModule[]; isRead: (course: CourseModule) => boolean; ready: boolean;
-  expiresAt?: number; enforced?: boolean;
+  expiresAt?: number; enforced?: boolean; showHeader?: boolean; onReturnPortal?: () => void;
   onOpen: (course: CourseModule) => void; onTest: () => void; onTutor: () => void; onLogout: () => void;
 }) {
   const done = modules.filter(isRead).length;
   const next = modules.find(m => !isRead(m));
   return <section className="init-path" aria-labelledby="initiation-title">
-    <header className="init-path__brand"><div className="init-path__identity"><ArmpLogo size="md" /><span><b>ACADEMIA</b><small>Apprendre les marchés publics</small></span></div><button onClick={onLogout}><LogOut size={16} /> Se déconnecter</button></header>
+    {showHeader && <header className="init-path__brand"><div className="init-path__identity"><ArmpLogo size="md" /><span><b>ACADEMIA</b><small>Apprendre les marchés publics</small></span></div><button onClick={onLogout}><LogOut size={16} /> Se déconnecter</button></header>}
+    {onReturnPortal && <div className="init-path__actions"><button onClick={onReturnPortal}><ArrowRight size={17} style={{transform:"rotate(180deg)"}} /> Retour au portail</button></div>}
     <div className="init-path__layout">
       <aside className="init-path__intro"><span className="init-path__badge"><GraduationCap size={16} /> Votre parcours · Initiation</span><h1 id="initiation-title">{ready ? 'Vos modules sont terminés. Évaluez vos acquis.' : 'Des bases solides pour agir avec confiance.'}</h1><p>Comprenez les marchés publics, les acteurs et les bonnes pratiques, à votre rythme. Chaque chapitre vous rapproche du niveau approfondi.</p>
         <div className="init-path__progress"><strong>{done} <small>/ {modules.length} modules terminés</small></strong><progress value={done} max={Math.max(1,modules.length)} aria-label="Modules d’initiation terminés" /></div>

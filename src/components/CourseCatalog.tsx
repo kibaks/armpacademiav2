@@ -1,3 +1,4 @@
+import { getLearnerOnboarding } from '../utils/learnerOnboarding';
 import React, { useState, useMemo, useEffect } from 'react';
 import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
 import { 
@@ -51,6 +52,7 @@ interface CourseCatalogProps {
   isOfflineMode: boolean;
   onSelectSubCategoryForBreadcrumb?: (cat: string | null) => void;
   onPreviewCourse?: (course: CourseModule) => void;
+  onOpenInitiation?: () => void;
 }
 
 export const CourseCatalog: React.FC<CourseCatalogProps> = ({
@@ -63,8 +65,16 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   onToggleOfflineDownload,
   isOfflineMode,
   onSelectSubCategoryForBreadcrumb,
-  onPreviewCourse
+  onPreviewCourse,
+  onOpenInitiation
 }) => {
+  const onboarding = getLearnerOnboarding(currentProfile, courses);
+  const isLevelLocked = (course: CourseModule) => isAuthenticated && onboarding.required && !onboarding.modules.some(module => module.id === course.id);
+  const openAllowedCourse = (course: CourseModule) => {
+    if (isLevelLocked(course)) { onOpenInitiation?.(); return; }
+    onOpenCoursePlayer(course);
+  };
+
   const profileConfig = useMemo(
     () => getProfilePedagogicalConfig(currentProfile.role),
     [currentProfile.role]
@@ -290,6 +300,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
   return (
     <div className="space-y-6">
+      {isAuthenticated && onboarding.required && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950 flex flex-wrap justify-between items-center gap-3"><p className="text-sm">Terminez l’initiation et réussissez le test de niveau pour ouvrir les modules avancés.</p><button className="min-h-11 rounded-xl bg-[#0c3b7c] px-4 py-2 text-sm font-bold text-white" onClick={() => onOpenInitiation?.()}>Mon initiation</button></div>}
       
       {/* AI Recommendation Banner tailored to user role */}
       <div className="rounded-2xl bg-gradient-to-r from-blue-900 via-sky-900 to-indigo-950 p-5 sm:p-6 text-white shadow-lg border border-blue-800/60 relative overflow-hidden">
@@ -425,7 +436,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => onOpenCoursePlayer(activeCatalogGraphEntry.course)}
+                      onClick={() => openAllowedCourse(activeCatalogGraphEntry.course)}
                       className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
                     >
                       <Play className="w-3 h-3 fill-white" />
@@ -475,7 +486,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                       {activeCatalogGraphEntry.chapterGraph.map((ch) => (
                         <div
                           key={ch.index}
-                          onClick={() => onOpenCoursePlayer(activeCatalogGraphEntry.course)}
+                          onClick={() => openAllowedCourse(activeCatalogGraphEntry.course)}
                           className="cursor-pointer rounded-xl p-2 bg-slate-50 hover:bg-blue-50/70 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 transition flex flex-col justify-between"
                           title={`${ch.shortLabel} : ${ch.title} (${ch.progressPct}%)`}
                         >
@@ -511,7 +522,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
                       {/* Barre Examen QCM */}
                       <div
-                        onClick={() => onOpenCoursePlayer(activeCatalogGraphEntry.course)}
+                        onClick={() => openAllowedCourse(activeCatalogGraphEntry.course)}
                         className="cursor-pointer rounded-xl p-2 bg-amber-50/70 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/60 transition flex flex-col justify-between"
                       >
                         <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1">
@@ -686,7 +697,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
                       <div className="space-y-1.5 pt-1">
                         <button
-                          onClick={() => onOpenCoursePlayer(course)}
+                          onClick={() => openAllowedCourse(course)}
                           className={`w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm cursor-pointer ${
                             isCompleted
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -1076,7 +1087,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                                 {course.code}
                               </span>
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                {course.level}
+                                {isLevelLocked(course) ? 'Verrouillé · Test de niveau' : course.level}
                               </span>
                             </div>
 
@@ -1155,6 +1166,8 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                                 <Lock className="w-3 h-3 text-amber-300" />
                                 <span>Se connecter pour visualiser</span>
                               </button>
+                            ) : isLevelLocked(course) ? (
+                              <button type="button" onClick={() => onOpenInitiation?.()} className="min-h-11 px-3 py-2 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 font-bold text-xs flex items-center gap-2"><Lock size={16} /> Test de niveau requis</button>
                             ) : needsDfat ? (
                               <button
                                 onClick={() => onOpenCgpmpRequestForm(course)}
@@ -1164,7 +1177,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                               </button>
                             ) : (
                               <button
-                                onClick={() => onOpenCoursePlayer(course)}
+                                onClick={() => openAllowedCourse(course)}
                                 className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition"
                               >
                                 Démarrer le cours
@@ -1218,7 +1231,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                         </span>
                       )}
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-900/80 text-amber-300 border border-amber-400/40 backdrop-blur-md">
-                        {course.level}
+                        {isLevelLocked(course) ? 'Verrouillé · Test de niveau' : course.level}
                       </span>
                     </div>
                   </div>
@@ -1359,7 +1372,9 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                           <Lock className="w-3.5 h-3.5 text-amber-300" />
                           <span>Se connecter</span>
                         </button>
-                      ) : needsDfat ? (
+                      ) : isLevelLocked(course) ? (
+                              <button type="button" onClick={() => onOpenInitiation?.()} className="min-h-11 px-3 py-2 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 font-bold text-xs flex items-center gap-2"><Lock size={16} /> Test de niveau requis</button>
+                            ) : needsDfat ? (
                         <button
                           onClick={() => onOpenCgpmpRequestForm(course)}
                           className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition"
@@ -1368,7 +1383,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                         </button>
                       ) : (
                         <button
-                          onClick={() => onOpenCoursePlayer(course)}
+                          onClick={() => openAllowedCourse(course)}
                           className={`px-4 py-2 rounded-xl text-white font-bold text-xs shadow-xs transition ${
                             isCardCompleted
                               ? 'bg-emerald-600 hover:bg-emerald-700'

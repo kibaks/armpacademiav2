@@ -56,6 +56,8 @@ interface HeaderProps {
   setIsDarkMode: (val: boolean | ((prev: boolean) => boolean)) => void;
   isOfflineMode: boolean;
   setIsOfflineMode: (val: boolean | ((prev: boolean) => boolean)) => void;
+  initiationRequired?: boolean;
+  onOpenInitiation?: () => void;
   onOpenTuteur?: () => void;
   onOpenPlacementQuiz?: () => void;
   totalCourses?: number;
@@ -78,6 +80,8 @@ export const Header: React.FC<HeaderProps> = ({
   setIsDarkMode,
   isOfflineMode,
   setIsOfflineMode,
+  initiationRequired = false,
+  onOpenInitiation,
   onOpenTuteur,
   onOpenPlacementQuiz,
   totalCourses: totalCoursesProp,
@@ -252,6 +256,10 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <div className="relative">
                 <button
+                  aria-label="Ouvrir le menu du profil"
+                  aria-expanded={isProfileMenuOpen}
+                  aria-controls="account-navigation"
+                  onKeyDown={event => { if (event.key === "Escape") setIsProfileMenuOpen(false); }}
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                   className="flex items-center space-x-2 p-1.5 sm:pl-2 sm:pr-3 rounded-2xl border border-slate-300 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-200/70 dark:hover:bg-slate-700/60 shadow-xs transition"
                 >
@@ -269,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {isProfileMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsProfileMenuOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-80 sm:w-88 sm:max-w-none bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-slate-100 dark:divide-slate-800 max-h-[85vh] overflow-y-auto">
+                    <div id="account-navigation" onKeyDown={event => { if (event.key === "Escape") { setIsProfileMenuOpen(false); event.currentTarget.parentElement?.querySelector("button")?.focus(); } }} className="absolute -right-12 sm:right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-80 sm:w-88 sm:max-w-none bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-slate-100 dark:divide-slate-800 max-h-[85vh] overflow-y-auto">
                       <div className="px-4 pb-3">
                         <div className="flex items-center space-x-3">
                           <img src={currentProfile.avatarUrl} alt={currentProfile.name} referrerPolicy="no-referrer" className="w-12 h-12 rounded-2xl object-cover border-2 border-[#114488] shadow-sm" />
@@ -292,6 +300,9 @@ export const Header: React.FC<HeaderProps> = ({
                       {/* Autres items — seulement en mode connecté */}
                       <div className="p-2 space-y-1">
                         <p className="px-3 pt-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Espace connecté</p>
+                        <button onClick={() => { setActiveTab('accueil'); setIsProfileMenuOpen(false); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold text-slate-800 dark:text-slate-100 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center gap-3"><Home size={18} /> Revenir au portail</button>
+                        {initiationRequired && <button onClick={() => { onOpenInitiation?.(); setIsProfileMenuOpen(false); }} className="w-full text-left px-3 py-3 rounded-xl text-sm font-bold text-blue-800 dark:text-blue-200 hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center gap-3"><GraduationCap size={18} /> Mon parcours d’initiation</button>}
+
                         <button onClick={() => { setActiveTab('profil'); setIsProfileMenuOpen(false); if(onNavigateProfileTab) onNavigateProfileTab('suivi'); }} className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-[#114488] dark:hover:text-blue-300 flex items-center justify-between transition">
                           <div className="flex items-center space-x-2.5">
                             <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-700 dark:text-purple-300"><User className="w-4 h-4" /></div>
@@ -653,6 +664,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 ))}
               </div>
+              {initiationRequired && <button onClick={() => { onOpenInitiation?.(); setIsMobileMenuOpen(false); }} className="w-full p-3 rounded-xl text-sm font-bold text-blue-800 dark:text-blue-200 flex items-center gap-2"><GraduationCap size={18} /> Mon initiation</button>}
               <button onClick={() => { setActiveTab('textes'); setIsMobileMenuOpen(false); }} className="w-full p-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center space-x-2"><FileText className="w-4 h-4 text-emerald-600" /><span>Bibliothèque</span></button>
               <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className="w-full p-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center space-x-2"><BarChart3 className="w-4 h-4 text-amber-600" /><span>Observatoire</span></button>
               {(currentProfile.role === 'dfat_admin' || currentProfile.role === 'super_admin') && (

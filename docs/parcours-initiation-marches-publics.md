@@ -99,3 +99,7 @@ Les SVG suivent désormais la phrase de narration en cours et mettent en éviden
 L’écran ne retranscrit pas le discours : il conserve au maximum deux phrases essentielles de 24 mots chacune, issues du texte ou de la synthèse pédagogique. La narration et la transcription gardent le développement intégral. Le SVG suit toujours la phrase orale détaillée, indépendamment de la synthèse affichée. Les phrases longues ne sont pas tronquées : une synthèse ou une question pédagogique courte est utilisée.
 
 La limite d’affichage est désormais une seule phrase de 12 mots et 96 caractères maximum. Les titres longs sont remplacés par un intitulé court, avec le titre complet conservé dans son infobulle. Les développements du panneau méthodologique et l’objectif personnalisé sont repliés par défaut ; ils restent consultables à la demande. Un audit sur les 520 scènes du catalogue contrôle la taille des synthèses affichées.
+
+## Navigation de l’apprenant
+
+L’initiation s’ouvre à la connexion dans l’en-tête commun de la plateforme. Le menu du profil reste accessible ; « Revenir au portail » et « Mon parcours d’initiation » permettent de circuler sans perdre les acquis. Le catalogue et le profil sont consultables, mais les cours hors initiation et leur ajout hors ligne restent verrouillés tant que le niveau supérieur n’est pas confirmé par le serveur. Terminer la lecture ouvre uniquement le test, pas les modules avancés.
