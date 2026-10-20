@@ -56,7 +56,7 @@ interface CourseCatalogProps {
 }
 
 export const CourseCatalog: React.FC<CourseCatalogProps> = ({
-  courses,
+  courses: allCourses,
   currentProfile,
   isAuthenticated = true,
   onRequireAuth,
@@ -68,7 +68,8 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   onPreviewCourse,
   onOpenInitiation
 }) => {
-  const onboarding = getLearnerOnboarding(currentProfile, courses);
+  const courses = useMemo(() => allCourses.filter(course => course.level !== 'Fondamental' && !course.id.startsWith('INIT-')), [allCourses]);
+  const onboarding = getLearnerOnboarding(currentProfile, allCourses);
   const isLevelLocked = (course: CourseModule) => isAuthenticated && onboarding.required && !onboarding.modules.some(module => module.id === course.id);
   const openAllowedCourse = (course: CourseModule) => {
     if (isLevelLocked(course)) { onOpenInitiation?.(); return; }
@@ -127,7 +128,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
   // Categories list
   const categories = ['Tous', 'Réglementation', 'Passation', 'Contrôle', 'Contentieux', 'Gestion & Audit'];
-  const levels = ['Tous', 'Fondamental', 'Intermédiaire', 'Avancé', 'Spécialisé'];
+  const levels = ['Tous', 'Intermédiaire', 'Avancé', 'Spécialisé'];
   const audiences: { label: string; roleKey: string }[] = [
     { label: 'Tous les publics', roleKey: 'Tous' },
     { label: 'PME & Sous-Traitants (Loi 17/001)', roleKey: 'pme' },
