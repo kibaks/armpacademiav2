@@ -1071,7 +1071,7 @@ export default function App() {
 
       {/* Main Container Viewport */}
       <main className="flex-1">
-        {isAuthenticated && onboarding.required && activeTab !== 'initiation' && <section aria-label="Votre parcours d’initiation" className="max-w-7xl mx-auto m-4 p-4 rounded-2xl border border-blue-200 bg-blue-50 text-blue-950 flex flex-wrap items-center justify-between gap-3">
+        {isAuthenticated && onboarding.required && activeTab !== 'initiation' && activeTab !== 'catalogue' && <section aria-label="Votre parcours d’initiation" className="max-w-7xl mx-auto m-4 p-4 rounded-2xl border border-blue-200 bg-blue-50 text-blue-950 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm">Les modules avancés restent verrouillés jusqu’à la réussite du test de niveau.</p>
           <button className="min-h-11 rounded-xl bg-[#0c3b7c] text-white px-4 py-2 text-sm font-bold" onClick={() => setActiveTab('initiation')}>Reprendre mon initiation</button>
         </section>}
