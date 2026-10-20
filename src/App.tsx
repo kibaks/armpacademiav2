@@ -273,7 +273,8 @@ export default function App() {
       const user = auth.currentUser;
       const active = () => generation === sessionGeneration.current && auth.currentUser === user;
       if (!user || lastSessionUid !== user.uid) reset();
-      else setIsAuthenticated(false);
+      // Keep the verified identity visible while refreshing the same session.
+      // Invalid sessions and identity changes still reset through the checks below.
       try {
         if (!user) return;
         const token = await user.getIdTokenResult();
