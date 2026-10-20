@@ -73,7 +73,6 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   currentProfile,
   allProfiles,
-  onSelectRole,
   activeTab,
   setActiveTab,
   isDarkMode,
@@ -497,99 +496,6 @@ export const Header: React.FC<HeaderProps> = ({
                             <ChevronRight className="w-4 h-4 text-slate-400" />
                           </button>
                         )}
-                      </div>
-
-                      {/* Sélecteur rapide de profil démo institutionnel selon les 4 catégories */}
-                      <div className="p-2.5 pt-2 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-2 max-h-80 overflow-y-auto">
-                        <p className="px-1 text-[10px] font-black uppercase tracking-wide text-slate-400 flex items-center justify-between">
-                          <span>Changer de profil officiel</span>
-                          <span className="text-amber-500 font-bold">Instantané</span>
-                        </p>
-
-                        {/* 1. Autorité Contractante */}
-                        <div>
-                          <p className="text-[10px] font-extrabold text-slate-500 px-1 mb-1">🏛️ Autorité Contractante</p>
-                          <div className="grid grid-cols-1 gap-1">
-                            <button
-                              onClick={() => { onSelectRole('cgpmp_member'); setIsProfileMenuOpen(false); }}
-                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'cgpmp_member' ? 'bg-[#0C3B7C] text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-blue-50'}`}
-                            >
-                              <span className="truncate">Membre de la cellule (CGPMP)</span>
-                              {currentProfile.role === 'cgpmp_member' && <span className="text-[10px]">✓</span>}
-                            </button>
-                            <button
-                              onClick={() => { onSelectRole('ac_agent'); setIsProfileMenuOpen(false); }}
-                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'ac_agent' ? 'bg-[#0C3B7C] text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-blue-50'}`}
-                            >
-                              <span className="truncate">Autre agent AC (DAF / Audit)</span>
-                              {currentProfile.role === 'ac_agent' && <span className="text-[10px]">✓</span>}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* 2. Opérateurs Économiques */}
-                        <div>
-                          <p className="text-[10px] font-extrabold text-slate-500 px-1 mb-1">🏢 Opérateurs Économiques</p>
-                          <div className="grid grid-cols-1 gap-1">
-                            <button
-                              onClick={() => { onSelectRole('pme'); setIsProfileMenuOpen(false); }}
-                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'pme' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-teal-50'}`}
-                            >
-                              <span className="truncate">PME & Sous-traitant (Loi 17/001)</span>
-                              {currentProfile.role === 'pme' && <span className="text-[10px]">✓</span>}
-                            </button>
-                            <button
-                              onClick={() => { onSelectRole('grande_entreprise'); setIsProfileMenuOpen(false); }}
-                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'grande_entreprise' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-teal-50'}`}
-                            >
-                              <span className="truncate">Grandes entreprises (BTP / Travaux)</span>
-                              {currentProfile.role === 'grande_entreprise' && <span className="text-[10px]">✓</span>}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* 3 & 4. Sociétés Civiles & Indépendant */}
-                        <div>
-                          <p className="text-[10px] font-extrabold text-slate-500 px-1 mb-1">⚖️ Société Civile & 👤 Indépendant</p>
-                          <div className="grid grid-cols-1 gap-1">
-                            <button
-                              onClick={() => { onSelectRole('societe_civile'); setIsProfileMenuOpen(false); }}
-                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'societe_civile' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50'}`}
-                            >
-                              <span className="truncate">Sociétés civiles (Observatoire)</span>
-                              {currentProfile.role === 'societe_civile' && <span className="text-[10px]">✓</span>}
-                            </button>
-                            <button
-                              onClick={() => { onSelectRole('independant'); setIsProfileMenuOpen(false); }}
-                              className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-bold transition flex items-center justify-between gap-1.5 ${currentProfile.role === 'independant' ? 'bg-cyan-600 text-white shadow-xs' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-cyan-50'}`}
-                            >
-                              <span className="truncate">Indépendant (Consultant & Expert)</span>
-                              {currentProfile.role === 'independant' && <span className="text-[10px]">✓</span>}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Autres : ARMP, DGCMP, Formateur */}
-                        <div className="pt-1 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-1">
-                          <button
-                            onClick={() => { onSelectRole('armp_agent'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1 rounded text-[10px] font-bold transition ${currentProfile.role === 'armp_agent' ? 'bg-amber-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                          >
-                            ⚖️ ARMP
-                          </button>
-                          <button
-                            onClick={() => { onSelectRole('dgcmp_agent'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1 rounded text-[10px] font-bold transition ${currentProfile.role === 'dgcmp_agent' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                          >
-                            🛡️ DGCMP
-                          </button>
-                          <button
-                            onClick={() => { onSelectRole('formateur'); setIsProfileMenuOpen(false); }}
-                            className={`px-2 py-1 rounded text-[10px] font-bold transition ${currentProfile.role === 'formateur' ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                          >
-                            🎓 Formateur
-                          </button>
-                        </div>
                       </div>
 
                       <div className="p-2 pt-2">
