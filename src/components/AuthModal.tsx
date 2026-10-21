@@ -972,16 +972,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   // ---------- 2FA : envoi / vérification du code ----------
-  const beginTwoFA = async (profile: UserProfile) => {
+  const beginTwoFA = async (profile: UserProfile, enroll = !profile.twoFactorEnabled && !profile.initiationOtpRequired) => {
+    setMode('login');
     setTwoFAProfile(profile);
     setOtp2FA('');
+    setOtp2FAHint(null);
     setOtp2FAError(null);
     setIsSending2FA(true);
     try {
       const res = await authenticatedFetch('/api/2fa/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enroll: !profile.twoFactorEnabled && !profile.initiationOtpRequired }),
+        body: JSON.stringify({ enroll }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -1462,7 +1464,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           : await firebaseRegisterUser(emailInput.trim(), passwordInput, finalComposedName || nameInput.trim(), selectedRole, extraDetails);
 
         onShowToast?.(`Inscription complétée avec succès ! Bienvenue ${userProfile.name}.`);
-        if (enable2FAOnRegister) { await beginTwoFA(userProfile); return; }
+        if (enable2FAOnRegister) { await beginTwoFA({ ...userProfile, twoFactorEnabled: false }, true); return; }
         onLoginSuccess?.(userProfile);
         onClose();
       } catch (err) {
