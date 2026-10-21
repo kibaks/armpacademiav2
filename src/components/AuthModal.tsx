@@ -1,3 +1,4 @@
+import { OtpInput } from './OtpInput';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -1838,16 +1839,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         </div>
                       )}
 
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={6}
-                        autoFocus
-                        value={otp2FA}
-                        onChange={(e) => setOtp2FA(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Code à 6 chiffres (ex : 123456)"
-                        className="w-full text-center tracking-widest text-lg font-mono px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
-                      />
+                      <OtpInput value={otp2FA} onChange={setOtp2FA} autoFocus disabled={isVerifying2FA || isSending2FA} />
 
                       <div className="flex gap-2">
                         <button

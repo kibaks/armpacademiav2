@@ -1,3 +1,4 @@
+import { OtpInput } from './OtpInput';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef } from 'react';
 import { 
@@ -79,7 +80,6 @@ import {
   filterInstitutionMask,
   filterRoleTitleMask,
   formatMatriculeOrRccmMask,
-  filterOtpMask,
   DRC_PROVINCES
 } from '../utils/inputMasks';
 import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
@@ -3858,12 +3858,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             </div>
 
             <div className="text-center space-y-3 text-xs">
-              <div className="w-32 h-32 mx-auto rounded-2xl bg-white p-2 border-2 border-slate-300 flex items-center justify-center shadow-inner">
-                <QrCode className="w-24 h-24 text-slate-900" />
-              </div>
-              <p className="text-slate-600 dark:text-slate-300">
-                Scannez ce QR Code avec Google Authenticator ou saisissez le code de vérification à 6 chiffres envoyé à votre adresse email.
-              </p>
+              <p className="text-slate-600 dark:text-slate-300">Saisissez le code à six chiffres envoyé à votre adresse email. Il est valable dix minutes.</p>
             </div>
 
             {otp2FAHint && (
@@ -3878,16 +3873,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             )}
 
             <form onSubmit={handleConfirm2FAActivation} className="space-y-3 pt-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otpInput}
-                onChange={(e) => setOtpInput(filterOtpMask(e.target.value))}
-                placeholder="Entrez le code à 6 chiffres (ex: 123456)"
-                className="w-full text-center tracking-widest text-lg font-mono px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
-                required
-              />
+              <OtpInput value={otpInput} onChange={setOtpInput} autoFocus disabled={isVerifying2FA} />
 
               <button
                 type="submit"

@@ -1,3 +1,4 @@
+import { authEmailConfigured, sendOtpEmail } from './authEmail.js';
 import { Router } from 'express';
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { authenticate, authenticateIdentity, services } from './admin.js';
@@ -19,8 +20,7 @@ authRouter.get('/auth/session', authenticate, wrap(async (req, res) => {
 authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
   const identity = req.identity;
   if (!identity.email || !identity.auth_time) return res.status(400).json({ error: 'Une session avec une adresse email est requise.' });
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return res.status(503).json({ error: 'Le code ne peut pas être envoyé pour le moment. Réessayez plus tard.' });
+  if (!authEmailConfigured()) return res.status(503).json({ error: 'Le code ne peut pas être envoyé pour le moment. Réessayez plus tard.' });
   const db = services().db;
   const ref = db.collection('mfaChallenges').doc(String(identity.appSessionId || identity.uid));
   const code = String(randomInt(100000, 1000000));
@@ -39,8 +39,7 @@ authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
   });
   if (!accepted) return res.status(429).json({ error: 'Attendez une minute avant de demander un nouveau code.' });
   try {
-    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.AUTH_EMAIL_FROM || 'ARMP RDC Academia <no-reply@armp-rdc.org>', to: [identity.email], subject: 'Votre code de vérification ACADEMIA', text: `Votre code : ${code}. Valable 10 minutes. Ne le partagez avec personne.` }), signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error('delivery-failed');
+    await sendOtpEmail(identity.email, code);
     await db.runTransaction(async tx => { const current = (await tx.get(ref)).data(); if (current?.salt === salt) tx.update(ref, { delivered: true }); });
     return res.json({ ok: true });
   } catch {
