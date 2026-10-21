@@ -516,6 +516,17 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
+      {activeTab !== 'accueil' && activeTab !== 'initiation' && (
+        <div className="px-3 sm:px-6 lg:px-8 pb-2">
+          <button
+            onClick={() => { setIsProfileMenuOpen(false); setIsMobileMenuOpen(false); setActiveTab('accueil'); }}
+            className="min-h-11 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#0C3B7C] hover:bg-blue-100 dark:text-blue-200 dark:hover:bg-slate-800"
+          >
+            <Home size={17} /> Retour au portail
+          </button>
+        </div>
+      )}
+
       {/* Mobile Drawer — seulement Catalogue / Demander + profil connecté */}
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 animate-in slide-in-from-top-2 shadow-lg max-h-[85vh] overflow-y-auto">
