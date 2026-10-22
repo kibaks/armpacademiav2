@@ -1284,6 +1284,14 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   isLastChapter={activeLessonIndex >= safeLessons.length - 1}
                   autoOpenSummaryVideo={openSummaryVideoNow}
                   onCloseSummaryVideo={() => setOpenSummaryVideoNow(false)}
+                  onOpenSummaryChapter={index => {
+                    const prerequisite = getFirstUnvalidatedPrereq(index);
+                    if (prerequisite !== null) { handleOpenValidationTest(prerequisite); return; }
+                    setActiveLessonIndex(index);
+                    setMode('reading');
+                    setIsMobileChaptersOpen(false);
+                    stopSpeech();
+                  }}
                 />
 
                 {/* OPTIONAL COMPLEMENTARY MEDIA IF UPLOADED (PDF / VISIO / VIDEO) */}

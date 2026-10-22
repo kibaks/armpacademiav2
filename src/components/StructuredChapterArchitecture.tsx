@@ -1,3 +1,5 @@
+import { buildModuleSummary } from '../utils/moduleSummary';
+import { LessonContextIllustration } from './LessonContextIllustration';
 import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -30,7 +32,6 @@ import { speechService } from '../utils/speechService';
 import { ambientMusicService } from '../utils/ambientMusicService';
 import {
   buildSynchronizedLessonScreens,
-  RealisticDrawingHandSVG
 } from './ProfessorFilmScenes';
 import { AishaAvatar } from './AishaAvatar';
 
@@ -46,6 +47,7 @@ interface StructuredChapterArchitectureProps {
   isLastChapter: boolean;
   autoOpenSummaryVideo?: boolean;
   onCloseSummaryVideo?: () => void;
+  onOpenSummaryChapter?: (index: number) => void;
 }
 
 interface ChapterCaseOption {
@@ -436,13 +438,13 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
   course: CourseModule;
   currentProfile: UserProfile;
   onClose?: () => void;
-}> = ({ course, currentProfile, onClose }) => {
+  onOpenChapter?: (index: number) => void;
+}> = ({ course, currentProfile, onClose, onOpenChapter }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(() => ambientMusicService.getState().enabled);
   const [activeSeqIdx, setActiveSeqIdx] = useState(0);
   const [seqProgress, setSeqProgress] = useState(0); // 0..1 inside active sequence
-  const [tick, setTick] = useState(0);
 
   const summaryId = `course-summary-video-${course.id}`;
 
@@ -461,74 +463,7 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
     }
   }, [isPlaying]);
 
-  // Build 5 concise summary sequences covering the whole course across the 5 pedagogical pillars
-  const sequences = useMemo(() => {
-    const lessons = Array.isArray(course.lessons) && course.lessons.length > 0 ? course.lessons : [];
-    const legal = course.legalRef || 'Loi n° 10/010 du 27 avril 2010';
-
-    return [
-      {
-        num: 1,
-        pillarTag: "1. L'ENJEU DU COURS",
-        title: `Les enjeux du module`,
-        color: '#D97706',
-        cards: [
-          { tag: 'CAS TERRAIN', sub: 'Prévenir tout rejet ou blocage de dossier', icon: 'warning_shield' },
-          { tag: 'LOI 10/010', sub: `Respect strict : ${legal.slice(0, 32)}`, icon: 'law_scale' },
-          { tag: 'OBJECTIF', sub: `Maîtriser les ${lessons.length} chapitres opérationnels`, icon: 'target_gauge' }
-        ],
-        spoken: `Bonjour et bienvenue, ${currentProfile.name}, c'est un vrai plaisir de vous retrouver aujourd'hui. Prenons un instant ensemble pour découvrir l'essentiel de ce module consacré à ${course.title}. Tout l'enjeu ici, voyez-vous, c'est vraiment de vous permettre d'éviter les blocages de dossiers, et de sécuriser sereinement chaque procédure sur le terrain.`
-      },
-      {
-        num: 2,
-        pillarTag: '2. LE PRINCIPE & LES RÔLES',
-        title: 'Règle d’or, Flux & Séparation des pouvoirs',
-        color: '#2563EB',
-        cards: [
-          { tag: 'RÈGLE D’OR', sub: 'L’appel d’offres ouvert est la règle', icon: 'open_scale' },
-          { tag: 'FLUX VISUEL', sub: 'Étape 01 (PPM) ➔ 02 (DAO) ➔ 03 (ANO)', icon: 'flow_steps' },
-          { tag: '3 ORGANES', sub: 'CGPMP prépare • DGCMP contrôle • ARMP régule', icon: 'triad_pillars' }
-        ],
-        spoken: `Mais alors... quel est le principe fondamental à garder en tête ? C'est notre règle d'or : l'appel d'offres ouvert et la stricte séparation des rôles. ... Tandis que la cellule de gestion prépare et évalue les offres, la direction générale du contrôle délivre son feu vert préalable... et l'autorité de régulation veille à l'équité pour tous.`
-      },
-      {
-        num: 3,
-        pillarTag: '3. LA PRATIQUE TERRAIN',
-        title: 'Check-list d’action, Vigilance & Visas',
-        color: '#059669',
-        cards: [
-          { tag: 'CHECK-LIST', sub: 'Vérifier PPM + Crédits + DAO complet', icon: 'checklist_board' },
-          { tag: 'INTERDICTION', sub: 'Zéro saucissonnage ni hors-seuil', icon: 'no_scissors' },
-          { tag: 'VISA REQUIS', sub: 'PV signé + ANO DGCMP obligatoire', icon: 'ano_shield' }
-        ],
-        spoken: `Sur le terrain, écoutez bien mon conseil de vigilance. Ayez toujours trois réflexes qui vous protégeront... vérifier d'abord l'inscription au plan de passation, refuser catégoriquement tout fractionnement artificiel du besoin... et attendre impérativement l'avis de non-objection avant d'engager la suite.`
-      },
-      {
-        num: 4,
-        pillarTag: '4. LE BILAN & LIVRABLES',
-        title: 'Les 3 Idées Clés & Modèles Téléchargeables',
-        color: '#7C3AED',
-        cards: [
-          { tag: 'MODÈLE DAO', sub: 'Canevas type ARMP prêt à l’emploi', icon: 'doc_dao' },
-          { tag: 'DÉPOUILLEMENT', sub: 'Grille officielle d’évaluation CGPMP', icon: 'doc_grid' },
-          { tag: 'RECOURS & VISA', sub: 'Formulaire de requête & liste ANO', icon: 'doc_crd' }
-        ],
-        spoken: `Rassurez-vous... pour vous accompagner concrètement au bureau, vous retrouverez dans chaque chapitre les trois idées maîtresses... ainsi que des modèles officiels prêts à l'emploi, notamment le dossier type d'appel d'offres et la grille de dépouillement.`
-      },
-      {
-        num: 5,
-        pillarTag: '5. LA VÉRIFICATION FINALE',
-        title: 'Quiz pratiques, Études de cas & Certification',
-        color: '#E11D48',
-        cards: [
-          { tag: 'QUIZ RAPIDE', sub: 'QCM ciblé sur les cas pratiques', icon: 'quiz_check' },
-          { tag: 'ÉTUDE DE CAS', sub: 'Arbitrage d’un scénario réel terrain', icon: 'case_compass' },
-          { tag: 'CERTIFICAT', sub: 'Validation & Attestation ARMP ✓', icon: 'trophy_seal' }
-        ],
-        spoken: `Enfin... prenez tranquillement le temps de tester vos réflexes avec le quiz pratique et l'étude de cas de chaque chapitre... afin de valider sereinement votre parcours, et d'obtenir votre certificat officiel.`
-      }
-    ];
-  }, [course, currentProfile.name]);
+  const sequences = useMemo(() => buildModuleSummary(course), [course]);
 
   // Subscribe to speechService for exact synchronization when voice is active
   useEffect(() => {
@@ -550,10 +485,9 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
-      setTick((t) => t + 1);
       const st = speechService.getState();
       const voiceDriving = !isMuted && st.isPlaying && st.currentId === summaryId;
-      if (!voiceDriving) {
+      if (isMuted && !voiceDriving) {
         setSeqProgress((prev) => {
           const next = prev + 0.0085;
           if (next >= 1) {
@@ -628,25 +562,6 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
   const currentSeq = sequences[activeSeqIdx] || sequences[0];
   const overallPct = Math.min(100, Math.round(((activeSeqIdx + seqProgress) / sequences.length) * 100));
 
-  // Sketch the essential illustration on the left (seqProgress 0..0.20) while writing the 3 fundamental lines (seqProgress 0.06..0.88) in lockstep with the voice
-  const isSketchingIllustration = seqProgress < 0.06;
-  const sketchRatio = Math.min(1, seqProgress / 0.22);
-  const writeProgress = Math.min(1, Math.max(0, (seqProgress - 0.06) / 0.82));
-  const cardIdx = writeProgress < 0.34 ? 0 : writeProgress < 0.68 ? 1 : 2;
-  const localCardRatio =
-    cardIdx === 0
-      ? writeProgress / 0.34
-      : cardIdx === 1
-      ? (writeProgress - 0.34) / 0.34
-      : (writeProgress - 0.68) / 0.32;
-
-  const handX = isSketchingIllustration
-    ? 384 + Math.cos(sketchRatio * Math.PI * 2) * 34
-    : 520 + Math.min(1, Math.max(0, localCardRatio)) * 270;
-  const handY = isSketchingIllustration
-    ? 172 + Math.sin(sketchRatio * Math.PI * 2) * 32
-    : 112 + cardIdx * 62 + Math.sin(localCardRatio * Math.PI * 8) * 1.6;
-
   return (
     <div className="rounded-3xl border-2 border-amber-400/60 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-4 sm:p-5 shadow-2xl space-y-4">
       {/* Top Bar */}
@@ -658,7 +573,7 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase tracking-wider">
-                🎬 Petite Vidéo Résumant le Cours (Croquis Essentiel &amp; Points Fondamentaux)
+                L’essentiel du module
               </span>
               <span className="text-[11px] font-mono font-bold text-cyan-300">
                 {course.code} • {course.legalRef}
@@ -677,7 +592,7 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
             className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
           >
             {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-            <span>{isPlaying ? 'Pause Résumé' : 'Lancer la Vidéo Résumé'}</span>
+            <span>{isPlaying ? 'Pause' : 'Écouter le résumé'}</span>
           </button>
           <button
             type="button"
@@ -725,205 +640,25 @@ export const CourseSummaryMiniVideoPlayer: React.FC<{
         </div>
       </div>
 
-      {/* Widescreen Animated Summary Video Canvas */}
-      <div className="relative w-full aspect-[16/7] min-h-[260px] sm:min-h-[310px] rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
-        <svg viewBox="0 0 860 320" className="w-full h-full block" preserveAspectRatio="xMidYMid meet">
-          <rect x="0" y="0" width="860" height="320" fill="#0F172A" />
-
-          {/* Left Studio Card: Aïsha + Course Identity */}
-          <rect x="14" y="14" width="252" height="292" rx="16" fill="#1E293B" stroke={currentSeq.color} strokeWidth="2.5" />
-          <rect x="26" y="26" width="228" height="26" rx="8" fill="#0F172A" />
-          <text x="140" y="43" textAnchor="middle" fill="#FBBF24" fontSize="9" fontWeight="900">
-            🎨 L&apos;ESSENTIEL EN CROQUIS &amp; MOTS CLÉS
-          </text>
-
-          <foreignObject x="92" y="60" width="96" height="96">
-            <div className="w-full h-full flex items-center justify-center">
-              <AishaAvatar
-                isSpeaking={isPlaying && !isMuted}
-                size={92}
-                showBadge={false}
-                className="rounded-full border-2 border-amber-400 shadow-lg"
-              />
-            </div>
-          </foreignObject>
-          <text x="140" y="174" textAnchor="middle" fill="#FFFFFF" fontSize="11" fontWeight="900">
-            Prof. Aïsha • Résumé {course.code}
-          </text>
-          <text x="140" y="191" textAnchor="middle" fill="#94A3B8" fontSize="8.8" fontWeight="700">
-            {course.legalRef}
-          </text>
-
-          {/* 5 Pillar Mini Progress Dots */}
-          <g transform="translate(33, 212)">
-            {sequences.map((s, idx) => {
-              const done = idx < activeSeqIdx;
-              const cur = idx === activeSeqIdx;
-              return (
-                <g key={s.num} transform={`translate(${idx * 40}, 0)`}>
-                  <rect
-                    x="0"
-                    y="0"
-                    width="34"
-                    height="24"
-                    rx="7"
-                    fill={cur ? s.color : done ? '#065F46' : '#0F172A'}
-                    stroke={cur ? '#FBBF24' : '#334155'}
-                    strokeWidth="1.5"
-                  />
-                  <text x="17" y="15.5" textAnchor="middle" fill="#FFFFFF" fontSize="9" fontWeight="900">
-                    {done ? '✓' : `${s.num}/5`}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
-
-          <rect x="26" y="250" width="228" height="42" rx="10" fill="#0F172A" stroke="#334155" strokeWidth="1.2" />
-          <text x="140" y="267" textAnchor="middle" fill="#6EE7B7" fontSize="8.5" fontWeight="900">
-            PROGRESSION DU RÉSUMÉ : {overallPct}%
-          </text>
-          <rect x="40" y="275" width="200" height="6" rx="3" fill="#1E293B" />
-          <rect x="40" y="275" width={Math.max(6, 2 * overallPct)} height="6" rx="3" fill="#10B981" />
-
-          {/* Right Clean Whiteboard: 1 Essential Illustration + 3 Fundamental Points Written */}
-          <rect x="280" y="14" width="566" height="292" rx="16" fill="#FFFDF9" stroke={currentSeq.color} strokeWidth="3" />
-          <rect x="280" y="14" width="566" height="50" rx="14" fill="#0F172A" />
-          <text x="298" y="33" fill="#FBBF24" fontSize="9" fontWeight="900">
-            {currentSeq.pillarTag} • ÉTAPE {currentSeq.num}/5
-          </text>
-          <text x="298" y="52" fill="#FFFFFF" fontSize="13" fontWeight="900">
-            {currentSeq.title}
-          </text>
-
-          {/* LEFT OF WHITEBOARD (x=296..472): 1 Single Essential Hand-Drawn Illustration */}
-          <g transform="translate(296, 78)">
-            <rect
-              x="0"
-              y="0"
-              width="176"
-              height="212"
-              rx="14"
-              fill="#F8FAFC"
-              stroke={currentSeq.color}
-              strokeWidth="2"
-              strokeDasharray="520"
-              strokeDashoffset={Math.max(0, 520 * (1 - sketchRatio))}
-            />
-            <text x="88" y="22" textAnchor="middle" fill={currentSeq.color} fontSize="8.5" fontWeight="900">
-              CROQUIS ESSENTIEL
-            </text>
-
-            {/* Clean Single Essential Symbol Drawn by Hand */}
-            <g
-              transform="translate(28, 38)"
-              stroke={currentSeq.color}
-              strokeWidth="3"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray="340"
-              strokeDashoffset={Math.max(0, 340 * (1 - sketchRatio))}
-            >
-              {activeSeqIdx === 0 && (
-                <g>
-                  <path
-                    d="M 60 6 L 106 22 L 106 58 C 106 88 60 108 60 108 C 60 108 14 88 14 58 L 14 22 Z"
-                    fill={sketchRatio > 0.6 ? `${currentSeq.color}18` : 'none'}
-                  />
-                  <polyline points="40,58 55,73 84,42" strokeWidth="4" />
-                </g>
-              )}
-              {activeSeqIdx === 1 && (
-                <g>
-                  <line x1="60" y1="14" x2="60" y2="98" strokeWidth="3.5" />
-                  <line x1="20" y1="36" x2="100" y2="36" strokeWidth="3.5" />
-                  <polygon points="20,36 6,66 34,66" fill={sketchRatio > 0.6 ? '#DBEAFE' : 'none'} />
-                  <polygon points="100,36 86,66 114,66" fill={sketchRatio > 0.6 ? '#D1FAE5' : 'none'} />
-                  <rect x="38" y="98" width="44" height="10" rx="4" />
-                </g>
-              )}
-              {activeSeqIdx === 2 && (
-                <g>
-                  <rect x="18" y="10" width="84" height="98" rx="10" fill={sketchRatio > 0.6 ? '#ECFDF5' : 'none'} />
-                  <polyline points="34,40 44,50 64,30" stroke="#059669" strokeWidth="3.5" />
-                  <polyline points="34,74 44,84 64,64" stroke="#059669" strokeWidth="3.5" />
-                </g>
-              )}
-              {activeSeqIdx === 3 && (
-                <g>
-                  <rect x="22" y="10" width="76" height="96" rx="8" fill={sketchRatio > 0.6 ? '#F3E8FF' : 'none'} />
-                  <line x1="38" y1="36" x2="82" y2="36" />
-                  <line x1="38" y1="56" x2="82" y2="56" />
-                  <line x1="38" y1="76" x2="68" y2="76" />
-                </g>
-              )}
-              {activeSeqIdx === 4 && (
-                <g>
-                  <circle cx="60" cy="52" r="40" fill={sketchRatio > 0.6 ? '#FFE4E6' : 'none'} />
-                  <polyline points="40,54 54,68 82,38" strokeWidth="4" />
-                </g>
-              )}
-            </g>
-
-            <rect x="14" y="172" width="148" height="26" rx="8" fill="#0F172A" opacity={sketchRatio} />
-            <text x="88" y="189" textAnchor="middle" fill="#FDE68A" fontSize="9" fontWeight="900" opacity={sketchRatio}>
-              {currentSeq.cards[0]?.tag}
-            </text>
-          </g>
-
-          {/* RIGHT OF WHITEBOARD (x=486..832): 3 Fundamental Elements Written Cleanly */}
-          <g transform="translate(486, 78)">
-            <text x="4" y="14" fill="#475569" fontSize="9" fontWeight="900">
-              ✍️ ÉLÉMENTS FONDAMENTAUX ÉCRITS AU TABLEAU :
-            </text>
-
-            {currentSeq.cards.map((cItem, cIdx) => {
-              const rowY = 26 + cIdx * 62;
-              const rowRatio =
-                !isSketchingIllustration && cIdx < cardIdx
-                  ? 1
-                  : !isSketchingIllustration && cIdx === cardIdx
-                  ? Math.max(0.08, Math.min(1, localCardRatio))
-                  : 0;
-              const visibleChars = Math.floor(cItem.sub.length * rowRatio);
-              const writtenSub = rowRatio >= 0.98 ? cItem.sub : cItem.sub.slice(0, visibleChars);
-
-              return (
-                <g key={cIdx} transform={`translate(0, ${rowY})`}>
-                  <rect
-                    x="0"
-                    y="0"
-                    width="344"
-                    height="52"
-                    rx="12"
-                    fill={rowRatio > 0 ? '#FFFFFF' : '#F8FAFC'}
-                    stroke={rowRatio > 0 ? currentSeq.color : '#E2E8F0'}
-                    strokeWidth={rowRatio > 0 && cIdx === cardIdx ? '2.4' : '1.5'}
-                  />
-                  <circle
-                    cx="24"
-                    cy="26"
-                    r="13"
-                    fill={rowRatio > 0 ? currentSeq.color : '#CBD5E1'}
-                  />
-                  <text x="24" y="30" textAnchor="middle" fill="#FFFFFF" fontSize="10" fontWeight="900">
-                    0{cIdx + 1}
-                  </text>
-                  <text x="46" y="20" fill={currentSeq.color} fontSize="8.8" fontWeight="900">
-                    {cItem.tag}
-                  </text>
-                  {rowRatio > 0 && (
-                    <text x="46" y="38" fill="#0F172A" fontSize="10.8" fontWeight="800">
-                      {writtenSub}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-      </div>
+      <section className="rounded-2xl bg-white p-4 sm:p-6 text-slate-900 space-y-4" aria-label="Résumé animé du module">
+        <div className="flex justify-between gap-3 text-xs font-bold text-blue-800">
+          <span>{currentSeq.pillarTag} / {sequences.length}</span><span>{overallPct}%</span>
+        </div>
+        <h3 className="text-lg sm:text-xl font-bold">{lessonDisplayHeading(currentSeq.title, 'Les notions essentielles')}</h3>
+        <div className="grid md:grid-cols-2 items-center gap-4">
+          <div className="min-w-0">
+            <LessonContextIllustration key={currentSeq.num} topic={currentSeq.title} progress={seqProgress} still={!isPlaying} labels={currentSeq.terms} narration={currentSeq.spoken} narrationProgress={seqProgress} />
+          </div>
+          <div className="space-y-4"><p key={currentSeq.num} className="text-xl sm:text-2xl font-bold leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-500">{currentSeq.caption}</p>
+            {onOpenChapter && <button type="button" onClick={() => { speechService.stop(); setIsPlaying(false); onOpenChapter(activeSeqIdx); }} className="min-h-11 rounded-xl bg-blue-800 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">Approfondir ce chapitre <ChevronRight className="inline h-4 w-4" /></button>}
+          </div>
+        </div>
+        <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden" aria-hidden="true"><div className="h-full bg-blue-700 transition-[width]" style={{width: overallPct + '%'}} /></div>
+        <details className="border-t border-slate-200 pt-3">
+          <summary className="cursor-pointer text-sm font-bold">Lire la synthèse du module</summary>
+          <ol className="mt-3 space-y-4">{sequences.map(seq => <li key={seq.num}><h4 className="font-bold text-sm">{seq.title}</h4><p className="text-sm leading-relaxed mt-1">{seq.spoken}</p></li>)}</ol>
+        </details>
+      </section>
 
       {/* 5 Sequence Jump Buttons */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -966,7 +701,8 @@ export const StructuredChapterArchitecture: React.FC<StructuredChapterArchitectu
   isChapterCompleted,
   isLastChapter,
   autoOpenSummaryVideo = false,
-  onCloseSummaryVideo
+  onCloseSummaryVideo,
+  onOpenSummaryChapter
 }) => {
   const [activePillarTab, setActivePillarTab] = useState<number>(0);
   const [showSummaryVideo, setShowSummaryVideo] = useState<boolean>(autoOpenSummaryVideo);
@@ -1106,6 +842,7 @@ export const StructuredChapterArchitecture: React.FC<StructuredChapterArchitectu
         <CourseSummaryMiniVideoPlayer
           course={course}
           currentProfile={currentProfile}
+          onOpenChapter={onOpenSummaryChapter ? index => { setShowSummaryVideo(false); onCloseSummaryVideo?.(); onOpenSummaryChapter(index); } : undefined}
           onClose={() => {
             setShowSummaryVideo(false);
             onCloseSummaryVideo?.();
