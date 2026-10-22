@@ -36,6 +36,7 @@ function profileDetails(details: any = {}) {
   return safe;
 }
 passwordRouter.post('/auth/profile', wrap(async (req, res) => {
+  req.accountStage = 'profile.verify-session';
   const identity = await nativeIdentity(req);
   const role = req.body?.role;
   const name = String(req.body?.name || '').trim();
@@ -43,6 +44,7 @@ passwordRouter.post('/auth/profile', wrap(async (req, res) => {
   const { auth, db } = services();
   const ref = db.collection('users').doc(identity.uid);
   const registeredAt = Date.now();
+  req.accountStage = 'profile.save';
   const created = await db.runTransaction(async tx => {
     if ((await tx.get(ref)).exists) return false;
     const accountRef = db.collection('authAccounts').doc(identity.uid);
@@ -52,7 +54,9 @@ passwordRouter.post('/auth/profile', wrap(async (req, res) => {
     return true;
   });
   if (!created) return res.status(409).json({ error: 'Le profil existe déjà.' });
+  req.accountStage = 'profile.assign-role';
   await auth.setCustomUserClaims(identity.uid, { ...(await auth.getUser(identity.uid)).customClaims, role });
+  req.accountStage = 'profile.issue-session';
   res.json(await issueSession(identity.uid, 'google', res));
 }));
 passwordRouter.post('/auth/login', wrap(async (req, res) => {
@@ -150,7 +154,9 @@ passwordRouter.post('/auth/password/confirm', wrap(async (req, res) => {
   res.status(ok ? 200 : 400).json(ok ? { ok: true } : { error: 'Lien expiré ou déjà utilisé.' });
 }));
 passwordRouter.use((error: any, _req: any, res: any, _next: any) => {
-  console.error('[Account API]', error?.code || 'unavailable');
+  const safeTag = (value: unknown) => typeof value === 'string' && /^[\w./:-]{1,100}$/.test(value) ? value : 'unavailable';
+  const frame = typeof error?.stack === 'string' ? error.stack.split('\n').slice(1).find((line: string) => /(?:api\.mjs|passwordAuth\.|nativeSession\.)/.test(line))?.trim() : undefined;
+  console.error('[Account API]', { stage: safeTag(_req.accountStage), code: safeTag(error?.code), type: safeTag(error?.name), ...(frame ? { frame } : {}) });
   if (error.code === 'app/invalid-service-account-config') return res.status(503).json({ code: 'AUTH_CONFIGURATION_INVALID', error: 'La configuration du service de connexion est invalide. Contactez l’administrateur.' });
   const exists = error.code === 'auth/email-already-exists';
   res.status(exists ? 409 : ['auth/invalid-id-token', 'auth/id-token-expired', 'auth/id-token-revoked', 'auth/user-disabled', 'auth/user-not-found'].includes(error.code) ? 401 : 503).json({ error: exists ? 'Cette adresse possède déjà un compte. Utilisez la connexion ou « Mot de passe oublié ».' : 'La connexion est momentanément indisponible. Réessayez plus tard.' });
