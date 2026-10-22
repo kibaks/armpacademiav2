@@ -301,7 +301,6 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
   return (
     <div className="space-y-6">
-      {isAuthenticated && onboarding.required && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950 flex flex-wrap justify-between items-center gap-3"><p className="text-sm">Terminez l’initiation et réussissez le test de niveau pour ouvrir les modules avancés.</p><button className="min-h-11 rounded-xl bg-[#0c3b7c] px-4 py-2 text-sm font-bold text-white" onClick={() => onOpenInitiation?.()}>Mon initiation</button></div>}
       
       {/* AI Recommendation Banner tailored to user role */}
       <div className="rounded-2xl bg-gradient-to-r from-blue-900 via-sky-900 to-indigo-950 p-5 sm:p-6 text-white shadow-lg border border-blue-800/60 relative overflow-hidden">

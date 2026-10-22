@@ -516,15 +516,21 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {activeTab !== 'accueil' && activeTab !== 'initiation' && (
-        <div className="px-3 sm:px-6 lg:px-8 pb-2">
-          <button
-            onClick={() => { setIsProfileMenuOpen(false); setIsMobileMenuOpen(false); setActiveTab('accueil'); }}
-            className="min-h-11 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#0C3B7C] hover:bg-blue-100 dark:text-blue-200 dark:hover:bg-slate-800"
-          >
-            <Home size={17} /> Retour au portail
-          </button>
-        </div>
+      {(activeTab !== 'accueil' && activeTab !== 'initiation' || isAuthenticated && initiationRequired && activeTab !== 'initiation') && (
+        <nav aria-label="Navigation du parcours" className="border-t border-white/10 bg-[#0C3B7C] px-3 text-white sm:px-6 lg:px-8">
+          <div className="mx-auto flex min-h-11 max-w-7xl flex-wrap items-center justify-between gap-x-4">
+            {activeTab !== 'accueil' && activeTab !== 'initiation' && <button type="button"
+              onClick={() => { setIsProfileMenuOpen(false); setIsMobileMenuOpen(false); setActiveTab('accueil'); }}
+              className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-blue-100 hover:text-white focus-visible:outline-2 focus-visible:outline-white">
+              <Home size={14} aria-hidden="true" /> Retour au portail
+            </button>}
+            {isAuthenticated && initiationRequired && activeTab !== 'initiation' && <button type="button"
+              onClick={() => { setIsProfileMenuOpen(false); setIsMobileMenuOpen(false); onOpenInitiation?.(); }}
+              className="ml-auto inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-white underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-white">
+              <GraduationCap size={15} aria-hidden="true" /> Reprendre l’initiation <ChevronRight size={13} aria-hidden="true" />
+            </button>}
+          </div>
+        </nav>
       )}
 
       {/* Mobile Drawer — seulement Catalogue / Demander + profil connecté */}
