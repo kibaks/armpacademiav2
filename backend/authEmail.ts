@@ -4,6 +4,14 @@ export function authEmailConfigured() {
   return Boolean(process.env.GMAIL_SMTP_USER && process.env.GMAIL_APP_PASSWORD || process.env.RESEND_API_KEY);
 }
 
+export function otpDeliveryFailure(error: unknown) {
+  const code = (error as { code?: string })?.code;
+  if (code === 'EAUTH') return { code: 'MAIL_AUTH_REJECTED', error: 'Le service de messagerie refuse la connexion. L’administrateur doit vérifier le mot de passe d’application Gmail.' };
+  if (code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND') return { code: 'MAIL_DEPENDENCY_MISSING', error: 'Le service d’envoi est indisponible sur ce déploiement. Contactez l’administrateur.' };
+  if (['ETIMEDOUT', 'ECONNECTION', 'ECONNREFUSED', 'ESOCKET', 'EDNS'].includes(code || '')) return { code: 'MAIL_CONNECTION_FAILED', error: 'Le serveur de messagerie est injoignable. Réessayez dans une minute.' };
+  return { code: 'MAIL_DELIVERY_FAILED', error: 'Le code n’a pas pu être envoyé. Réessayez dans une minute.' };
+}
+
 export async function sendOtpEmail(to: string, code: string) {
   const subject = 'Votre code de vérification ACADEMIA';
   const text = `Votre code : ${code}. Valable 10 minutes. Ne le partagez avec personne. Si vous n’avez pas demandé ce code, ignorez ce message.`;

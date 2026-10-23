@@ -1,4 +1,4 @@
-import { authEmailConfigured, sendOtpEmail } from './authEmail.js';
+import { authEmailConfigured, sendOtpEmail, otpDeliveryFailure } from './authEmail.js';
 import { Router } from 'express';
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { authenticate, authenticateIdentity, services } from './admin.js';
@@ -42,10 +42,12 @@ authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
     await sendOtpEmail(identity.email, code);
     await db.runTransaction(async tx => { const current = (await tx.get(ref)).data(); if (current?.salt === salt) tx.update(ref, { delivered: true }); });
     return res.json({ ok: true });
-  } catch {
+  } catch (error) {
     // A failed delivery never leaves a usable challenge.
+    const failure = otpDeliveryFailure(error);
+    console.error('[OTP delivery]', { code: failure.code, provider: process.env.GMAIL_SMTP_USER && process.env.GMAIL_APP_PASSWORD ? 'gmail' : 'resend' });
     await db.runTransaction(async tx => { const current = (await tx.get(ref)).data(); if (current?.salt === salt) tx.delete(ref); });
-    return res.status(503).json({ error: 'Envoi du code indisponible. Réessayez.' });
+    return res.status(503).json(failure);
   }
 }));
 authRouter.post('/2fa/verify', authenticateIdentity, wrap(async (req, res) => {

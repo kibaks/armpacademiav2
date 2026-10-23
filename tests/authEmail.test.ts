@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { authEmailConfigured, sendOtpEmail } from '../backend/authEmail';
+import { authEmailConfigured, sendOtpEmail, otpDeliveryFailure } from '../backend/authEmail';
+
+test('mail errors identify the failure without exposing SMTP secrets or recipient data', () => {
+  assert.equal(otpDeliveryFailure({ code: 'EAUTH', message: 'secret-password and recipient@example.invalid' }).code, 'MAIL_AUTH_REJECTED');
+  assert.equal(otpDeliveryFailure({ code: 'MODULE_NOT_FOUND' }).code, 'MAIL_DEPENDENCY_MISSING');
+  assert.equal(otpDeliveryFailure({ code: 'ETIMEDOUT' }).code, 'MAIL_CONNECTION_FAILED');
+  assert.ok(!JSON.stringify(otpDeliveryFailure({ code: 'EAUTH', message: 'secret-password' })).includes('secret-password'));
+});
 
 test('Gmail OTP uses TLS, configured sender and recipient; rejected deliveries fail closed', async () => {
   const require = createRequire(import.meta.url);
