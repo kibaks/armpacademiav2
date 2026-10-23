@@ -4,7 +4,7 @@ import express from 'express';
 import { SignJWT, jwtVerify } from 'jose';
 import { authRouter } from '../backend/auth';
 import { authenticate, services, adminRouter } from '../backend/admin';
-import { hashToken, resetLink, issueSession } from '../backend/nativeSession';
+import { hashToken, resetLink, issueSession, nativeIdentity } from '../backend/nativeSession';
 
 process.env.JWT_SECRET = 'test-secret-32-bytes-minimum-do-not-use-in-production';
 process.env.APP_ORIGIN = 'https://academia.example.com';
@@ -53,6 +53,21 @@ const cookieOf = (response: Response) => response.headers.get('set-cookie')!.spl
 let cookie = '';
 let uid = '';
 const password = 'my secure password 123';
+test('Google profile identity obtains its email from the verified Firebase user, not the session record', async () => {
+  const id = 'google-email-regression';
+  users.set(id, { uid: id, email: 'verified@example.com', displayName: 'Verified User', customClaims: { role: 'particulier' } });
+  let sessionCookie = '';
+  const session = await issueSession(id, 'google', { cookie: (name: string, value: string) => { sessionCookie = `${name}=${value}`; } } as any);
+  const record = records.get(`authSessions/${session.appSessionId}`);
+  assert.equal(record.email, undefined);
+  const identity = await nativeIdentity({ headers: { cookie: sessionCookie } } as any);
+  assert.equal(identity.email, 'verified@example.com');
+  assert.equal(identity.name, 'Verified User');
+  records.set(`authSessions/${session.appSessionId}`, { ...record, email: 'stale@example.com' });
+  assert.equal((await nativeIdentity({ headers: { cookie: sessionCookie } } as any)).email, 'verified@example.com');
+  users.delete(id);
+  records.delete(`authSessions/${session.appSessionId}`);
+});
 after(() => { server.close(); mock.restoreAll(); delete process.env.JWT_SECRET; delete process.env.RESEND_API_KEY; });
 
 test('registration issues a signed HttpOnly application JWT and stores only a salted password hash', async () => {
