@@ -9,7 +9,7 @@ const { auth, db } = services();
 const records = new Map<string, any>();
 const users = new Map<string, any>();
 const doc = (key: string): any => ({ key, get: async () => ({ exists: records.has(key), data: () => structuredClone(records.get(key)) }), set: async (data: any) => records.set(key, structuredClone(data)), delete: async () => records.delete(key) });
-mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => name === 'authSessions' ? { get: async () => ({ data: () => ({ uid: id, authTime: 1, expiresAt: Date.now() + 60000, version: 0 }) }) } : doc(`${name}/${id}`), add: async () => {} }));
+mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => name === 'authSessions' ? { get: async () => ({ data: () => ({ uid: id, role: id === 'admin' ? 'super_admin' : 'particulier', authTime: 1, expiresAt: Date.now() + 60000, version: 0 }) }) } : doc(`${name}/${id}`), add: async () => {} }));
 mock.method(db, 'runTransaction', async (fn: any) => fn({ get: (ref: any) => ref.get(), set: (ref: any, value: any) => ref.set(value), delete: (ref: any) => ref.delete() }));
 mock.method(auth, 'verifyIdToken', async (token: string) => ({ firebase: { sign_in_provider: 'google.com' }, uid: token, appSessionId: token, auth_time: 1, email: `${token}@example.com`, role: token === 'admin' ? 'super_admin' : 'particulier' }));
 mock.method(auth, 'getUserByEmail', async (email: string) => { if (!users.has(email)) throw Object.assign(new Error(), { code: 'auth/user-not-found' }); return users.get(email); });

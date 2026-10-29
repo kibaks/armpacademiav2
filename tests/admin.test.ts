@@ -19,9 +19,12 @@ mock.method(auth, 'deleteUser', async () => {});
 mock.method(auth, 'generatePasswordResetLink', async () => 'https://example.com/reset');
 const fixture = { tests: [{ id: 'test-1', title: 'Test', level: 'Initiation', passPct: 60, active: true, questions: [{ id: 'q1', question: 'Question', options: ['A','B','C','D'], answer: 2 }] }] };
 const writes: any[] = [];
+// These route fixtures have no learner profile; initiation policy has its own tests.
 mock.method(db, 'collection', (name: string) => ({
-  doc: (id?: string) => ({ id: id || 'attempt-1', get: async () => ({ exists: true, data: () => name === 'authSessions' ? { uid: id, authTime: 1, expiresAt: Date.now() + 60000, version: 0 } : fixture }), set: async (data: any) => { writes.push(data); }, update: async (data: any) => { writes.push(data); }, delete: async () => {} }),
+  doc: (id?: string) => ({ id: id || 'attempt-1', get: async () => ({ exists: name !== 'users', data: () => name === 'authSessions' ? { uid: id, role: id === 'admin' ? 'super_admin' : id === 'dfat' ? 'dfat_admin' : 'particulier', authTime: 1, expiresAt: Date.now() + 60000, version: 0 } : fixture }), set: async (data: any) => { writes.push(data); }, update: async (data: any) => { writes.push(data); }, delete: async () => {} }),
   add: async (data: any) => { writes.push(data); },
+  // The candidate already completed initiation; prerequisite rules are tested separately.
+  where: () => ({ get: async () => ({ docs: [{ data: () => ({ level: 'Initiation', passed: true }) }] }) }),
   orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
 }));
 mock.method(db, 'batch', () => { const batch = { set: (_ref: any, data: any) => { writes.push(data); return batch; }, commit: async () => [] }; return batch; });

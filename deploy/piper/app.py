@@ -27,8 +27,8 @@ def load_voice(path: str):
     return PiperVoice(session=session, config=config)
 
 voices = {
-    'female': load_voice('/models/fr_FR-siwis-medium.onnx'),
-    'male': load_voice('/models/fr_FR-tom-medium.onnx'),
+    'female': load_voice(str(Path(os.environ.get('PIPER_MODEL_DIR', '/models')) / 'fr_FR-siwis-medium.onnx')),
+    'male': load_voice(str(Path(os.environ.get('PIPER_MODEL_DIR', '/models')) / 'fr_FR-tom-medium.onnx')),
 }
 lock = threading.Lock()
 token = os.environ['TTS_API_KEY']

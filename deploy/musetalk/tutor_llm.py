@@ -1,5 +1,6 @@
 """Authenticated, bounded gateway to the local fixed Ollama tutor model."""
 import json
+import os
 import threading
 import urllib.request
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,7 +31,7 @@ def create_router(authorize):
             reply = result.get('message', {}).get('content', '').strip()
             if not reply or not result.get('done') or result.get('done_reason') == 'length':
                 raise ValueError('Incomplete reply')
-            return {'reply': reply, 'model': 'academia-tuteur', 'provider': 'qwen3-14b'}
+            return {'reply': reply, 'model': 'academia-tuteur', 'provider': os.environ.get('TUTOR_LLM_PROVIDER_LABEL', 'qwen3-14b')}
         except Exception:
             raise HTTPException(503, 'Tutor unavailable') from None
         finally:
