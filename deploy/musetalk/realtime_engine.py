@@ -70,7 +70,7 @@ class RealtimeEngine:
             features, length = rt.audio_processor.get_audio_feature(str(audio), weight_dtype=rt.weight_dtype)
             chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=25)
             height, width = avatar.frame_list_cycle[0].shape[:2]
-            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{width}x{height}', '-r', '25', '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '4', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '25', '-keyint_min', '25', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
+            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{width}x{height}', '-r', '25', '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '4', '-preset', 'veryfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '25', '-keyint_min', '25', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
             announced = False
             # stderr goes to a file: never risk a full pipe blocking the encoder.
             with output.with_suffix('.encode.log').open('wb') as log:

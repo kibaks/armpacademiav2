@@ -1642,7 +1642,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   </div>
 
                   {true && <div className="h-[32rem] max-w-md mx-auto">
-                    <TutorVideoPlayer persona={courseTutorPersona} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
+                    <TutorVideoPlayer persona={courseTutorPersona} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
                       <AishaAvatar tutorPersona={courseTutorPersona} variant="studio" handGestures={false} showBadge={false} />
                     </TutorVideoPlayer>
                   </div>}

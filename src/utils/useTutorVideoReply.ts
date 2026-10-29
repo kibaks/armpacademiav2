@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../lib/adminApi';
+import { openTutorVideoStream, supportsTutorVideoStream } from './tutorVideoStream';
 import { speechService } from './speechService';
 
-export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string };
-type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number };
+export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean };
+type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number; progressiveStreaming?: boolean };
 export function useTutorVideoReply(persona: string, active = true) {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
   const config = useRef<Promise<Config> | null>(null);
@@ -40,7 +41,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     }
   }), []);
 
-  const start = async (text: string, voice: string): Promise<boolean> => {
+  const start = async (text: string, voice: string, progressive = true): Promise<boolean> => {
     if (!activeRef.current) return true;
     speechService.stop();
     releaseMedia();
@@ -59,7 +60,8 @@ export function useTutorVideoReply(persona: string, active = true) {
     const signal = AbortSignal.any([abort.signal, deadline]);
     const current = () => !signal.aborted && run === generation.current;
     speechService.stop();
-    setState({ status: 'loading' });
+    setState({ status: 'loading', stage: 'voice' });
+    const stream = progressive && settings.progressiveStreaming && supportsTutorVideoStream();
     try {
       const response = await authenticatedFetch('/api/ai/tutor-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -67,6 +69,8 @@ export function useTutorVideoReply(persona: string, active = true) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'La vidéo est indisponible.');
+      if (!current()) return true;
+      setState({ status: 'loading', stage: 'render' });
       let failedPolls = 0;
       // A cached reply may already be playable in the creation response.
       let result = data;
@@ -76,6 +80,14 @@ export function useTutorVideoReply(persona: string, active = true) {
         if (result.status === 'COMPLETED' || result.status === 'STREAMING') {
           if (typeof result.videoUrl !== 'string') throw new Error('Vidéo indisponible.');
           let url = result.videoUrl;
+          if (result.status === 'STREAMING' && stream) {
+            objectUrl.current = openTutorVideoStream(url, signal, () => {
+              // Retry the same cached job with ordinary playback if MSE fails.
+              if (current()) void start(text, voice, false);
+            });
+            setState({ status: 'ready', url: objectUrl.current, progressive: true });
+            return true;
+          }
           if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {
             const media = await authenticatedFetch(url, { signal });
             if (!media.ok || !media.headers.get('content-type')?.includes('video/mp4')) throw new Error('Vidéo indisponible.');
@@ -98,7 +110,7 @@ export function useTutorVideoReply(persona: string, active = true) {
           });
         }
         let statusResponse: Response;
-        try { statusResponse = await authenticatedFetch(`/api/ai/tutor-video/${encodeURIComponent(data.id)}`, { signal }); }
+        try { statusResponse = await authenticatedFetch(`/api/ai/tutor-video/${encodeURIComponent(data.id)}${stream ? '?progressive=1' : ''}`, { signal }); }
         catch (error) { if (current() && ++failedPolls <= 3) continue; throw error; }
         result = await statusResponse.json().catch(() => ({}));
         if (!current()) return true;
@@ -119,5 +131,6 @@ export function useTutorVideoReply(persona: string, active = true) {
     stop();
     if (last) void speechService.play(last.text, `video-audio-${Date.now()}`, { voice: last.voice });
   };
-  return { state, start, stop, listenWithoutVideo };
+  const retry = () => { const last = lastRequest.current; if (last) void start(last.text, last.voice, false); };
+  return { state, start, stop, listenWithoutVideo, retry };
 }

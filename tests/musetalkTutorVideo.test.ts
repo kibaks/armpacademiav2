@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
 import { createHmac } from 'node:crypto';
 import { createMuseTalkTutorVideoRouter } from '../backend/musetalkTutorVideo';
-async function harness(workerStatus = 'COMPLETED') {
+async function harness(workerStatus = 'COMPLETED', progressive = false) {
   const records = new Map<string, any>();
   let submissions = 0, polls = 0;
   let tail = Promise.resolve();
@@ -18,7 +18,7 @@ async function harness(workerStatus = 'COMPLETED') {
       tail = task.then(() => undefined, () => undefined); return task;
     },
   };
-  const router = createMuseTalkTutorVideoRouter({ db: () => db, env: { MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true' },
+  const router = createMuseTalkTutorVideoRouter({ db: () => db, env: { MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' },
     authenticate: (req: any, res, next) => { if (!req.headers.authorization) return void res.sendStatus(401); req.identity = { uid: req.headers.authorization }; next(); },
     synthesize: async () => ({ audioBuffer: Buffer.alloc(100, 1), mimeType: 'audio/wav' }),
     fetcher: (async (url: any, options: any) => {
@@ -33,7 +33,7 @@ async function harness(workerStatus = 'COMPLETED') {
   });
   // Drive Express middleware directly; these tests need no listening socket.
   const request = (url: string, init: RequestInit = {}) => new Promise<Response>((resolve, reject) => {
-    const req = { url: new URL(url).pathname.replace(/^\/video/, '') || '/', method: init.method || 'GET',
+    const req = { query: Object.fromEntries(new URL(url).searchParams), url: new URL(url).pathname.replace(/^\/video/, '') || '/', method: init.method || 'GET',
       headers: Object.fromEntries(new Headers(init.headers).entries()), body: init.body ? JSON.parse(String(init.body)) : undefined };
     const res: any = new EventEmitter();
     const headers = new Headers();
@@ -112,4 +112,18 @@ test('a growing MP4 is not exposed as playable before finalization', async () =>
   assert.notEqual(h.records.get(`musetalkTutorJobs/${id}`).status, 'COMPLETED');
   assert.equal((await h.request(`${h.base}/${id}`, { headers: { authorization: 'other' } })).status, 404);
   assert.equal(h.counts().submissions, 1);
+});
+
+test('only opted-in MSE clients receive a signed progressive stream, still bound to their owner', async () => {
+  const h = await harness('STREAMING', true);
+  const { id } = await (await h.post()).json();
+  const config = await (await h.request(`${h.base}/config`, { headers: { authorization: 'owner' } })).json();
+  assert.equal(config.progressiveStreaming, true);
+  assert.equal((await (await h.request(`${h.base}/${id}`, { headers: { authorization: 'owner' } })).json()).status, 'PENDING');
+  const ready = await (await h.request(`${h.base}/${id}?progressive=1`, { headers: { authorization: 'owner' } })).json();
+  assert.equal(ready.status, 'STREAMING');
+  assert.ok(ready.videoUrl.startsWith('https://worker.example/musetalk/jobs/'));
+  assert.ok(!ready.videoUrl.includes('private-key'));
+  assert.notEqual(h.records.get(`musetalkTutorJobs/${id}`).status, 'COMPLETED');
+  assert.equal((await h.request(`${h.base}/${id}?progressive=1`, { headers: { authorization: 'other' } })).status, 404);
 });

@@ -1354,7 +1354,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           {showStudioStage && (
             <aside className="tutor-portrait-panel">
               <div className="tutor-portrait">
-                <TutorVideoPlayer persona={selectedVoice} active={!isVideoCallActive && !isCallActive} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
+                <TutorVideoPlayer persona={selectedVoice} active={!isVideoCallActive && !isCallActive} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
                   <AishaAvatar isSpeaking={isSpeaking} isListening={isListening || isRecordingVoice} isLoading={isLoading} emotion={effectiveTutorEmotion} tutorPersona={selectedVoice} variant="studio" motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} showBadge={false} />
                 </TutorVideoPlayer>
 
@@ -2016,7 +2016,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <div className="absolute inset-0 z-40 bg-slate-950 flex flex-col min-h-0 overflow-hidden">
             {/* Scène principale Visio HD */}
             <div className="flex-1 min-h-0 relative bg-slate-950 overflow-hidden flex items-center justify-center">
-              <TutorVideoPlayer persona={selectedVoice} showPresentation={false} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo}>
+              <TutorVideoPlayer persona={selectedVoice} showPresentation={false} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
               <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures}
                 isSpeaking={isSpeaking}
                 isListening={isListening || isRecordingVoice}

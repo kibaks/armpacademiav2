@@ -2,9 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { speechService } from '../utils/speechService';
 import type { TutorVideoState } from '../utils/useTutorVideoReply';
 
-export function TutorVideoPlayer({ state, onStop, onAudioOnly, persona, active = true, showPresentation = true, children }: {
-  state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode;
+export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona, active = true, showPresentation = true, children }: {
+  state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode;
 }) {
+  const [waitingSeconds, setWaitingSeconds] = useState(0);
+  useEffect(() => {
+    setWaitingSeconds(0);
+    if (state.status !== 'loading') return;
+    const started = Date.now();
+    const timer = setInterval(() => setWaitingSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [state.status]);
   const [mediaError, setMediaError] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -47,10 +55,12 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, persona, active =
         }}
         onEnded={() => { clearStall(); if (!presentation) onStop(); }}
         onError={() => { clearStall(); setMediaError(true); }} />
+        {!presentation && state.progressive && <p className="px-3 pt-2 text-center text-xs text-blue-200">Lecture progressive · voix et visage synchronisés</p>}
         {presentation ? <p className="p-2 text-center text-xs text-slate-300">Extrait de présentation · Comparer les offres</p> : <>
           {(mediaError || stalled) && <div role="status" className="p-2 text-center text-sm">
             <p>La lecture a été interrompue.</p>
             <button type="button" className="min-h-11 px-3 underline" onClick={() => {
+              if (state.progressive && onRetry) { onRetry(); return; }
               const video = videoRef.current;
               if (!video) return;
               setMediaError(false); setStalled(false);
@@ -65,7 +75,14 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, persona, active =
     </> : <>
       <div className="min-h-0 flex-1 opacity-60">{children}</div>
       <div role="status" aria-live="polite" className="p-3 text-center text-sm">
-        {state.status === 'loading' ? 'Préparation de la vidéo et de sa voix…' : state.error}
+        {state.status === 'loading' ? <>
+          <div className="mb-2 flex justify-center gap-1.5" aria-hidden="true">
+            {[0, 1, 2].map(index => <span key={index} className="h-1.5 w-6 rounded-full bg-blue-400 motion-safe:animate-pulse" style={{ animationDelay: `${index * 180}ms` }} />)}
+          </div>
+          <p className="font-medium">{state.stage === 'voice' ? 'La tutrice prépare sa voix…' : 'Le visage et la voix se synchronisent…'}</p>
+          <p className="mt-1 text-xs text-slate-300" aria-live="off">{waitingSeconds > 0 ? `${waitingSeconds} s d’attente · ` : ''}La lecture démarre dès que possible.</p>
+          {waitingSeconds >= 8 && <p className="mt-2 text-xs text-blue-200">Vous pouvez écouter la réponse sans attendre la vidéo.</p>}
+        </> : state.error}
         <button type="button" onClick={onAudioOnly} className="block min-h-11 w-full underline underline-offset-4">Écouter sans vidéo</button>
         <button type="button" onClick={onStop} className="block min-h-11 w-full underline underline-offset-4">
           {state.status === 'loading' ? 'Annuler l’attente' : 'Revenir au tuteur'}
