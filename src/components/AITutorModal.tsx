@@ -1,3 +1,4 @@
+import { tutorHistoryForStorage, tutorAudioMime } from '../../shared/tutorVoice';
 import { DEFAULT_TUTOR_PRESENTATION, normalizeTutorPresentation } from '../../shared/tutorPresentation';
 import './TutorStudio.css';
 import { authenticatedFetch } from '../lib/adminApi';
@@ -414,6 +415,7 @@ type MediaAttachment = {
   audioBase64?: string;
   mimeType?: string;
   transcriptText?: string;
+  pendingUpload?: boolean;
 };
 
 type EnhancedMessage = ChatMessage & {
@@ -531,9 +533,18 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     return () => { document.removeEventListener('keydown', keyboard); previous?.focus(); };
   }, [isOpen, onClose]);
 
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileImageRef = useRef<HTMLInputElement>(null);
   const fileVideoRef = useRef<HTMLInputElement>(null);
+  const fileAudioRef = useRef<HTMLInputElement>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingLimitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureGenerationRef = useRef(0);
+  const capturePendingRef = useRef(false);
+  const modalOpenRef = useRef(isOpen);
+  modalOpenRef.current = isOpen;
   const recognitionRef = useRef<any>(null);
   const voiceRecordRecognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -544,6 +555,19 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const localStreamRef = useRef<MediaStream | null>(null);
   const callGreetingTimerRef = useRef<any>(null);
   const handledInitialQuestionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      captureGenerationRef.current++;
+      recordActionRef.current = 'cancel';
+      if (recordingLimitRef.current) clearTimeout(recordingLimitRef.current);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+      recordingStreamRef.current?.getTracks().forEach(track => track.stop());
+      recordingStreamRef.current = null;
+      setIsRecordingVoice(false);
+    }
+  }, [isOpen]);
 
   const showNotice = (msg: string) => {
     setToastNotice(msg);
@@ -584,14 +608,15 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   const persistMessages = (nextMsgs: EnhancedMessage[]) => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(nextMsgs.slice(-40)));
+      localStorage.setItem(storageKey, JSON.stringify(tutorHistoryForStorage(nextMsgs)));
     } catch {}
     if (currentProfile.id) {
-      saveTutorHistoryToFirestore(currentProfile.id, nextMsgs.slice(-40)).catch(() => {});
+      saveTutorHistoryToFirestore(currentProfile.id, tutorHistoryForStorage(nextMsgs)).catch(() => {});
     }
   };
 
   const handleResetConversation = () => {
+    if (isRecordingVoice) stopVoiceRecord('cancel');
     stopSpeaking();
     const fresh = [buildWelcomeMessage()];
     setMessages(fresh);
@@ -614,6 +639,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   }, [messages, isLoading, isSpeaking]);
 
   useEffect(() => {
+    modalOpenRef.current = isOpen;
     const unsub = speechService.subscribe((st) => {
       setIsVoiceLoading(Boolean(st.isLoading && st.currentId?.startsWith('tutor-')));
       if (st.error) { setToastNotice(st.error); setTimeout(() => setToastNotice(null), 6500); }
@@ -635,6 +661,13 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     });
     return () => {
       unsub();
+      modalOpenRef.current = false;
+      captureGenerationRef.current++;
+      recordActionRef.current = 'cancel';
+      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+      recordingStreamRef.current?.getTracks().forEach(track => track.stop());
+      if (recordingLimitRef.current) clearTimeout(recordingLimitRef.current);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       speechService.stop();
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
@@ -815,6 +848,20 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     e.target.value = '';
   };
 
+  const handleAudioPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file || isLoading) return;
+    const mimeType = tutorAudioMime(file.name, file.type);
+    if (!mimeType || file.size > 6000000) { showNotice('Choisissez un vocal de 6 Mo maximum, dans un format audio courant.'); return; }
+    speechService.unlockAudio(); stopSpeaking();
+    const url = URL.createObjectURL(file);
+    try {
+      const audioBase64 = await blobToDataUrl(file);
+      if (!modalOpenRef.current) { URL.revokeObjectURL(url); return; }
+      await handleSendMessage('', { type: 'audio', url, name: file.name, mimeType, audioBase64, pendingUpload: true });
+    } catch { URL.revokeObjectURL(url); showNotice('Ce vocal ne peut pas être lu. Essayez un autre fichier.'); }
+  };
+
   const getSupportedAudioMimeType = () => {
     if (typeof MediaRecorder === 'undefined') return '';
     const candidates = [
@@ -835,6 +882,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const startVoiceRecord = async () => {
+    if (capturePendingRef.current || isLoading || mediaRecorderRef.current?.state === 'recording') return;
     speechService.unlockAudio();
     stopSpeaking();
     setLiveVoiceTranscript('');
@@ -843,40 +891,21 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     recordActionRef.current = 'send';
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setShowAssistedVoiceBox(true);
-      showNotice('Mode Voice Assisté activé : saisissez ou dictez votre message vocal.');
+      showNotice('Le micro n’est pas accessible ici. Vous pouvez joindre un fichier vocal.');
       return;
     }
 
+    capturePendingRef.current = true;
+    const capture = ++captureGenerationRef.current;
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!modalOpenRef.current || capture !== captureGenerationRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
+      recordingStreamRef.current = stream;
       const mimeType = getSupportedAudioMimeType();
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       const startedAt = Date.now();
-
-      // Lance en parallèle la reconnaissance vocale locale si disponible pour afficher la transcription en direct
-      const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SR) {
-        try {
-          const rec = new SR();
-          rec.lang = 'fr-FR';
-          rec.continuous = true;
-          rec.interimResults = true;
-          rec.onresult = (ev: any) => {
-            const t = Array.from(ev.results)
-              .map((r: any) => r[0]?.transcript || '')
-              .join(' ')
-              .trim();
-            if (t) {
-              liveTranscriptRef.current = t;
-              setLiveVoiceTranscript(t);
-            }
-          };
-          rec.start();
-          voiceRecordRecognitionRef.current = rec;
-        } catch {}
-      }
 
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = setInterval(() => {
@@ -888,6 +917,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       };
 
       mr.onstop = async () => {
+        if (recordingLimitRef.current) clearTimeout(recordingLimitRef.current);
         if (recordingTimerRef.current) {
           clearInterval(recordingTimerRef.current);
           recordingTimerRef.current = null;
@@ -896,10 +926,10 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           voiceRecordRecognitionRef.current?.stop();
         } catch {}
         voiceRecordRecognitionRef.current = null;
-        stream.getTracks().forEach((t) => t.stop());
+        stream?.getTracks().forEach((t) => t.stop());
         setIsRecordingVoice(false);
 
-        const action = recordActionRef.current;
+        const action = !modalOpenRef.current || capture !== captureGenerationRef.current ? 'cancel' : recordActionRef.current;
         if (action === 'cancel') {
           setLiveVoiceTranscript('');
           liveTranscriptRef.current = '';
@@ -917,13 +947,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           audioBase64 = await blobToDataUrl(blob);
         } catch {}
 
-        const capturedTranscript = liveTranscriptRef.current.trim();
+        if (!modalOpenRef.current || capture !== captureGenerationRef.current) { URL.revokeObjectURL(url); return; }
+        if (!audioBase64 || blob.size <= 44 || blob.size > 6000000) { URL.revokeObjectURL(url); showNotice('Vocal vide ou trop volumineux. Réessayez avec un enregistrement plus court.'); return; }
+        const capturedTranscript = '';
         const mediaAttachment: MediaAttachment = {
           type: 'audio',
           url,
           name: `Voice (${mm}:${ss})`,
           duration: `${mm}:${ss}`,
           audioBase64,
+          pendingUpload: true,
           mimeType: finalMime,
           transcriptText: capturedTranscript || undefined
         };
@@ -932,7 +965,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         liveTranscriptRef.current = '';
 
         if (action === 'send') {
-          await handleSendMessage(capturedTranscript || '', mediaAttachment);
+          await handleSendMessage('', mediaAttachment);
         } else {
           setPreviewMedia(mediaAttachment);
         }
@@ -943,17 +976,17 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       setIsRecordingVoice(true);
       speechService.playTone('chime');
 
-      setTimeout(() => {
+      recordingLimitRef.current = setTimeout(() => {
         if (mr.state === 'recording') {
           recordActionRef.current = 'send';
           mr.stop();
         }
       }, 45000);
     } catch {
-      // Fallback automatique vers le créateur de Voice assisté si le micro est bloqué par le navigateur/iframe
-      setShowAssistedVoiceBox(true);
-      showNotice('Micro non détecté : utilisez le générateur de Voice ci-dessous.');
-    }
+      stream?.getTracks().forEach(track => track.stop());
+      recordingStreamRef.current = null;
+      showNotice('Autorisez le microphone pour enregistrer, ou joignez un fichier vocal.');
+    } finally { capturePendingRef.current = false; }
   };
 
   const stopVoiceRecord = (action: 'send' | 'preview' | 'cancel' = 'send') => {
@@ -1105,6 +1138,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const endCall = () => {
+    captureGenerationRef.current++;
+    recordActionRef.current = 'cancel';
+    recordingStreamRef.current?.getTracks().forEach(track => track.stop());
     if (callGreetingTimerRef.current) {
       clearTimeout(callGreetingTimerRef.current);
       callGreetingTimerRef.current = null;
@@ -1157,14 +1193,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   const handleSendMessage = async (textToSend?: string, customMedia?: MediaAttachment | null) => {
     const mediaToSend = customMedia !== undefined ? customMedia : previewMedia;
-    const text = (textToSend !== undefined ? textToSend : inputText).trim();
+    const directVoice = mediaToSend?.type === 'audio' && !!mediaToSend.audioBase64;
+    const text = directVoice ? '' : (textToSend !== undefined ? textToSend : inputText).trim();
     if ((!text && !mediaToSend) || isLoading) return;
+    if (isRecordingVoice && !directVoice) stopVoiceRecord('cancel');
 
     speechService.unlockAudio();
     stopSpeaking();
 
     const userMsgId = `user-${Date.now()}`;
-    const displayUserText =
+    const displayUserText = directVoice ? `Message vocal${mediaToSend?.duration ? ' · ' + mediaToSend.duration : ''}` :
       text ||
       mediaToSend?.transcriptText ||
       (mediaToSend?.type === 'image'
@@ -1181,12 +1219,13 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       media: mediaToSend || undefined,
       isVoice: mediaToSend?.type === 'audio'
     };
-    const nextAfterUser = [...messages, userMsg];
+    const nextAfterUser = [...messagesRef.current, userMsg];
     setMessages(nextAfterUser);
     persistMessages(nextAfterUser);
     if (textToSend === undefined) setInputText('');
     if (customMedia === undefined) setPreviewMedia(null);
     setIsLoading(true);
+    let updatedUserMessages = nextAfterUser;
 
     try {
       const excerptForRag = learningContext?.lastCourseExcerpt
@@ -1195,7 +1234,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const lessonsForRag = learningContext?.lastCourseLessons
         ? ` | Leçons du cours: ${learningContext.lastCourseLessons}`
         : '';
-      const effectiveMessage =
+      const effectiveMessage = directVoice ? '' :
         text ||
         mediaToSend?.transcriptText ||
         (mediaToSend?.type === 'audio'
@@ -1206,7 +1245,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
       const body: any = {
         message: effectiveMessage,
-        history: nextAfterUser.slice(-8),
+        history: nextAfterUser.slice(-8).map(({ sender, text }) => ({ sender, text })),
         context: `Profil du tuteur sélectionné: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} | Dernier cours: ${
           learningContext
             ? `${learningContext.lastCourseTitle} (${learningContext.lastCourseCode}) ${learningContext.lastCourseProgress}%`
@@ -1230,17 +1269,17 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok || !data.reply?.trim()) throw new Error(data.error || 'La réponse n’a pas pu être chargée. Réessayez.');
-
       // Si le serveur a transcrit la note vocale audio, enrichir le message utilisateur avec la transcription
       const transcribedText = typeof data.transcribedText === 'string' ? data.transcribedText.trim() : '';
-      const updatedUserMessages = transcribedText && !text
+      updatedUserMessages = transcribedText && directVoice
         ? nextAfterUser.map((m) =>
             m.id === userMsgId
-              ? { ...m, text: `🎙️ « ${transcribedText} »` }
+              ? { ...m, media: { ...m.media!, transcriptText: transcribedText, ...(/^\/api\/ai\/tutor-voice\/[a-f0-9]{64}$/.test(data.voiceRecordingUrl || '') ? { url: data.voiceRecordingUrl, audioBase64: undefined, pendingUpload: false } : {}) } }
               : m
           )
         : nextAfterUser;
+
+      if (!response.ok || !data.reply?.trim()) throw new Error(data.error || 'La réponse n’a pas pu être chargée. Réessayez.');
 
       const reply: string =
         data.reply ||
@@ -1287,7 +1326,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           'Comment fonctionne le recours gracieux ?'
         ]
       };
-      const updatedErr = [...nextAfterUser, fallbackBotMsg];
+      const updatedErr = [...updatedUserMessages, fallbackBotMsg];
       setMessages(updatedErr);
       persistMessages(updatedErr);
     } finally {
@@ -1347,7 +1386,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         <div className="tutor-selection">
           <span className="text-sm font-semibold">Aïsha · Votre tutrice</span>
           {!showStudioStage && (isSpeaking || isVoiceLoading) && <button type="button" onClick={stopSpeaking} className="tutor-stop"><Pause size={14} />Arrêter la lecture</button>}
-          <span role="status" className="tutor-status"><i className={isSpeaking ? 'speaking' : ''} />{isVoiceLoading ? 'Préparation de la voix…' : isSpeaking ? 'Lecture en cours' : isLoading ? 'Préparation de la réponse…' : isListening ? 'À votre écoute' : 'Disponible'}</span>
+          <span role="status" className="tutor-status"><i className={isSpeaking ? 'speaking' : ''} />{isVoiceLoading ? 'Préparation de la voix…' : isSpeaking ? 'Lecture en cours' : isLoading ? 'Préparation de la réponse…' : isListening || isRecordingVoice ? 'À votre écoute' : 'Disponible'}</span>
         </div>
 
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
@@ -1423,11 +1462,13 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                           />
                         )}
                         {msg.media?.type === 'audio' && (
-                          <div className="flex items-center gap-2 mb-2.5 p-2 rounded-xl bg-black/10 dark:bg-white/5 border border-white/10">
+                          <div className="flex flex-wrap items-center gap-2 mb-2.5 p-2 rounded-xl bg-black/10 dark:bg-white/5 border border-white/10">
                             <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center">
                               <Volume2 className="w-4 h-4" />
                             </div>
-                            <audio controls src={msg.media.url} className="flex-1 h-8" />
+                            {(msg.media.url || msg.media.audioBase64) && <audio controls src={msg.media.url || msg.media.audioBase64} className="min-w-0 flex-1 h-8" onPlay={() => stopSpeaking()} />}
+                            {msg.media.pendingUpload && msg.media.audioBase64 && !isLoading && <button type="button" onClick={() => void handleSendMessage('', msg.media)} className="min-h-10 text-xs underline">Réessayer ce vocal</button>}
+                            {msg.media.transcriptText && <details className="basis-full text-xs"><summary className="min-h-8 cursor-pointer pt-2">Voir la transcription</summary><p className="pt-2 leading-relaxed">{msg.media.transcriptText}</p></details>}
                           </div>
                         )}
 
@@ -1634,7 +1675,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   <span className="w-3 h-3 rounded-full bg-rose-600 animate-ping shrink-0" />
                   <div className="min-w-0">
                     <div className="text-xs font-black text-rose-800 dark:text-rose-200 flex items-center gap-2">
-                      <span>🎙️ Enregistrement Voice pour {activeTutor.name}</span>
+                      <span>🎙️ Enregistrement vocal pour {activeTutor.name}</span>
                       <span className="font-mono px-2 py-0.5 rounded-md bg-rose-600 text-white text-[11px]">
                         {formatCallTime(recordingSeconds)}
                       </span>
@@ -1642,7 +1683,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     <p className="text-[11px] text-rose-700 dark:text-rose-300 truncate mt-0.5">
                       {liveVoiceTranscript
                         ? `Transcription : « ${liveVoiceTranscript} »`
-                        : 'Parlez clairement dans votre micro, puis cliquez sur « Envoyer le Voice »…'}
+                        : 'Parlez, puis envoyez le vocal · 45 s maximum avant envoi automatique.'}
                     </p>
                   </div>
                 </div>
@@ -1666,7 +1707,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     onClick={() => stopVoiceRecord('send')}
                     className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm"
                   >
-                    <Send className="w-3.5 h-3.5" /> Envoyer le Voice
+                    <Send className="w-3.5 h-3.5" /> Envoyer le vocal
                   </button>
                 </div>
               </div>
@@ -1759,6 +1800,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 className="flex items-end gap-1.5 sm:gap-2"
               >
                 <div className="flex items-center gap-1">
+                  <input ref={fileAudioRef} type="file" accept="audio/*,.m4a,.opus" className="hidden" onChange={handleAudioPick} />
+                  <button type="button" disabled={isLoading || isRecordingVoice} onClick={() => fileAudioRef.current?.click()} title="Joindre un message vocal" aria-label="Joindre un message vocal" className="min-h-11 min-w-11 rounded-xl border border-slate-200 bg-white text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-300 disabled:opacity-40"><Volume2 className="mx-auto h-4 w-4" /></button>
                   <input
                     ref={fileImageRef}
                     type="file"
@@ -1783,10 +1826,11 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   </button>
                 </div>
 
-                <div className="flex-1 relative">
+                <div className="min-w-0 flex-1 relative">
                   <input
                     type="text"
                     value={inputText}
+                    disabled={isRecordingVoice}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder={
                       isListening
@@ -1803,20 +1847,22 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => (isListening ? stopListening() : startListening(false))}
+                  onClick={() => isRecordingVoice ? stopVoiceRecord('send') : startVoiceRecord()}
+                  disabled={isLoading}
                   className={`p-2.5 rounded-xl border font-bold transition ${
-                    isListening
+                    isRecordingVoice
                       ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
-                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                      : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
                   }`}
-                  title={isListening ? 'Arrêter la dictée vocale' : 'Dicter ma question au micro'}
+                  title={isRecordingVoice ? 'Envoyer le vocal' : 'Enregistrer une question vocale'}
+                  aria-label={isRecordingVoice ? 'Envoyer le vocal' : 'Enregistrer une question vocale'}
                 >
-                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  {isRecordingVoice ? <Send className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
 
                 <button
                   type="submit"
-                  disabled={(!inputText.trim() && !previewMedia) || isLoading}
+                  disabled={(!inputText.trim() && !previewMedia) || isLoading || isRecordingVoice}
                   className="px-3.5 sm:px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md transition"
                 >
                   <Send className="w-4 h-4" />
@@ -1933,6 +1979,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 <input
                   type="text"
                   value={inCallQuestionText}
+                  disabled={isRecordingVoice}
                   onChange={(e) => setInCallQuestionText(e.target.value)}
                   placeholder={`Parlez au micro ou tapez votre question en direct à ${activeTutor.name}…`}
                   className="flex-1 px-4 py-2.5 rounded-full bg-white/10 border border-white/20 text-white placeholder-white/50 text-xs sm:text-sm focus:outline-none focus:border-emerald-400"
@@ -1955,7 +2002,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     } else if (isListening) {
                       stopListening();
                     } else {
-                      startListening(true);
+                      startVoiceRecord();
                     }
                   }}
                   className={`px-5 py-3 rounded-full border font-black text-xs flex items-center gap-2 shadow-lg transition ${
@@ -2181,6 +2228,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 <input
                   type="text"
                   value={inCallQuestionText}
+                  disabled={isRecordingVoice}
                   onChange={(e) => setInCallQuestionText(e.target.value)}
                   placeholder={`Poser une question en direct à ${activeTutor.name}…`}
                   className="flex-1 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-white placeholder-white/50 text-xs focus:outline-none focus:border-blue-400"
@@ -2204,7 +2252,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     } else if (isListening) {
                       stopListening();
                     } else {
-                      startListening(true);
+                      startVoiceRecord();
                     }
                   }}
                   className={`px-4 py-2 rounded-full border font-bold text-xs flex items-center gap-1.5 transition ${

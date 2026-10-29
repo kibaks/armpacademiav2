@@ -1,3 +1,4 @@
+import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './backend/tutorVoiceInput.js';
 import { prepareTutorSpeech, readSpeechPronunciation } from './backend/speechPronunciation.js';
 import initiationKnowledge from './shared/initiationKnowledge.json' with { type: 'json' };
 import { learnerProgressionRouter, readLearningStage } from './backend/learnerProgression.js';
@@ -76,6 +77,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 
 app.use('/api/ai/tutor-video', createTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
+app.use('/api/ai/tutor-voice', createTutorVoiceMediaRouter());
 // Lazy initialize Gemini AI client (supports dynamic API_KEY from paid_model_flow as well as GEMINI_API_KEY)
 let aiClient: GoogleGenAI | null = null;
 let lastUsedApiKey: string | null = null;
@@ -1750,7 +1752,7 @@ const TUTOR_PERSONAS_META: Record<
 };
 
 // AI Tutor Chatbot endpoint — RAG cours + Arena Claude label + Gemini + Voice Note Transcription
-app.post('/api/ai/tutor', async (req, res) => {
+app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   let message = (req.body?.message || '').trim();
   const {
     history,

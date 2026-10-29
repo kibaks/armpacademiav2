@@ -68,7 +68,7 @@ def synthesize(body: Speech, authorization: str = Header(default='')):
             for passage in split_passages(body.text.strip()):
                 fragment = io.BytesIO()
                 with wave.open(fragment, 'wb') as fragment_wav:
-                    voice.synthesize_wav(passage, fragment_wav, syn_config=SynthesisConfig(length_scale=1.08) if body.voice == Voice.male else None)
+                    voice.synthesize_wav(passage, fragment_wav, syn_config=SynthesisConfig(length_scale=1.08 if body.voice == Voice.male else 1.03, noise_scale=0.55, noise_w_scale=0.65))
                 with wave.open(io.BytesIO(fragment.getvalue()), 'rb') as fragment_wav:
                     wav.writeframes(fragment_wav.readframes(fragment_wav.getnframes()))
         audio = output.getvalue()

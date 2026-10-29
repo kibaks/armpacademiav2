@@ -1,3 +1,4 @@
+import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './tutorVoiceInput.js';
 import { prepareTutorSpeech, readSpeechPronunciation } from './speechPronunciation.js';
 import initiationKnowledge from '../shared/initiationKnowledge.json' with { type: 'json' };
 import { learnerProgressionRouter, readLearningStage } from './learnerProgression.js';
@@ -67,6 +68,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 });
 app.use('/api/ai/tutor-video', createTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
+app.use('/api/ai/tutor-voice', createTutorVoiceMediaRouter());
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;
 function getAIClient(): GoogleGenAI | null {
@@ -586,7 +588,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // AI Tutor Chatbot endpoint — RAG cours + Arena Claude label + Gemini
-app.post('/api/ai/tutor', async (req, res) => {
+app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   const message = req.body?.message;
   if (!message) {
     return res.status(400).json({ error: 'Message requis' });

@@ -35,7 +35,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const text = normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.()));
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v6' : 'musetalk-v15-realtime-fragments-v5'])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v7-voice-clarity' : 'musetalk-v15-realtime-fragments-v5'])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {

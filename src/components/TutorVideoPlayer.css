@@ -1,0 +1,8 @@
+.tutor-video-player { container-type:inline-size; }
+.tutor-video-label, .tutor-video-action-label, .tutor-video-loading-detail { display:none; }
+.tutor-video-compact { display:block; }
+@container (min-width:220px) {
+  .tutor-video-label, .tutor-video-loading-detail { display:block; }
+  .tutor-video-action-label { display:inline; }
+  .tutor-video-compact { display:none; }
+}

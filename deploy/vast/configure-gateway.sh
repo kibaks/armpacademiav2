@@ -12,6 +12,9 @@ http://:18090 {
  @play path /musetalk/jobs/*/play
  header @play Access-Control-Allow-Origin https://armpacademiav2.vercel.app
  header @play Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
+ handle_path /stt/* {
+  reverse_proxy 127.0.0.1:8062
+ }
  handle_path /piper/* {
   reverse_proxy 127.0.0.1:8060
  }

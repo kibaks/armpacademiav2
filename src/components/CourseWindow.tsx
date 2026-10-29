@@ -1614,7 +1614,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                         className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5"
                       >
                         <Waves className="w-3.5 h-3.5" />
-                        <span>Envoyer un Voice</span>
+                        <span>Envoyer un vocal</span>
                       </button>
                       <button
                         onClick={() => {
@@ -1641,7 +1641,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     </div>
                   </div>
 
-                  {true && <div className="h-[32rem] max-w-md mx-auto">
+                  {true && <div className="h-[min(60dvh,36rem)] w-full">
                     <TutorVideoPlayer persona={courseTutorPersona} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
                       <AishaAvatar tutorPersona={courseTutorPersona} variant="studio" handGestures={false} showBadge={false} />
                     </TutorVideoPlayer>
