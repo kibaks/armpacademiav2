@@ -26,6 +26,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     stop();
     config.current = null;
     if (!active) return;
+    void speechService.refreshPronunciation();
     const request = new AbortController();
     // Configuration is refreshed on persona/session change; no API key reaches the browser.
     config.current = authenticatedFetch('/api/ai/tutor-video/config', { signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]) })

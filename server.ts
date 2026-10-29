@@ -1,3 +1,4 @@
+import { prepareTutorSpeech, readSpeechPronunciation } from './backend/speechPronunciation.js';
 import initiationKnowledge from './shared/initiationKnowledge.json' with { type: 'json' };
 import { learnerProgressionRouter, readLearningStage } from './backend/learnerProgression.js';
 import { learnerLevelGuidance, beginnerAdvancedRedirect } from './shared/learnerProgression.js';
@@ -1499,11 +1500,11 @@ app.post('/api/tts/settings', (req, res) => {
 async function getOrSynthesizeTtsPayload(
   rawText: string,
   voice?: string,
-  emotion?: string
+  emotion?: string,
+  pronunciationApplied = false
 ): Promise<CachedTtsPayload | null> {
-  const cleanText = humanizeTextForNaturalEloquenceServer(
-    normalizeCongoleseProperNounsServer((rawText || '').trim().slice(0, piperConfigured() ? 3000 : 950))
-  );
+  const trimmed = (rawText || '').trim().slice(0, piperConfigured() ? 3000 : 950);
+  const cleanText = await prepareTutorSpeech(pronunciationApplied ? trimmed : humanizeTextForNaturalEloquenceServer(normalizeCongoleseProperNounsServer(trimmed)), pronunciationApplied);
   if (!cleanText) return null;
 
   // Per-persona voice key (Aïsha = 'vivienne'); unknown values fall back to her.
@@ -1602,6 +1603,8 @@ async function getOrSynthesizeTtsPayload(
 }
 
 // Health check endpoint
+app.get('/api/ai/pronunciation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ entries: await readSpeechPronunciation() }); });
+
 app.get('/api/tutor/presentation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation()); });
 
 app.get('/api/health', (req, res) => {
@@ -1623,7 +1626,7 @@ app.post('/api/ai/tts/prewarm', async (req, res) => {
     (async () => {
       for (const s of valid) {
         try {
-          await getOrSynthesizeTtsPayload(s, voice);
+          await getOrSynthesizeTtsPayload(s, voice, undefined, req.body?.pronunciationApplied === true);
         } catch {
           // ignore individual prewarm error
         }
@@ -1644,7 +1647,7 @@ app.post('/api/ai/tts', async (req, res) => {
       return res.status(400).json({ error: 'Texte requis pour la synthèse vocale' });
     }
 
-    const payload = await getOrSynthesizeTtsPayload(text, voice, emotion);
+    const payload = await getOrSynthesizeTtsPayload(text, voice, emotion, req.body?.pronunciationApplied === true);
     if (payload) {
       return res.json({
         ...payload,

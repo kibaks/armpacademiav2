@@ -1,3 +1,4 @@
+import { prepareTutorSpeech, readSpeechPronunciation } from './speechPronunciation.js';
 import initiationKnowledge from '../shared/initiationKnowledge.json' with { type: 'json' };
 import { learnerProgressionRouter, readLearningStage } from './learnerProgression.js';
 import { learnerLevelGuidance, beginnerAdvancedRedirect } from '../shared/learnerProgression.js';
@@ -576,6 +577,8 @@ Pour t'y retrouver simplement : la cellule qui gère les marchés prépare, la d
   };
 }
 
+app.get('/api/ai/pronunciation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ entries: await readSpeechPronunciation() }); });
+
 app.get('/api/tutor/presentation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation()); });
 
 app.get('/api/health', (req, res) => {
@@ -1005,7 +1008,7 @@ app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
     }
 
     if (piperConfigured() && rawText.length > 3000) return res.status(400).json({ error: 'Le passage est trop long. Limitez-le à 3000 caractères.' });
-    const cleanSentence = rawText.slice(0, piperConfigured() ? 3000 : 950);
+    const cleanSentence = (await prepareTutorSpeech(rawText, req.body?.pronunciationApplied === true)).slice(0, piperConfigured() ? 3000 : 950);
     const cacheKey = `v37-piper-passages:${voiceChoice}:${cleanSentence}`;
     const cached = ttsMemoryCache.get(cacheKey);
     if (cached) {
@@ -1059,7 +1062,7 @@ app.post(['/api/ai/tts/prewarm', '/ai/tts/prewarm'], async (req, res) => {
     res.json({ status: 'prewarming', count: sentences.length, voice: voiceChoice });
 
     for (const s of sentences) {
-      const cleanSentence = (s || '').toString().trim().slice(0, piperConfigured() ? 3000 : 950);
+      const cleanSentence = (await prepareTutorSpeech((s || '').toString().trim(), req.body?.pronunciationApplied === true)).slice(0, piperConfigured() ? 3000 : 950);
       if (!cleanSentence) continue;
       const cacheKey = `v37-piper-passages:${voiceChoice}:${cleanSentence}`;
       if (ttsMemoryCache.has(cacheKey)) continue;

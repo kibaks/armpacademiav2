@@ -103,3 +103,16 @@ test('tutor presentation is managed only by superadministrators, validates input
   assert.deepEqual((await response.json()).settings, valid);
   assert.ok(writes.some(w => w.action === 'tutor.presentation.updated' && w.actor === 'admin'));
 });
+
+test('only superadministrators may save or preview pronunciation dictionaries, with validation and audit', async () => {
+  assert.equal((await request('/admin/speech-pronunciation', 'learner')).status, 403);
+  assert.equal((await request('/admin/speech-pronunciation', 'dfat', { entries: [] })).status, 403);
+  assert.equal((await request('/admin/speech-pronunciation/preview', 'learner', { entries: [], text: 'Ester' })).status, 403);
+  assert.equal((await request('/admin/speech-pronunciation', 'admin', { entries: [{ word: 'David', pronunciation: '<script>' }] })).status, 400);
+  assert.equal((await request('/admin/speech-pronunciation/preview', 'admin', { entries: [], text: 'x'.repeat(301) })).status, 400);
+  const entries = [{ word: 'Ester', pronunciation: 'Estère' }];
+  const response = await request('/admin/speech-pronunciation', 'admin', { entries });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).entries, entries);
+  assert.ok(writes.some(w => w.action === 'speech.pronunciation.updated' && w.actor === 'admin'));
+});

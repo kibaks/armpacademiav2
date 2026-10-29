@@ -1,3 +1,4 @@
+import { normalizeSpeechPronunciation, parsePronunciationEntries, type PronunciationEntry } from '../../shared/speechPronunciation';
 import { providerRate } from './speechPlaybackProfile';
 import { samplePhoneme, type TimedPhoneme } from '../../shared/speechTiming';
 import { readTutorVoiceMode, TUTOR_VOICE_MODE_KEY } from './tutorVoiceMode';
@@ -1056,150 +1057,24 @@ class SpeechService {
   }
 
   // Authentic Congolese phonetic adaptation for the 26 DRC Provinces, Capitals, Cities & Proper Nouns
+  private pronunciationEntries: PronunciationEntry[] = [];
+  private pronunciationExpires = 0;
+  private pronunciationPending: Promise<void> | null = null;
+  public async refreshPronunciation() {
+    if (Date.now() < this.pronunciationExpires) return;
+    if (this.pronunciationPending) return this.pronunciationPending;
+    this.pronunciationPending = (async () => {
+      try {
+        const response = await authenticatedFetch('/api/ai/pronunciation', { signal: AbortSignal.timeout(2500) });
+        if (!response.ok) throw new Error();
+        this.pronunciationEntries = parsePronunciationEntries((await response.json()).entries);
+        this.pronunciationExpires = Date.now() + 30000;
+      } catch { this.pronunciationExpires = Date.now() + 10000; }
+    })().finally(() => { this.pronunciationPending = null; });
+    return this.pronunciationPending;
+  }
   public normalizeCongoleseProperNounsForSpeech(text: string): string {
-    return text
-      // Prevent any English-accented reading of first names (e.g. "Landry") or English loanwords at the start of sentences
-      .replace(/\bLandry\b/gi, 'Landri')
-      .replace(/\bstandstill\b/gi, 'délai de suspension')
-      .replace(/\be-procurement\b/gi, 'passation numérique')
-      .replace(/\bopen\s+data\b/gi, 'données ouvertes')
-      .replace(/\bopen\s+contracting\b/gi, 'commande publique ouverte')
-      .replace(/\bworkflow\b/gi, 'circuit de validation')
-      .replace(/\bcheck-lists?\b/gi, 'liste de vérification')
-      .replace(/\bchecklists?\b/gi, 'liste de vérification')
-      .replace(/\bplanning\b/gi, 'calendrier')
-      .replace(/\breporting\b/gi, 'rapport de suivi')
-      .replace(/\bmanagement\b/gi, 'pilotage')
-      .replace(/\bquiz\b/gi, 'questionnaire')
-      // 1. Compound & Multi-word DRC Provinces (26 Provinces)
-      .replace(/\bKongo[\s-]+Central\b/gi, 'Kongo-Central')
-      .replace(/\bMa[iï][\s-]+Ndombe\b/gi, 'Maï-Ndombé')
-      .replace(/\bKasa[iï][\s-]+Central\b/gi, 'Kassaï-Central')
-      .replace(/\bKasa[iï][\s-]+Oriental\b/gi, 'Kassaï-Oriental')
-      .replace(/\bHaut[\s-]+Katanga\b/gi, 'Haut-Katanga')
-      .replace(/\bHaut[\s-]+Lomami\b/gi, 'Haut-Lomami')
-      .replace(/\bHaut[\s-]+U[eé]l[eé]\b/gi, 'Haut-Ouélé')
-      .replace(/\bBas[\s-]+U[eé]l[eé]\b/gi, 'Bas-Ouélé')
-      .replace(/\bNord[\s-]+Kivu\b/gi, 'Nord-Kivou')
-      .replace(/\bSud[\s-]+Kivu\b/gi, 'Sud-Kivou')
-      .replace(/\bNord[\s-]+Ubangi\b/gi, 'Nord-Oubangui')
-      .replace(/\bSud[\s-]+Ubangi\b/gi, 'Sud-Oubangui')
-      // 2. Single-word DRC Provinces & Historic Regions
-      .replace(/\bKinshasa\b/gi, 'Kinshasa')
-      .replace(/\bKinchassa\b/gi, 'Kinshasa')
-      .replace(/\bKasa[iï][\s-]+Vubu\b/gi, 'Kasa-Vubu')
-      .replace(/\bKasa[iï]\b/gi, 'Kassaï')
-      .replace(/\bKwilu\b/gi, 'Kwilu')
-      .replace(/\bKwango\b/gi, 'Kwango')
-      .replace(/\bSankuru\b/gi, 'Sankourou')
-      .replace(/\bManiema\b/gi, 'Maniéma')
-      .replace(/\bIturi\b/gi, 'Itouri')
-      .replace(/\bTshopo\b/gi, 'Tshopo')
-      .replace(/\bTshuapa\b/gi, 'Tshuapa')
-      .replace(/\bLualaba\b/gi, 'Loualaba')
-      .replace(/\bLulua\b/gi, 'Louloua')
-      .replace(/\bTanganyika\b/gi, 'Tanganyika')
-      .replace(/\bMongala\b/gi, 'Mongala')
-      .replace(/\bU[eé]l[eé]\b/gi, 'Ouélé')
-      .replace(/\bUbangi\b/gi, 'Oubangui')
-      .replace(/\bKivu\b/gi, 'Kivou')
-      .replace(/\bBandundu\b/gi, 'Bandoundou')
-      .replace(/\bKatanga\b/gi, 'Katanga')
-      // 3. Provincial Capitals (Chefs-lieux), Major DRC Cities & Communes
-      .replace(/\bLubumbashi\b/gi, 'Louboumbachi')
-      .replace(/\bKisangani\b/gi, 'Kissangani')
-      .replace(/\bBukavu\b/gi, 'Boukavou')
-      .replace(/\bMbuji[\s-]+Mayi\b/gi, 'Mbouji-Mayi')
-      .replace(/\bKananga\b/gi, 'Kananga')
-      .replace(/\bMbandaka\b/gi, 'Mbandaka')
-      .replace(/\bMatadi\b/gi, 'Matadi')
-      .replace(/\bBoma\b/gi, 'Boma')
-      .replace(/\bGoma\b/gi, 'Goma')
-      .replace(/\bKolwezi\b/gi, 'Kolouézi')
-      .replace(/\bKolwézi\b/gi, 'Kolouézi')
-      .replace(/\bLikasi\b/gi, 'Likassi')
-      .replace(/\bKipushi\b/gi, 'Kipouchi')
-      .replace(/\bKasumbalesa\b/gi, 'Kassoumbaléssa')
-      .replace(/\bTshikapa\b/gi, 'Tchikapa')
-      .replace(/\bKikwit\b/gi, 'Kikouite')
-      .replace(/\bKenge\b/gi, 'Kéngué')
-      .replace(/\bInongo\b/gi, 'Inongo')
-      .replace(/\bInga\b/gi, 'Inga')
-      .replace(/\bBoende\b/gi, 'Boéndé')
-      .replace(/\bGemena\b/gi, 'Guéména')
-      .replace(/\bGbadolite\b/gi, 'Gbadolité')
-      .replace(/\bLisala\b/gi, 'Lissala')
-      .replace(/\bBumba\b/gi, 'Boumba')
-      .replace(/\bIsiro\b/gi, 'Issiro')
-      .replace(/\bBunia\b/gi, 'Bounia')
-      .replace(/\bKindu\b/gi, 'Kindou')
-      .replace(/\bKindou\b/gi, 'Kindou')
-      .replace(/\bKalemie\b/gi, 'Kalémi')
-      .replace(/\bKamina\b/gi, 'Kamina')
-      .replace(/\bKabinda\b/gi, 'Kabinda')
-      .replace(/\bLusambo\b/gi, 'Loussambo')
-      .replace(/\bMwene[\s-]+Ditu\b/gi, 'Mouéné-Ditou')
-      .replace(/\bMwéné[\s-]+Ditou\b/gi, 'Mouéné-Ditou')
-      .replace(/\bUvira\b/gi, 'Ouvira')
-      .replace(/\bButembo\b/gi, 'Boutémbo')
-      .replace(/\bBeni\b/gi, 'Béni')
-      .replace(/\bMuanda\b/gi, 'Mouanda')
-      .replace(/\bMoanda\b/gi, 'Mouanda')
-      .replace(/\bZongo\b/gi, 'Zongo')
-      .replace(/\bKimpese\b/gi, 'Kimpéssé')
-      .replace(/\bGombe\b/gi, 'Gombé')
-      .replace(/\bLukunga\b/gi, 'Loukounga')
-      .replace(/\bFuna\b/gi, 'Founa')
-      .replace(/\bTshangu\b/gi, 'Tchangou')
-      .replace(/\bMasina\b/gi, 'Massina')
-      .replace(/\bLimete\b/gi, 'Limété')
-      .replace(/\bNgaliema\b/gi, 'Ngaliéma')
-      .replace(/\bKintambo\b/gi, 'Kintambo')
-      .replace(/\bBandalungwa\b/gi, 'Bandaloungoua')
-      .replace(/\bSelembao\b/gi, 'Sélémbao')
-      .replace(/\bKimbanseke\b/gi, 'Kimbanséké')
-      .replace(/\bKimbanséké\b/gi, 'Kimbanséké')
-      .replace(/\bMaluku\b/gi, 'Maloukou')
-      .replace(/\bKalamu\b/gi, 'Kalamou')
-      .replace(/\bBarumbu\b/gi, 'Baroumbou')
-      .replace(/\bLingwala\b/gi, 'Lingwala')
-      .replace(/\bMatete\b/gi, 'Matété')
-      .replace(/\bLemba\b/gi, 'Lémba')
-      .replace(/\bNsele\b/gi, 'Nsélé')
-      .replace(/\bMont[\s-]+Ngafula\b/gi, 'Mont-Ngafoula')
-      // 4. Proper Names & Surnames of DRC Practitioners & Historical Figures (pure French phonetics without English 'w')
-      .replace(/\bKibakweto\b/gi, 'Kibakouéto')
-      .replace(/\bKibakwéto\b/gi, 'Kibakouéto')
-      .replace(/\bMukendi\b/gi, 'Moukéndi')
-      .replace(/\bKabangu\b/gi, 'Kabangou')
-      .replace(/\bIlunga\b/gi, 'Ilounga')
-      .replace(/\bKasongo\b/gi, 'Kassongo')
-      .replace(/\bMuteba\b/gi, 'Moutéba')
-      .replace(/\bTshilomba\b/gi, 'Tchilomba')
-      .replace(/\bMwamba\b/gi, 'Mouamba')
-      .replace(/\bTshisekedi\b/gi, 'Tchissékédi')
-      .replace(/\bLumumba\b/gi, 'Loumoumba')
-      .replace(/\bMobutu\b/gi, 'Moboutou')
-      .replace(/\bLukonde\b/gi, 'Loukondé')
-      .replace(/\bMbuyi\b/gi, 'Mbouyi')
-      .replace(/\bTshiamala\b/gi, 'Tchiamala')
-      .replace(/\bKabasele\b/gi, 'Kabassélé')
-      .replace(/\bLukoji\b/gi, 'Loukodji')
-      .replace(/\bLukusa\b/gi, 'Loukoussa')
-      .replace(/\bLufungula\b/gi, 'Loufoungoula')
-      .replace(/\bMavungu\b/gi, 'Mavoungou')
-      .replace(/\bMutombo\b/gi, 'Moutombo')
-      .replace(/\bMulumba\b/gi, 'Mouloumba')
-      .replace(/\bNgalula\b/gi, 'Ngaloula')
-      .replace(/\bMputu\b/gi, 'Mpoutou')
-      .replace(/\bKyungu\b/gi, 'Kyoungou')
-      .replace(/\bLukwebo\b/gi, 'Loukouébo')
-      .replace(/\bLoukwébo\b/gi, 'Loukouébo')
-      .replace(/\bSuminwa\b/gi, 'Souminoua')
-      .replace(/\bTuluka\b/gi, 'Toulouka')
-      .replace(/\bKapend\b/gi, 'Kapénd')
-      // 5. General Congolese proper-noun phonetic rule for capitalized Tsh- names
-      .replace(/\bTsh([a-zàâéèêëîïôùû]+)/g, 'Tch$1');
+    return normalizeSpeechPronunciation(text, this.pronunciationEntries);
   }
 
   // Transform raw text into warm, natural spoken French (ZERO robotic letter-by-letter spelling or article stuttering!)
@@ -1648,6 +1523,7 @@ class SpeechService {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 text: sentence,
+                pronunciationApplied: true,
                 voice,
                 emotion: detectSentenceEmotion(sentence),
               }),
@@ -1849,6 +1725,8 @@ class SpeechService {
     this.stop();
     this.isCancelled = false;
     const generation = this.playbackGeneration;
+    await this.refreshPronunciation();
+    if (this.isCancelled || generation !== this.playbackGeneration) return;
 
     const sentences =
       options?.customSentences && options.customSentences.length > 0

@@ -1,3 +1,6 @@
+import { synthesizePiperTutor } from './piperTutorSpeech.js';
+import { normalizeSpeechPronunciation, parsePronunciationEntries } from '../shared/speechPronunciation.js';
+import { readSpeechPronunciation, saveSpeechPronunciation } from './speechPronunciation.js';
 import { readTutorPresentation, saveTutorPresentation } from './tutorPresentation.js';
 import { readInitiationAccess } from './initiationAccess.js';
 import { resetLink } from './nativeSession.js';
@@ -69,6 +72,28 @@ const audit = async (req: AuthRequest, action: string, target: string) => {
 };
 export const adminRouter = Router();
 adminRouter.use(authenticate, requireAdmin);
+adminRouter.post('/speech-pronunciation/preview', superOnly, wrap(async (req, res) => {
+  let entries;
+  try { entries = parsePronunciationEntries(req.body?.entries); }
+  catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Dictionnaire invalide.' }); }
+  if (typeof req.body?.text !== 'string' || !req.body.text.trim() || req.body.text.length > 300) return res.status(400).json({ error: 'Indiquez une phrase d’essai de 300 caractères maximum.' });
+  const spoken = normalizeSpeechPronunciation(req.body.text, entries);
+  if (spoken.length > 3000) return res.status(400).json({ error: 'Raccourcissez la phrase d’essai ou les prononciations.' });
+  const audio = await synthesizePiperTutor(spoken, 'vivienne');
+  if (!audio) return res.status(503).json({ error: 'Le service vocal Piper doit être configuré pour cet aperçu.' });
+  res.json({ audioBase64: audio.audioBuffer.toString('base64'), mimeType: audio.mimeType });
+}));
+adminRouter.get('/speech-pronunciation', superOnly, wrap(async (_req, res) => {
+  res.set('Cache-Control', 'no-store'); res.json({ entries: await readSpeechPronunciation(true) });
+}));
+adminRouter.post('/speech-pronunciation', superOnly, wrap(async (req, res) => {
+  try { const entries = await saveSpeechPronunciation(req.body?.entries, req.identity!.uid); res.json({ ok: true, entries }); }
+  catch (error) {
+    // Validation errors are safe to display; storage failures use the router's 503 handler.
+    if (error instanceof Error && ['Le dictionnaire', 'Indiquez', 'Utilisez', 'Chaque nom'].some(prefix => error.message.startsWith(prefix))) return res.status(400).json({ error: error.message });
+    throw error;
+  }
+}));
 adminRouter.get('/tutor-presentation', superOnly, wrap(async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation(true)); }));
 adminRouter.post('/tutor-presentation', superOnly, wrap(async (req, res) => {
   const b = req.body;

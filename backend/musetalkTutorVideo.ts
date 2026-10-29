@@ -1,3 +1,5 @@
+import { readSpeechPronunciation } from './speechPronunciation.js';
+import { normalizeSpeechPronunciation } from '../shared/speechPronunciation.js';
 import { createHash, createHmac } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { authenticate, services } from './admin.js';
@@ -30,7 +32,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (!configured()) return res.status(503).json({ error: 'La vidéo MuseTalk n’est pas encore activée.' });
       const { text: raw, persona } = req.body || {};
       if (typeof raw !== 'string' || raw.length > 6000 || !personas.includes(persona)) return res.status(400).json({ error: 'Réponse ou tutrice invalide.' });
-      const text = normalizeVideoText(raw);
+      const text = normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.()));
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
       const id = createHash('sha256').update(JSON.stringify([uid, text, persona, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v6' : 'musetalk-v15-realtime-fragments-v5'])).digest('hex');
