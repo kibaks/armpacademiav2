@@ -1,3 +1,5 @@
+import { operationsApi } from './lib/operationsApi';
+import { downloadOperation } from './lib/operationsApi';
 import { InitiationPathway } from './components/InitiationPathway';
 import type { LearningStage } from '../shared/learnerProgression';
 import { getLearnerOnboarding } from './utils/learnerOnboarding';
@@ -155,7 +157,7 @@ export default function App() {
       ...c,
       lessons: (c.lessons || []).map((l, idx) => ({
         ...l,
-        format: 'animation',
+        format: l.format || 'animation',
         templateId:
           l.templateId && l.templateId !== 'whiteboard'
             ? l.templateId
@@ -173,7 +175,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const extraCustom = parsed
-            .filter((c: CourseModule) => c && c.id && c.level !== 'Fondamental' && !officialIds.has(c.id))
+            .filter((c: CourseModule) => c && c.id && !officialIds.has(c.id))
             .map(normalizeCourseToAnimation);
           return [...officialNormalized, ...extraCustom];
         }
@@ -183,7 +185,7 @@ export default function App() {
     }
     return officialNormalized;
   });
-  const [requests, setRequests] = useState<TrainingRequest[]>(INITIAL_TRAINING_REQUESTS);
+  const [requests, setRequests] = useState<TrainingRequest[]>([]);
   const [cgpmpAccountRequests, setCgpmpAccountRequests] = useState<CgpmpAccountCreationRequest[]>(() => {
     return getLocalCgpmpAccountRequests();
   });
@@ -198,7 +200,8 @@ export default function App() {
     return false;
   });
   const [isMobileMode, setIsMobileMode] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline,setIsOffline]=useState(!navigator.onLine);
+  useEffect(()=> {const online=()=>setIsOffline(false),offline=()=>setIsOffline(true);window.addEventListener('online',online);window.addEventListener('offline',offline);return()=>{window.removeEventListener('online',online);window.removeEventListener('offline',offline);};},[]);
 
   // Modals State
   const [isTutorOpen, setIsTutorOpen] = useState(false);
@@ -312,7 +315,7 @@ export default function App() {
         if (courses) {
           const map = new Map<string, CourseModule>();
           COURSES_DATA.forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
-          courses.filter(c => c.level !== 'Fondamental').forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
+          courses.filter(c => !COURSES_DATA.some(official => official.id===c.id && official.level==='Fondamental')).forEach(c => map.set(c.id, normalizeCourseToAnimation(c)));
           setCourses(Array.from(map.values()));
         }
       } catch { if (active()) showToast('Chargement de la session ou des données indisponible. Réessayez.'); }
@@ -699,79 +702,14 @@ export default function App() {
     );
   };
 
-  // Module Completion Handler
-  const handleCompleteModule = async (courseId: string, score?: number) => {
-    const initiationModule = onboarding.modules.find(course => course.id === courseId);
-    if (onboarding.required && initiationModule && !onboarding.isRead(initiationModule)) {
-      showToast('Lisez et validez chaque chapitre avant de terminer ce module d’initiation.');
-      return;
-    }
-    const courseObj = courses.find(c => c.id === courseId);
-    const prevCompletedIds = currentProfile.completedCourseIds || [];
-    const isNewCompletion = !prevCompletedIds.includes(courseId);
-    const nextCompletedIds = isNewCompletion ? [...prevCompletedIds, courseId] : prevCompletedIds;
-    const nextCourseProgress = { ...(currentProfile.courseProgress || {}), [courseId]: 100 };
-    const nextQuizScores = score !== undefined
-      ? { ...(currentProfile.quizScoresByCourse || {}), [courseId]: score }
-      : (currentProfile.quizScoresByCourse || {});
-
-    const existingCerts = currentProfile.certificates || [];
-    const hasCertAlready = existingCerts.some(c => c.courseId === courseId);
-    const nextCertificates = (!hasCertAlready && courseObj)
-      ? [
-          {
-            id: `CERT-${courseObj.code}-${Date.now().toString().slice(-4)}`,
-            courseId: courseObj.id,
-            courseCode: courseObj.code,
-            courseTitle: courseObj.title,
-            score: score || 90,
-            issuedAt: new Date().toLocaleDateString('fr-FR'),
-            sealNumber: `ARMP-RDC-${courseObj.code}-${Math.floor(100000 + Math.random() * 900000)}`
-          },
-          ...existingCerts
-        ]
-      : existingCerts;
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const isNewActiveDay = currentProfile.lastActiveDate !== todayStr;
-
-    const baseWithReading = courseObj
-      ? recordCourseReadingInProfile(
-          currentProfile,
-          courseObj,
-          Math.max(0, (courseObj.lessons?.length || 1) - 1),
-          100
-        )
-      : currentProfile;
-
-    const updated: UserProfile = {
-      ...baseWithReading,
-      completedModulesCount: Math.max(
-        isNewCompletion ? currentProfile.completedModulesCount + 1 : currentProfile.completedModulesCount,
-        nextCompletedIds.length
-      ),
-      certificationsCount: Math.max(
-        isNewCompletion ? currentProfile.certificationsCount + 1 : currentProfile.certificationsCount,
-        nextCertificates.length
-      ),
-      completedCourseIds: nextCompletedIds,
-      courseProgress: nextCourseProgress,
-      quizScoresByCourse: nextQuizScores,
-      certificates: nextCertificates,
-      totalStudyMinutes: (currentProfile.totalStudyMinutes || 180) + 45,
-      streakDays: isNewActiveDay ? (currentProfile.streakDays || 5) + 1 : (currentProfile.streakDays || 5),
-      lastActiveDate: todayStr
-    };
-    setProfiles((prev) => ({
-      ...prev,
-      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
-    }));
-    showToast(`Félicitations ! Votre attestation officielle ARMP a été générée et sauvegardée.`);
-    try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Could not sync module completion to Firestore", e);
-    }
+  // Certificates and final scores are issued by the assessment API, never invented here.
+  const handleCompleteModule = async () => {
+    const response = await authenticatedFetch('/api/operations/profiles');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Actualisation du résultat impossible.');
+    const profile = data.profiles.find((p: UserProfile) => p.id === currentProfile.id);
+    if (profile) setProfiles(prev => ({...prev,[currentRole]:applyProfileMedia(profile,prev[currentRole] || profile)}));
+    showToast('Évaluation enregistrée. Votre attestation pédagogique est disponible après réussite.');
   };
 
   // Persist granular course progress (lessons completed, percentage, quiz score, and last reading history)
@@ -812,7 +750,6 @@ export default function App() {
       courseProgress: nextCourseProgress,
       completedLessonsByCourse: nextLessonsMap,
       quizScoresByCourse: nextQuizScores,
-      totalStudyMinutes: (currentProfile.totalStudyMinutes || 180) + 10,
       lastActiveDate: new Date().toISOString().slice(0, 10)
     };
     setProfiles((prev) => ({
@@ -848,36 +785,17 @@ export default function App() {
     }
   };
 
-  // Offline Download Toggle Handler
-  const handleToggleOfflineDownload = async (courseId: string) => {
-    const exists = currentProfile.offlineDownloads.includes(courseId);
-    if (!exists && onboarding.required && !onboarding.modules.some(module => module.id === courseId)) { showToast('Réussissez le test de niveau avant de télécharger ce module.'); return; }
-    const nextDownloads = exists
-      ? currentProfile.offlineDownloads.filter((id) => id !== courseId)
-      : [...currentProfile.offlineDownloads, courseId];
-
-    const updated: UserProfile = {
-      ...currentProfile,
-      offlineDownloads: nextDownloads
-    };
-
-    setProfiles((prev) => ({
-      ...prev,
-      [currentRole]: applyProfileMedia(updated, prev[currentRole] || currentProfile)
-    }));
-
-    const isNowDownloaded = !exists;
-    showToast(
-      isNowDownloaded
-        ? `Module sauvegardé en stockage local pour consultation hors-ligne (Province).`
-        : `Module retiré du stockage local.`
-    );
-
+  // Actual PDF export; the profile tracks the download, not a simulated offline app.
+  const handleToggleOfflineDownload = async (courseId:string) => {
+    const course=courses.find(c=>c.id===courseId); if(!course) return;
+    if(onboarding.required && !onboarding.modules.some(c=>c.id===courseId)) {showToast('Réussissez le test de niveau avant de télécharger ce module.');return;}
     try {
-      await syncUserProfileToFirestore(updated);
-    } catch (e) {
-      console.warn("Could not sync downloads to Firestore", e);
-    }
+      await downloadOperation(`/courses/${courseId}/document`,`support-${course.code}.pdf`);
+      const updated={...currentProfile,offlineDownloads:[...new Set([...(currentProfile.offlineDownloads || []),courseId])]};
+      await syncUserProfileToFirestore(updated,{offlineDownloads:updated.offlineDownloads});
+      setProfiles(prev=>({...prev,[currentRole]:applyProfileMedia(updated,prev[currentRole] || currentProfile)}));
+      showToast('Support PDF téléchargé. Ouvrez ce fichier pour le consulter sans connexion.');
+    }catch(error) {showToast(error instanceof Error ? error.message : 'Téléchargement non confirmé.');}
   };
 
   // Trainer Course Authoring Handler (persists to localStorage + Firestore)
@@ -914,79 +832,18 @@ export default function App() {
     });
   };
   // CGPMP Request Handlers
-  const handleSubmitRequest = async (newReq: TrainingRequest) => {
-    setRequests((prev) => [newReq, ...prev]);
-    showToast(`Demande ${newReq.id} transmise avec succès à la DFAT pour validation préalable.`);
-    try {
-      await saveTrainingRequestToFirestore(newReq);
-    } catch (err) {
-      console.warn("Could not save training request to Firestore", err);
-    }
+  const handleSubmitRequest = async (newReq:TrainingRequest) => {
+    await saveTrainingRequestToFirestore(newReq);
+    setRequests(prev=>[newReq,...prev]);
+    showToast(`Demande ${newReq.id} enregistrée et disponible pour instruction par la DFAT.`);
   };
-
-  const handleApproveRequest = async (reqId: string, note?: string) => {
-    const decidedAt = new Date().toLocaleDateString('fr-FR');
-    const noteText = note || 'Visa DFAT accordé. Session programmée.';
-
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === reqId
-          ? {
-              ...r,
-              status: 'Approuvé par DFAT',
-              dfatNote: noteText,
-              decidedAt
-            }
-          : r
-      )
-    );
-    showToast(`Visa DFAT accordé pour la demande ${reqId}. Notification envoyée à la CGPMP.`);
-
-    const found = requests.find(r => r.id === reqId);
-    if (found) {
-      try {
-        await saveTrainingRequestToFirestore({
-          ...found,
-          status: 'Approuvé par DFAT',
-          dfatNote: noteText,
-          decidedAt
-        });
-      } catch (e) {
-        console.warn("Could not sync approval to Firestore", e);
-      }
-    }
+  const decideTraining = async (id:string,status:string,note:string) => {
+    const result=await operationsApi(`/training/${id}/decision`,{status,note});
+    setRequests(prev=>prev.map(r=>r.id===id?result.request:r));
+    showToast('Décision enregistrée. Elle est consultable depuis le guichet.');
   };
-
-  const handleRejectRequest = async (reqId: string, note: string) => {
-    const decidedAt = new Date().toLocaleDateString('fr-FR');
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === reqId
-          ? {
-              ...r,
-              status: 'Rejeté',
-              dfatNote: note,
-              decidedAt
-            }
-          : r
-      )
-    );
-    showToast(`Demande ${reqId} rejetée avec motif transmis.`);
-
-    const found = requests.find(r => r.id === reqId);
-    if (found) {
-      try {
-        await saveTrainingRequestToFirestore({
-          ...found,
-          status: 'Rejeté',
-          dfatNote: note,
-          decidedAt
-        });
-      } catch (e) {
-        console.warn("Could not sync rejection to Firestore", e);
-      }
-    }
-  };
+  const handleApproveRequest=(id:string,note?:string)=>decideTraining(id,'Approuvé par DFAT',note || 'Visa DFAT accordé.');
+  const handleRejectRequest=(id:string,note:string)=>decideTraining(id,'Rejeté',note);
 
   // CGPMP Account Creation Request Handlers (Secrétaire Permanent + ARMP Validation + Email Dispatch)
   const handleApproveCgpmpAccountRequest = async (req: CgpmpAccountCreationRequest, note?: string) => {
@@ -1042,7 +899,7 @@ export default function App() {
         initiationRequired={isAuthenticated && onboarding.required}
         onOpenInitiation={() => setActiveTab('initiation')}
         currentProfile={currentProfile}
-        allProfiles={profiles}
+        allProfiles={isAuthenticated ? Object.fromEntries([currentProfile, ...firestoreProfiles].map(p => [p.id, p])) : {}}
         onSelectRole={handleRoleChange}
         activeTab={activeTab}
         setActiveTab={(tab: string) => {
@@ -1121,7 +978,7 @@ export default function App() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white">Catalogues des formations</h4>
-                    <p className="text-[11px] text-slate-500">12 modules certifiants</p>
+                    <p className="text-[11px] text-slate-500">{courses.length} modules disponibles</p>
                   </div>
                 </div>
 
@@ -1295,7 +1152,7 @@ export default function App() {
             ) : (
               <UserProfileView
                 currentProfile={currentProfile}
-                allProfiles={profiles}
+                allProfiles={isAuthenticated ? Object.fromEntries([currentProfile, ...firestoreProfiles].map(p => [p.id, p])) : {}}
                 onSelectRole={handleRoleChange}
                 courses={courses}
                 requests={requests}
@@ -1355,13 +1212,13 @@ export default function App() {
         )}
 
         {/* TAB 5: TABLEAU DE BORD DÉCISIONNEL & ANALYTICS */}
-        {(activeTab === 'dashboard' || activeTab === 'analytics') && (
+        {(activeTab === 'dashboard' || activeTab === 'analytics') && isAuthenticated && ['super_admin','dfat_admin'].includes(currentProfile.role) && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <AnalyticsDashboard
               institutionName={currentProfile.institution}
               courses={courses}
               requests={requests}
-              allProfiles={profiles}
+              allProfiles={isAuthenticated ? Object.fromEntries([currentProfile, ...firestoreProfiles].map(p => [p.id, p])) : {}}
               firestoreProfiles={firestoreProfiles}
               onShowToast={showToast}
             />
@@ -1374,7 +1231,7 @@ export default function App() {
             <div className="w-full">
               <TrainerPortal
                 currentProfile={currentProfile}
-                allProfiles={profiles}
+                allProfiles={isAuthenticated ? Object.fromEntries([currentProfile, ...firestoreProfiles].map(p => [p.id, p])) : {}}
                 courses={courses}
                 onAddCourse={handleAddCustomCourse}
                 onPreviewCourse={(course) => setPreviewCourse(course)}
@@ -1412,7 +1269,7 @@ export default function App() {
                 currentProfile={currentProfile}
                 courses={courses}
                 requests={requests}
-                allProfiles={profiles}
+                allProfiles={isAuthenticated ? Object.fromEntries([currentProfile, ...firestoreProfiles].map(p => [p.id, p])) : {}}
                 firestoreProfiles={firestoreProfiles}
                 onShowToast={showToast}
                 onAddCourse={handleAddCustomCourse}
@@ -1516,7 +1373,7 @@ export default function App() {
         initialRole={currentRole}
         initialMode={authModalMode}
         initialRegisterEntry={authModalEntry}
-        allProfiles={profiles}
+        allProfiles={isAuthenticated ? Object.fromEntries([currentProfile, ...firestoreProfiles].map(p => [p.id, p])) : {}}
         pendingCourseTitle={
           pendingCourseForAuth?.title ||
           (pendingTutorAfterAuth ? 'Conversation & Assistance Juridique IA (ARMP)' : undefined)

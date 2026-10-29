@@ -1,3 +1,4 @@
+import { operationsApi } from './lib/operationsApi';
 import { initializeApp, getApps } from 'firebase/app';
 import { 
   getAuth, 
@@ -137,17 +138,9 @@ export function buildDefaultProfile(uid: string, email: string, name: string, ro
     completedLessonsByCourse: {},
     quizScoresByCourse: {},
     notesByCourse: {},
-    studyHoursHistory: [
-      { month: 'Avr', hours: 3.5, score: 62 },
-      { month: 'Mai', hours: 4.8, score: 68 },
-      { month: 'Juin', hours: 5.5, score: 72 },
-      { month: 'Juil', hours: 6.4, score: 76 },
-      { month: 'Août', hours: 7.2, score: 80 },
-      { month: 'Sep', hours: 8.0, score: base.placementScore || 84 }
-    ],
-    totalStudyMinutes: 180,
-    streakDays: 5,
-    lastActiveDate: new Date().toISOString().slice(0, 10),
+    studyHoursHistory: [],
+    totalStudyMinutes: 0,
+    streakDays: 0,
     galleryPhotos: [],
     certificates: [],
     whatsappNotifications: true,
@@ -159,16 +152,8 @@ export function buildDefaultProfile(uid: string, email: string, name: string, ro
 // Fetch all user profiles for institutional analytics & trainer seguimiento
 export async function fetchAllUserProfilesFromFirestore(): Promise<UserProfile[]> {
   if (!auth.currentUser) return [];
-  const path = 'users';
-  try {
-    const snap = await getDocs(collection(db, 'users'));
-    const list: UserProfile[] = [];
-    snap.forEach(d => list.push(d.data() as UserProfile));
-    return list;
-  } catch (error) {
-    console.warn('Could not list all profiles from Firestore:', error);
-    return [];
-  }
+  const result = await operationsApi('/profiles');
+  return result.profiles;
 }
 
 // Custom Courses persistence

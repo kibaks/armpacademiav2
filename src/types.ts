@@ -107,6 +107,8 @@ export interface UserProfile {
   notesByCourse?: Record<string, string>;
   studyHoursHistory?: { month: string; hours: number; score: number }[];
   totalStudyMinutes?: number;
+  studyMinutesByCourse?: Record<string, number>;
+  studyMinutesByDay?: Record<string, number>;
   streakDays?: number;
   lastActiveDate?: string;
   galleryPhotos?: { id: string; url: string; label: string; createdAt: string }[];

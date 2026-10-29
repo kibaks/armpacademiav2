@@ -1,3 +1,4 @@
+import { operationsRouter } from './operations.js';
 import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './tutorVoiceInput.js';
 import { prepareTutorSpeech, readSpeechPronunciation } from './speechPronunciation.js';
 import initiationKnowledge from '../shared/initiationKnowledge.json' with { type: 'json' };
@@ -62,6 +63,9 @@ app.use('/api/storage', storageRouter);
 app.use('/api/profile', profileMediaRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);
+app.use('/api/operations', operationsRouter);
+app.use('/api/ai/flow-video', authenticate, (_req,res)=>res.status(410).json({error:'Cet ancien service de démonstration a été retiré. Utilisez la vidéo de la tutrice dans l’application.',code:'LEGACY_DEMO_RETIRED'}));
+app.use('/api/ai', (req,res,next)=>['/recommendations','/generate-report','/generate-animated-module'].includes(req.path) ? operationsRouter(req,res,next) : next());
 app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, next) => {
  if (req.method === 'GET') return next();
  authenticate(req, res, () => requireAdmin(req, res, next));
@@ -669,62 +673,6 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
 
 app.use('/api', learnerProgressionRouter);
 
-
-app.post('/api/ai/recommendations', async (req, res) => {
-  try {
-    const { role, institution } = req.body;
-    const ai = getAIClient();
-    if (!ai) return res.json({ summary: `Recommandations pour ${institution || 'institution'}`, modules: [{ id: 'MOD-002', title: 'Contrôle DGCMP', priority: 'Haute', reason: 'Seuils ANO' }] });
-    const prompt = `Conseiller pédagogique RDC. Rôle: ${role}, Institution: ${institution} Génère 3 recommandations JSON {summary, modules:[{id,title,priority,reason}]}`;
-    try {
-      const r = await generateWithResilience(ai, { contents: prompt, config: { responseMimeType: 'application/json' } });
-      return res.json(JSON.parse(r.text || '{}'));
-    } catch {
-      return res.json({ summary: 'Recommandations adaptatives', modules: [{ id: 'MOD-002', title: 'Contrôle DGCMP', priority: 'Haute', reason: 'Art.12' }] });
-    }
-  } catch (err: any) {
-    return res.json({ summary: 'Recommandations', modules: [] });
-  }
-});
-
-app.post('/api/ai/generate-report', async (req, res) => {
-  const fallback = { reportTitle: `Rapport - ${req.body?.institution || 'Global'}`, generatedAt: new Date().toLocaleDateString('fr-FR'), executiveSummary: "Progression de 18% sur PPM et passation.", keyObservations: ["Complétion 87%", "Rejets DGCMP -32%"], complianceScore: 92, recommendationsDFAT: "Ateliers PPP et e-Procurement." };
-  try {
-    const { institution, period, stats } = req.body;
-    const ai = getAIClient();
-    if (!ai) return res.json(fallback);
-    const prompt = `Directeur DFAT ARMP. Institution: ${institution}, Période: ${period}, Stats: ${JSON.stringify(stats)} Retourne JSON {reportTitle, generatedAt, executiveSummary, keyObservations, complianceScore, recommendationsDFAT}`;
-    try {
-      const r = await generateWithResilience(ai, { contents: prompt, config: { responseMimeType: 'application/json' } });
-      return res.json(JSON.parse(r.text || '{}'));
-    } catch { return res.json(fallback); }
-  } catch { return res.json(fallback); }
-});
-
-app.get('/api/ai/flow-video/cache-check', (_req, res) => {
-  return res.json({
-    cached: true,
-    videoUrl: '/assets/aisha_veo_vids_studio.mp4',
-    operationName: null,
-    engine: 'veo-3.1-vids-hd',
-  });
-});
-
-app.post('/api/ai/flow-video/start', (_req, res) => {
-  return res.json({
-    cached: true,
-    done: true,
-    videoUrl: '/assets/aisha_veo_vids_studio.mp4',
-    engine: 'veo-3.1-vids-hd',
-  });
-});
-
-app.post('/api/ai/flow-video/status', (_req, res) => {
-  return res.json({
-    done: true,
-    videoUrl: '/assets/aisha_veo_vids_studio.mp4',
-  });
-});
 
 // ============================================================================
 // NEURAL FRENCH VOICE ENGINE (Prof. Aïsha — 100% Natural Human Expressive Prosody)

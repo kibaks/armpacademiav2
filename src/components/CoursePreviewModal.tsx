@@ -225,7 +225,7 @@ export const CoursePreviewModal: React.FC<CoursePreviewModalProps> = ({
                 <Award className="w-3.5 h-3.5 text-blue-600" />
                 <span>Attestation</span>
               </div>
-              <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">Officielle ARMP</p>
+              <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">Pédagogique, après réussite</p>
             </div>
 
             <div className="p-2 border-l border-slate-200 dark:border-slate-700">
@@ -233,7 +233,7 @@ export const CoursePreviewModal: React.FC<CoursePreviewModalProps> = ({
                 <Users className="w-3.5 h-3.5 text-blue-600" />
                 <span>Apprenants</span>
               </div>
-              <p className="text-sm font-black text-slate-900 dark:text-white">{course.studentsCount} inscrits</p>
+              <p className="text-sm font-black text-slate-900 dark:text-white">{course.lessons.length} chapitres disponibles</p>
             </div>
           </div>
 

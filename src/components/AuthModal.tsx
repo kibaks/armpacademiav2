@@ -1364,7 +1364,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             await firebaseRegisterUser(emailInput.trim(), passwordInput, finalComposedName || nameInput.trim(), 'particulier');
           }
           const newCgpmpReq: CgpmpAccountCreationRequest = {
-            id: `CGPMP-ACC-2026-${Math.floor(110 + Math.random() * 880)}`,
+            id: `CGPMP-ACC-${crypto.randomUUID()}`,
             institution: institutionInput.trim(),
             subCategory: subCategoryInput || activeRoleConfig.subCategoryOptions[0],
             province: provinceInput,

@@ -1,3 +1,4 @@
+import { synthesizeVoiceNote } from '../utils/synthesizeVoiceNote';
 import { tutorHistoryForStorage, tutorAudioMime } from '../../shared/tutorVoice';
 import { DEFAULT_TUTOR_PRESENTATION, normalizeTutorPresentation } from '../../shared/tutorPresentation';
 import './TutorStudio.css';
@@ -360,52 +361,6 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
-
-// Génère un vrai fichier audio WAV (PCM 16-bit) avec carillon vocal doux pour les appareils sans micro matériel
-const createSynthesizedVoiceNoteBlob = (text: string): { blob: Blob; durationLabel: string } => {
-  const sampleRate = 22050;
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  const durationSec = Math.max(2, Math.min(12, Math.ceil(words * 0.42)));
-  const numSamples = sampleRate * durationSec;
-  const buffer = new ArrayBuffer(44 + numSamples * 2);
-  const view = new DataView(buffer);
-  const writeStr = (offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-  };
-  writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + numSamples * 2, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data');
-  view.setUint32(40, numSamples * 2, true);
-
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    // Enveloppe syllabique douce pour donner un rendu sonore agréable à la lecture du lecteur audio
-    const syllableEnv = 0.35 + 0.65 * Math.abs(Math.sin(2 * Math.PI * 3.2 * t));
-    const fade = Math.min(1, t / 0.08) * Math.min(1, (durationSec - t) / 0.15);
-    const f0 = 195 + 25 * Math.sin(2 * Math.PI * 1.4 * t);
-    const wave =
-      0.55 * Math.sin(2 * Math.PI * f0 * t) +
-      0.28 * Math.sin(2 * Math.PI * (f0 * 2) * t) +
-      0.12 * Math.sin(2 * Math.PI * (f0 * 3) * t);
-    const sample = Math.max(-1, Math.min(1, wave * syllableEnv * fade * 0.18));
-    view.setInt16(44 + i * 2, sample * 32767, true);
-  }
-  const mm = Math.floor(durationSec / 60);
-  const ss = String(durationSec % 60).padStart(2, '0');
-  return {
-    blob: new Blob([buffer], { type: 'audio/wav' }),
-    durationLabel: `${mm}:${ss}`
-  };
-};
 
 type MediaAttachment = {
   type: 'image' | 'video' | 'audio';
@@ -1009,7 +964,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       return;
     }
     speechService.unlockAudio();
-    const { blob, durationLabel } = createSynthesizedVoiceNoteBlob(rawText);
+    let blob:Blob;
+    try {blob=await synthesizeVoiceNote(rawText);}catch(error){showNotice(error instanceof Error ? error.message : 'Synthèse impossible.');return;}
+    const durationLabel='Synthèse vocale';
     const url = URL.createObjectURL(blob);
     const mediaAttachment: MediaAttachment = {
       type: 'audio',

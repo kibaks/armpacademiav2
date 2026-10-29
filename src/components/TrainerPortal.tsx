@@ -1,3 +1,5 @@
+import { operationsApi, downloadOperation } from '../lib/operationsApi';
+import { learnerCourse, courseActivity, learner, teaches } from '../../shared/operationalStats';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -159,23 +161,11 @@ export const TrainerPortal: React.FC<TrainerPortalProps> = ({
   const [learnerSearchQuery, setLearnerSearchQuery] = useState('');
   const [learnerStatusFilter, setLearnerStatusFilter] = useState<'all' | 'certified' | 'in_progress' | 'needs_help'>('all');
   const [learnerRoleFilter, setLearnerRoleFilter] = useState<'all' | 'cgpmp' | 'pme' | 'dgcmp' | 'other'>('all');
-  const [trainerObservations, setTrainerObservations] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('academia_trainer_learner_observations');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
-  const [currentLearnerObservationInput, setCurrentLearnerObservationInput] = useState('');
-  const [customCertifiedIds, setCustomCertifiedIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('academia_trainer_custom_certifications');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [trainerObservations,setTrainerObservations] = useState<Record<string,string>>({});
+  const [currentLearnerObservationInput,setCurrentLearnerObservationInput] = useState('');
+  const [liveLearners,setLiveLearners] = useState<UserProfile[]>([]);
+  const [learnerLoadError,setLearnerLoadError] = useState<string | null>(null);
+  useEffect(()=> {let active=true; Promise.all([operationsApi('/profiles'),operationsApi('/trainer/observations')]).then(([ps,obs])=> {if(active){setLiveLearners(ps.profiles);setTrainerObservations(obs.observations);}}).catch(e=>{if(active)setLearnerLoadError(e.message);});return()=>{active=false;};},[currentProfile.id]);
 
   // Course Authoring Studio State (Step 1 -> 4)
   const [authoringStep, setAuthoringStep] = useState<1 | 2 | 3 | 4>(1);
@@ -300,8 +290,8 @@ L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'éval
         description: m.description || `Module animé généré par l'IA à partir du support de ${currentProfile.name}.`,
         coverImage: newCourseCover || imgTraining,
         chaptersCount: Array.isArray(m.lessons) ? m.lessons.length : 3,
-        rating: 5.0,
-        studentsCount: 1,
+        rating: 0,
+        studentsCount: 0,
         requiresDfatApproval: false,
         lessons: (Array.isArray(m.lessons) ? m.lessons : []).map((les: any, idx: number) => ({
           id: les.id || `L-IA-${idx + 1}`,
@@ -467,31 +457,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   const [prompterFontSize, setPrompterFontSize] = useState<'normal' | 'large' | 'xl'>('large');
   const [studioLowerThird, setStudioLowerThird] = useState(true);
   const [studioOverlayTheme, setStudioOverlayTheme] = useState<'official_blue' | 'presidential_gold' | 'minimal'>('official_blue');
-  const defaultStudioVideos: RecordedVideo[] = [
-    {
-      id: 'VID-001',
-      title: 'Masterclass : Rédaction du DAO Type ARMP',
-      duration: '14 min 30s',
-      blobUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      date: 'Hier, 15:40',
-      courseCode: 'MOD-002'
-    },
-    {
-      id: 'VID-002',
-      title: 'Point de Droit : Le Recours non juridictionnel devant le CRD',
-      duration: '08 min 12s',
-      blobUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-      date: '21 Septembre 2026',
-      courseCode: 'MOD-004'
-    }
-  ];
-  const [recordedVideos, setRecordedVideos] = useState<RecordedVideo[]>(() => {
-    try {
-      const saved = localStorage.getItem('armp_studio_videos');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return defaultStudioVideos;
-  });
+  const [recordedVideos,setRecordedVideos] = useState<RecordedVideo[]>([]);
 
   // Banque nationale de QCM persistée dans Firestore + localStorage
   const defaultQuizBank: QuizBankItem[] = [
@@ -536,16 +502,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   useEffect(() => {
     let mounted = true;
     fetchStudioVideosFromFirestore().then(remote => {
-      if (mounted && remote && remote.length > 0) {
-        setRecordedVideos(prev => {
-          const map = new Map<string, RecordedVideo>();
-          [...remote, ...prev].forEach(v => map.set(v.id, v));
-          const merged = Array.from(map.values());
-          try { localStorage.setItem('armp_studio_videos', JSON.stringify(merged)); } catch {}
-          return merged;
-        });
-      }
-    }).catch(() => {});
+      if(mounted) setRecordedVideos(remote.filter(v => v.authorId === currentProfile.id && !v.blobUrl.startsWith('blob:') && !v.blobUrl.includes('gtv-videos-bucket')));
+    }).catch(()=>setTrainerNotice('La bibliothèque vidéo ne peut pas être chargée.'));
 
     fetchQuizBankFromFirestore().then(remote => {
       if (mounted && remote && remote.length > 0) {
@@ -561,7 +519,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     return () => { mounted = false; };
   }, []);
 
-  const handleAddQuizBankItem = (e: React.FormEvent) => {
+  const handleAddQuizBankItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQbQuestion.trim() || !newQbAnswer.trim()) return;
     const item: QuizBankItem = {
@@ -574,50 +532,21 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       createdBy: currentProfile.name,
       createdAt: new Date().toISOString()
     };
+    try {
+    await saveQuizBankItemToFirestore(item);
     const next = [item, ...quizBankItems];
     setQuizBankItems(next);
     try { localStorage.setItem('armp_quiz_bank', JSON.stringify(next)); } catch {}
-    saveQuizBankItemToFirestore(item).catch(() => {});
     setNewQbQuestion('');
     setNewQbAnswer('');
     setTrainerNotice(`Question ${item.code} enregistrée et synchronisée dans la Banque Nationale ARMP ✓`);
     setTimeout(() => setTrainerNotice(null), 4000);
+    } catch(error) {setTrainerNotice(error instanceof Error ? error.message : "Question non enregistrée.");}
   };
 
   // --- Modules Enregistrés du Formateur Actuel ---
   // Règle d'or : chaque formateur ne suit, ne voit ou ne gère QUE ses modules enregistrés / homologués
-  const trainerCourses = React.useMemo(() => {
-    const registeredIds = new Set<string>();
-    if (Array.isArray(currentProfile.registeredCourseIds)) {
-      currentProfile.registeredCourseIds.forEach(id => registeredIds.add(id));
-    }
-    if (Array.isArray(currentProfile.assignedCourseIds)) {
-      currentProfile.assignedCourseIds.forEach(id => registeredIds.add(id));
-    }
-
-    // Valeur par défaut pour le profil formateur de référence Dr. Sylvie Tshilomba si pas encore de registeredCourseIds
-    const isSylvie = currentProfile.id === 'USR-FORM-06' || currentProfile.email === 'sylvie.tshilomba@academia-itech.cd' || currentProfile.name?.includes('Sylvie');
-    if (isSylvie && registeredIds.size === 0) {
-      registeredIds.add('MOD-001');
-      registeredIds.add('MOD-002');
-    }
-
-    return courses.filter(c => {
-      // 1. Module explicitement enregistré ou assigné au formateur
-      if (registeredIds.has(c.id) || registeredIds.has(c.code)) return true;
-      // 2. Créé par ce formateur ou sous son ID
-      if (c.trainerId && c.trainerId === currentProfile.id) return true;
-      if (c.authorId && c.authorId === currentProfile.id) return true;
-      if (c.createdBy && (c.createdBy === currentProfile.id || c.createdBy === currentProfile.name)) return true;
-      // 3. Nom du formateur correspondant
-      if (c.trainerName && (
-        c.trainerName.toLowerCase().includes(currentProfile.name.toLowerCase()) ||
-        currentProfile.name.toLowerCase().includes(c.trainerName.toLowerCase())
-      )) return true;
-
-      return false;
-    });
-  }, [courses, currentProfile]);
+  const trainerCourses = React.useMemo(()=>courses.filter(c=>teaches(currentProfile,c)),[courses,currentProfile]);
 
   const handleToggleRegisterCourse = async (course: CourseModule) => {
     const currentList = currentProfile.registeredCourseIds || currentProfile.assignedCourseIds || [];
@@ -643,131 +572,33 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
     setTimeout(() => setTrainerNotice(null), 4000);
   };
 
-  // Calculs dynamiques et réels des KPIs Formateur
-  const profilesArray = allProfiles ? Object.values(allProfiles) : [currentProfile];
-  const learnerProfiles = profilesArray.filter(p => p.role !== 'formateur' && p.role !== 'dfat_admin');
+  const learnerProfiles = liveLearners.filter(learner);
   const totalStudentsCount = learnerProfiles.length;
-
-  // Apprenants certifiés et actifs sur les modules enregistrés du formateur
-  const trainerCourseIds = new Set(trainerCourses.flatMap(c => [c.id, c.code]));
-  const certifiedLearnersCount = learnerProfiles.filter(p => {
-    const hasCert = (p.certificates && p.certificates.some(c => trainerCourseIds.has(c.courseId) || trainerCourseIds.has(c.courseCode))) ||
-      (p.completedCourseIds && p.completedCourseIds.some(cid => trainerCourseIds.has(cid))) ||
-      customCertifiedIds.some(key => key.startsWith(p.id) && Array.from(trainerCourseIds).some(cid => key.endsWith(cid)));
-    return Boolean(hasCert || (p.completedModulesCount && p.completedModulesCount > 0));
-  }).length;
-
-  const activeLearnersCount = learnerProfiles.filter(p => {
-    const hasProg = p.courseProgress && Object.entries(p.courseProgress).some(([cid, prog]) => trainerCourseIds.has(cid) && typeof prog === 'number' && prog > 0);
-    return Boolean(hasProg || (p.courseProgress && Object.values(p.courseProgress).some(v => typeof v === 'number' && v > 0)));
-  }).length;
-
-  const avgSuccessRate = Number(
-    (learnerProfiles.reduce((acc, p) => acc + (p.placementScore || 80), 0) / Math.max(1, learnerProfiles.length)).toFixed(1)
-  );
-
-  // Calcul du suivi par apprenant pour un cours donné
-  const computeLearnerCourseProgress = (learner: UserProfile, course: CourseModule) => {
-    const certKey = `${learner.id}_${course.id}`;
-    const isCustomCertified = customCertifiedIds.includes(certKey) || customCertifiedIds.includes(`${learner.id}_${course.code}`);
-    
-    let progressPct = 0;
-    if (isCustomCertified) {
-      progressPct = 100;
-    } else if (learner.courseProgress?.[course.id] !== undefined) {
-      progressPct = learner.courseProgress[course.id];
-    } else if (learner.courseProgress?.[course.code] !== undefined) {
-      progressPct = learner.courseProgress[course.code];
-    } else if (learner.completedCourseIds?.includes(course.id) || learner.completedCourseIds?.includes(course.code)) {
-      progressPct = 100;
-    } else {
-      const hash = Math.abs((learner.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 17 + course.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) * 23) % 100);
-      progressPct = hash < 20 ? 35 : (hash > 80 ? 92 : hash);
-    }
-
-    const totalLessons = Math.max(1, course.lessons.length);
-    const completedLessonsCount = progressPct >= 100 
-      ? totalLessons 
-      : Math.min(totalLessons, Math.max(1, Math.round((progressPct / 100) * totalLessons)));
-
-    const isCertified = progressPct >= 100 || isCustomCertified || Boolean(learner.certificates && learner.certificates.some(c => c.courseId === course.id || c.courseCode === course.code));
-
-    let quizScore = 80;
-    if (isCertified) {
-      quizScore = 90 + (learner.name.length % 9);
-    } else if (learner.quizScoresByCourse?.[course.id] !== undefined) {
-      quizScore = learner.quizScoresByCourse[course.id];
-    } else if (learner.placementScore) {
-      quizScore = Math.max(65, Math.min(96, Math.round(learner.placementScore * 0.95 + (progressPct * 0.1))));
-    } else {
-      quizScore = Math.round(68 + (progressPct * 0.28));
-    }
-
-    const studyTime = `${Math.round(progressPct * 0.08 + 2)}h ${((learner.name.length * 9) % 45) + 10}min`;
-    const lastActive = learner.lastActiveDate || (progressPct > 75 ? "Aujourd'hui à 10:30" : "Il y a 2 jours");
-
-    return {
-      profile: learner,
-      course,
-      progressPct,
-      completedLessonsCount,
-      quizScore,
-      isCertified,
-      studyTime,
-      lastActive,
-      status: isCertified ? ('certified' as const) : (progressPct < 40 ? ('needs_help' as const) : ('in_progress' as const))
-    };
-  };
-
-  // Liste des apprenants inscrits selon le cours sélectionné
-  // Filtré EXCLUSIVEMENT sur les modules enregistrés du formateur
+  const trainerCourseIds = new Set(trainerCourses.flatMap(c=>[c.id,c.code]));
+  const certifiedLearnersCount = learnerProfiles.filter(p=>p.certificates?.some(c=>trainerCourseIds.has(c.courseId))).length;
+  const activeLearnersCount = learnerProfiles.filter(p=>trainerCourses.some(c=>courseActivity(p,c))).length;
+  const actualScores = learnerProfiles.flatMap(p=>Object.entries(p.quizScoresByCourse || {}).filter(([id])=>trainerCourseIds.has(id)).map(([,score])=>score));
+  const avgSuccessRate = actualScores.length ? Math.round(actualScores.filter(s=>s>=70).length / actualScores.length * 100) : 0;
+  const computeLearnerCourseProgress = learnerCourse;
   const getEnrolledLearners = (courseId: string) => {
-    if (trainerCourses.length === 0) return [];
-
-    if (courseId === 'all') {
-      return learnerProfiles.map((lp, idx) => {
-        const assignedCourse = trainerCourses[idx % trainerCourses.length] || trainerCourses[0];
-        return computeLearnerCourseProgress(lp, assignedCourse);
-      });
-    }
-
-    const targetCourse = trainerCourses.find(c => c.id === courseId || c.code === courseId) || trainerCourses[0];
-    if (!targetCourse) return [];
-
-    return learnerProfiles.map(lp => computeLearnerCourseProgress(lp, targetCourse));
+    const selected=courseId==='all' ? trainerCourses : trainerCourses.filter(c=>c.id===courseId || c.code===courseId);
+    return selected.flatMap(c=>learnerProfiles.filter(p=>courseActivity(p,c)).map(p=>learnerCourse(p,c)));
   };
-
-  const handleSaveLearnerObservation = (learnerId: string, courseId: string, text: string) => {
-    const key = `${learnerId}_${courseId}`;
-    const next = { ...trainerObservations, [key]: text };
-    setTrainerObservations(next);
-    try {
-      localStorage.setItem('academia_trainer_learner_observations', JSON.stringify(next));
-    } catch {}
-    setTrainerNotice(`Observation pédagogique enregistrée pour ${selectedLearnerForModal?.profile.name || 'l\'apprenant'} ✓`);
-    setTimeout(() => setTrainerNotice(null), 3500);
+  const handleSaveLearnerObservation = async (learnerId:string,courseId:string,text:string) => {
+    try {await operationsApi('/trainer/observations',{learnerId,courseId,text});setTrainerObservations(prev=>({...prev,[`${learnerId}_${courseId}`]:text}));setTrainerNotice('Observation sauvegardée sur le serveur.');}
+    catch(error) {setTrainerNotice(error instanceof Error ? error.message : 'Observation non enregistrée.');}
   };
-
-  const handleGrantCertification = (learnerId: string, courseId: string) => {
-    const key = `${learnerId}_${courseId}`;
-    if (!customCertifiedIds.includes(key)) {
-      const next = [...customCertifiedIds, key];
-      setCustomCertifiedIds(next);
-      try {
-        localStorage.setItem('academia_trainer_custom_certifications', JSON.stringify(next));
-      } catch {}
-      setTrainerNotice(`Attestation Homologuée DFAT validée avec succès pour cet apprenant ✓`);
-      setTimeout(() => setTrainerNotice(null), 4000);
-      if (selectedLearnerForModal) {
-        setSelectedLearnerForModal({
-          ...selectedLearnerForModal,
-          isCertified: true,
-          progressPct: 100,
-          completedLessonsCount: selectedLearnerForModal.course.lessons.length,
-          quizScore: Math.max(90, selectedLearnerForModal.quizScore)
-        });
-      }
-    }
+  const handleGrantCertification = async (learnerId:string,courseId:string) => {
+    try {await operationsApi('/trainer/certify',{learnerId,courseId});setTrainerNotice('Attestation pédagogique vérifiée ; revue du formateur enregistrée.');}
+    catch(error) {setTrainerNotice(error instanceof Error ? error.message : 'Vérification non confirmée.');}
+  };
+  const [presentationBusy,setPresentationBusy] = useState(false);
+  const generatePresentation = async (index:number) => {
+    if(presentationBusy) return;
+    setPresentationBusy(true);
+    try {const lesson=lessonsList[index];await downloadOperation('/presentation',`presentation-${newCourseCode}.pptx`,{title:newCourseTitle,code:newCourseCode,prompt:lesson.aiPrompt,content:lesson.content});setTrainerNotice('Présentation PowerPoint créée. Relisez son contenu avant publication.');}
+    catch(error) {setTrainerNotice(error instanceof Error ? error.message : 'Présentation non générée.');}
+    finally {setPresentationBusy(false);}
   };
   const [videoUploading, setVideoUploading] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
@@ -864,6 +695,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
   // Handle Recording Trigger
   const handleToggleRecord = () => {
     if (!isRecording) {
+      if(!videoPreviewRef.current?.srcObject || typeof MediaRecorder==='undefined') {setTrainerNotice('Activez la caméra ou le partage d’écran avant d’enregistrer.');return;}
       // Start recording
       recordedChunksRef.current = [];
       setIsRecording(true);
@@ -884,13 +716,13 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           recorder.onstop = async () => {
             const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
-            const vidId = `VID-${Date.now().toString().slice(-4)}`;
+            const vidId = `VID-${crypto.randomUUID()}`;
             const newVid: RecordedVideo = {
               id: vidId,
               title: `Prise de cours #${recordedVideos.length + 1} (${new Date().toLocaleTimeString('fr-FR')})`,
               duration: formatTime(recordSeconds),
               blobUrl: url,
-              date: "À l'instant",
+              date: new Date().toISOString(),
               courseCode: newCourseCode
             };
             setRecordedVideos(prev => {
@@ -898,7 +730,6 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
               try { localStorage.setItem('armp_studio_videos', JSON.stringify(next)); } catch {}
               return next;
             });
-            saveStudioVideoToFirestore({ ...newVid, authorId: currentProfile.id }).catch(() => {});
             // → Upload vers Academia Storage (137.184.59.184) — vidéos
             try {
               setVideoUploading(true);
@@ -916,9 +747,10 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                 try { localStorage.setItem('armp_studio_videos', JSON.stringify(updated)); } catch {}
                 return updated;
               });
-              saveStudioVideoToFirestore({ ...newVid, academiaUrl: acad.url, academiaId: acad.id, blobUrl: acad.url, authorId: currentProfile.id }).catch(() => {});
+              await saveStudioVideoToFirestore({ ...newVid, academiaUrl: acad.url, academiaId: acad.id, blobUrl: acad.url, authorId: currentProfile.id });
+              setTrainerNotice('Vidéo enregistrée et sauvegardée sur le serveur.');
             } catch (e: any) {
-              console.warn('Upload Academia vidéo échoué', e);
+              setTrainerNotice('Vidéo conservée dans cette session uniquement. La sauvegarde serveur a échoué : téléchargez-la avant de fermer la page.');
             } finally {
               setVideoUploading(false);
             }
@@ -926,7 +758,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
           recorder.start();
           mediaRecorderRef.current = recorder;
         } catch (e) {
-          console.warn("MediaRecorder fallback", e);
+          setIsRecording(false);setTrainerNotice("Enregistrement indisponible dans ce navigateur. Aucun fichier créé.");
         }
       }
     } else {
@@ -938,21 +770,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       } else {
-        // Fallback recorded item for simulation
-        const fallbackVid: RecordedVideo = {
-          id: `VID-${Date.now().toString().slice(-4)}`,
-          title: `Masterclass ARMP #${recordedVideos.length + 1}`,
-          duration: formatTime(recordSeconds || 74),
-          blobUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-          date: "À l'instant",
-          courseCode: newCourseCode
-        };
-        setRecordedVideos(prev => {
-          const next = [fallbackVid, ...prev];
-          try { localStorage.setItem('armp_studio_videos', JSON.stringify(next)); } catch {}
-          return next;
-        });
-        saveStudioVideoToFirestore({ ...fallbackVid, authorId: currentProfile.id }).catch(() => {});
+        setTrainerNotice('Aucun enregistrement n’a été produit. Vérifiez la caméra et réessayez.');
       }
     }
   };
@@ -1022,8 +840,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
       description: newCourseDescription || `Formation officielle conçue par ${currentProfile.name}, formatrice accréditée ARMP. Maîtrise des standards de passation et de conformité.`,
       coverImage: newCourseCover,
       chaptersCount: lessonsList.length,
-      rating: 5.0,
-      studentsCount: 1,
+      rating: 0,
+      studentsCount: 0,
       requiresDfatApproval: false,
       trainerId: currentProfile.id,
       trainerName: currentProfile.name,
@@ -1368,7 +1186,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                             {c.title}
                           </h4>
                           <span className="text-[10px] text-slate-500 block">
-                            {c.lessons.length} chapitres • {learnerProfiles.length} apprenants réels • Note {c.rating}★
+                            {c.lessons.length} chapitres • {learnerProfiles.length} apprenants réels
                           </span>
                         </div>
                       </div>
@@ -1675,7 +1493,8 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
               </div>
             </div>
 
-            {trainerNotice && (
+            {learnerLoadError && <p role="alert" className="m-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{learnerLoadError}</p>}
+              {trainerNotice && (
               <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs font-bold flex items-center justify-between gap-3">
                 <div className="flex items-center space-x-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -2581,7 +2400,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                                   coverImage: newCourseCover,
                                   chaptersCount: lessonsList.length,
                                   rating: 5,
-                                  studentsCount: 1,
+                                  studentsCount: 0,
                                   requiresDfatApproval: false,
                                   lessons: lessonsList,
                                   quiz: quizList
@@ -2607,7 +2426,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                             <span className="font-bold text-indigo-700 dark:text-indigo-300 text-xs flex items-center gap-1">🤖 IA — Génération PPT</span>
                             <textarea rows={3} value={lesson.aiPrompt || ''} onChange={e=>{const u=[...lessonsList]; u[idx].aiPrompt=e.target.value; setLessonsList(u);}} placeholder="Ex: Génère un cours PPT de 8 slides sur le fractionnement des marchés (Art.13), avec définitions, exemples chiffrés, et un quiz final..." className="w-full px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-xs" />
                             <div className="flex gap-2">
-                              <button onClick={()=> alert(`Prompt IA envoyé : ${lesson.aiPrompt?.slice(0,60)}...\n→ Slides PPT générés (8 slides) + PDF` )} className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/> Générer le PPT avec l'IA</button>
+                              <button onClick={()=>void generatePresentation(idx)} disabled={presentationBusy} className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/> Générer le PPT avec l'IA</button>
                               <AcademiaMediaUploader kind="image" category="cours_ppt" visibility="private" entityId={lesson.id} compact label="Uploader PPT/PDF" onUploaded={(f)=>{const u=[...lessonsList]; u[idx].mediaUrl=f.url; setLessonsList(u);}} />
                             </div>
                             {lesson.mediaUrl && lesson.mediaUrl.match(/\.(ppt|pptx|pdf)$/i) && <div className="text-xs p-2 bg-white dark:bg-slate-900 rounded-lg border flex items-center justify-between"><span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5 text-red-500"/>{lesson.mediaUrl.split('/').pop()}</span><a href={lesson.mediaUrl} target="_blank" className="text-indigo-600 underline">Ouvrir</a></div>}

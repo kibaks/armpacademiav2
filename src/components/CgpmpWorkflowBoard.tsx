@@ -18,16 +18,16 @@ interface CgpmpWorkflowBoardProps {
   requests: TrainingRequest[];
   courses: CourseModule[];
   currentProfile: UserProfile;
-  onSubmitRequest: (newReq: TrainingRequest) => void;
-  onApproveRequest: (reqId: string, note?: string) => void;
-  onRejectRequest: (reqId: string, note: string) => void;
+  onSubmitRequest: (newReq: TrainingRequest) => void | Promise<void>;
+  onApproveRequest: (reqId: string, note?: string) => void | Promise<void>;
+  onRejectRequest: (reqId: string, note: string) => void | Promise<void>;
   cgpmpAccountRequests?: CgpmpAccountCreationRequest[];
   onApproveCgpmpAccountRequest?: (req: CgpmpAccountCreationRequest, note?: string) => Promise<void>;
   onRejectCgpmpAccountRequest?: (req: CgpmpAccountCreationRequest, reason: string) => Promise<void>;
-  onOpenCgpmpRegistrationPage?: () => void;
+  onOpenCgpmpRegistrationPage?: () => void | Promise<void>;
   preselectedCourse?: CourseModule | null;
-  onClearPreselectedCourse?: () => void;
-  onSelectSubCategoryForBreadcrumb?: (cat: string | null) => void;
+  onClearPreselectedCourse?: () => void | Promise<void>;
+  onSelectSubCategoryForBreadcrumb?: (cat: string | null) => void | Promise<void>;
 }
 
 export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
@@ -56,7 +56,7 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
   const [selectedModuleId, setSelectedModuleId] = useState(courses[0]?.id || 'mod-1');
   const [celluleName, setCelluleName] = useState(currentProfile.institution || 'Ministère des Infrastructures et Travaux Publics');
   const [participantsCount, setParticipantsCount] = useState(12);
-  const [requestedDate, setRequestedDate] = useState('2025-05-15');
+  const [requestedDate, setRequestedDate] = useState(new Date().toISOString().slice(0,10));
   const [justification, setJustification] = useState('');
 
   useEffect(() => {
@@ -89,13 +89,18 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
     return matchStatus && matchMinistry;
   });
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const [requestBusy,setRequestBusy]=useState(false);
+  const [requestError,setRequestError]=useState<string | null>(null);
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(requestBusy)return;
+    setRequestBusy(true);setRequestError(null);
+    try {
     const mod = courses.find((c) => c.id === selectedModuleId) || courses[0];
     if (!mod) return;
 
     const newReq: TrainingRequest = {
-      id: `REQ-2025-0${requests.length + 12}`,
+      id: `REQ-${crypto.randomUUID()}`,
       cgpmpCellule: `CGPMP - ${celluleName}`,
       ministereOrEntite: celluleName,
       applicantName: currentProfile.name,
@@ -108,11 +113,13 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
         'Renforcement des capacités techniques des membres de la CGPMP dans le cadre du Plan de Passation des Marchés.',
       requestedDate,
       status: 'En attente',
-      createdAt: new Date().toLocaleDateString('fr-FR')
+      createdAt: new Date().toISOString()
     };
 
-    onSubmitRequest(newReq);
+    await onSubmitRequest(newReq);
     setJustification('');
+    } catch(error) {setRequestError(error instanceof Error ? error.message : 'Demande non enregistrée.');}
+    finally {setRequestBusy(false);}
   };
 
   const pendingCount = requests.filter((r) => r.status === 'En attente').length;
@@ -124,6 +131,7 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
 
   return (
     <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {requestError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{requestError}</p>}
       {/* =================================================================== */}
       {/* COLUMN 1 (LEFT — 6 COLS ÉGALES 50%): NAVIGATION, COMPTE CGPMP & FORM */}
       {/* =================================================================== */}
@@ -192,7 +200,8 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
             Nouvelle Demande de Session de Formation CGPMP
           </div>
 
-          <form onSubmit={handleFormSubmit} className="space-y-3.5 text-xs">
+          <form aria-busy={requestBusy} onSubmit={handleFormSubmit} className="space-y-3.5 text-xs">
+            {requestError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{requestError}</p>}
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Module de Formation Sollicité *
@@ -494,12 +503,13 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  onRejectRequest(
+                                onClick={async () => {
+                                  try {await onRejectRequest(
                                     req.id,
                                     dfatDecisionNote || 'Rejeté pour ajustement du plan.'
                                   );
                                   setReviewingReqId(null);
+                                  }catch(error){setRequestError(error instanceof Error?error.message:"Décision non enregistrée.");}
                                 }}
                                 className="px-3.5 py-1.5 rounded-xl bg-red-100 text-red-700 font-bold text-xs cursor-pointer"
                               >
@@ -507,12 +517,13 @@ export const CgpmpWorkflowBoard: React.FC<CgpmpWorkflowBoardProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  onApproveRequest(
+                                onClick={async () => {
+                                  try {await onApproveRequest(
                                     req.id,
                                     dfatDecisionNote || 'Visa formel accordé par la DFAT.'
                                   );
                                   setReviewingReqId(null);
+                                  }catch(error){setRequestError(error instanceof Error?error.message:"Décision non enregistrée.");}
                                 }}
                                 className="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs cursor-pointer"
                               >

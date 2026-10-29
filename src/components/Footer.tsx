@@ -50,7 +50,7 @@ export const Footer: React.FC<FooterProps> = ({
               {isOffline ? (
                 <>
                   <WifiOff className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-amber-600 dark:text-amber-400 font-medium">Cache Local Actif</span>
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">Connexion interrompue</span>
                 </>
               ) : (
                 <>
@@ -62,7 +62,7 @@ export const Footer: React.FC<FooterProps> = ({
             <span>•</span>
             <span>Édition 2026</span>
             <span>•</span>
-            <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-mono text-[10px] font-bold">v863427f • header full-width + mode jour</span>
+            <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-mono text-[10px] font-bold">ARMP Academia</span>
           </div>
         </div>
       </div>
@@ -90,7 +90,7 @@ export const Footer: React.FC<FooterProps> = ({
             </p>
             <p className="flex items-center space-x-1.5">
               <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-              <span>+243 (0) 81 000 2430 / DFAT Direction</span>
+              <span>Contact : administration du portail</span>
             </p>
           </div>
         </div>

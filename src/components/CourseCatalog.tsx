@@ -528,7 +528,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                         <div className="flex items-center justify-between text-[10px] font-mono font-bold mb-1">
                           <span className="text-amber-800 dark:text-amber-300">QCM</span>
                           <span className="text-amber-700 dark:text-amber-400">
-                            {currentProfile.quizScoresByCourse?.[activeCatalogGraphEntry.courseId] ?? (activeCatalogGraphEntry.progressPct >= 100 ? 88 : 0)}%
+                            {currentProfile.quizScoresByCourse?.[activeCatalogGraphEntry.courseId] ?? 0}%
                           </span>
                         </div>
                         <div className="w-full h-14 bg-amber-200/50 dark:bg-slate-700 rounded-lg overflow-hidden flex items-end p-0.5">
@@ -538,7 +538,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                               height: `${Math.max(
                                 18,
                                 currentProfile.quizScoresByCourse?.[activeCatalogGraphEntry.courseId] ??
-                                  (activeCatalogGraphEntry.progressPct >= 100 ? 88 : Math.round(activeCatalogGraphEntry.progressPct * 0.5))
+                                  0
                               )}%`
                             }}
                           />
@@ -1003,7 +1003,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                 {isFiltersLocked ? `Certifiant Officiel ARMP (${profileConfig.shortLabel})` : 'Certifiant Officiel ARMP'}
               </option>
               <option value="DFAT">Requiert Approbation DFAT (CGPMP)</option>
-              <option value="Downloaded">Téléchargés en local (Hors-ligne)</option>
+              <option value="Downloaded">Supports PDF téléchargés</option>
             </select>
           </div>
 
@@ -1142,7 +1142,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                                   ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200'
                                   : 'text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                               }`}
-                              title={isDownloaded ? 'Téléchargé hors-ligne' : 'Sauvegarder pour consultation hors-ligne'}
+                              title={isDownloaded ? 'Téléchargé hors-ligne' : 'Télécharger le support PDF'}
                             >
                               <DownloadCloud className="w-3.5 h-3.5" />
                             </button>
@@ -1349,7 +1349,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                             ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200'
                             : 'text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
-                        title={isDownloaded ? 'Disponible hors-ligne' : 'Sauvegarder en local'}
+                        title={isDownloaded ? 'Support PDF téléchargé' : 'Télécharger le support PDF'}
                       >
                         <DownloadCloud className="w-4 h-4" />
                       </button>

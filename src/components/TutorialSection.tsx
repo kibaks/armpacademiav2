@@ -11,8 +11,8 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
   const tutoSteps = [
     {
       n: '01',
-      title: 'Installez l’app en un tap',
-      desc: 'Ouvrez armpacademia.vercel.app dans Chrome ou Safari → « Installer l’app » / « Ajouter à l’écran d’accueil ». PWA 1,2 Mo, icône ARMP, lancement instantané à Kinshasa, Lubumbashi ou Goma.',
+      title: 'Ouvrez le portail sur votre appareil',
+      desc: 'Ouvrez armpacademiav2.vercel.app sur ordinateur ou smartphone et connectez-vous à votre espace.',
       icon: Download,
     },
     {
@@ -23,14 +23,14 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
     },
     {
       n: '03',
-      title: 'Apprenez, même sans internet',
-      desc: 'Vidéos, fiches et quiz contextualisés RDC. Téléchargez à Kinshasa, poursuivez à Kikwit, Mbandaka ou Bukavu hors-ligne. Synchronisation Firestore automatique au retour du réseau.',
+      title: 'Emportez vos supports de cours',
+      desc: 'Téléchargez le support PDF de votre module pour le consulter sans réseau. Les vidéos, évaluations et échanges avec la tutrice restent accessibles en ligne.',
       icon: BookOpen,
     },
     {
       n: '04',
       title: 'Certifiez-vous & rejoignez la communauté',
-      desc: 'Examen 70% DFAT → attestation QR vérifiable, imprimable et enregistrée. Profil vérifié, forum CGPMP/ARMP, partage WhatsApp, 2 500+ apprenants actifs.',
+      desc: 'Réussissez l’évaluation du module pour obtenir une attestation pédagogique PDF avec une référence stable. Échangez ensuite avec les autres apprenants sur le forum.',
       icon: Award,
     },
   ];
@@ -45,13 +45,13 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
           <span className="bg-gradient-to-r from-[#0C3B7C] to-[#0071e3] bg-clip-text text-transparent">Publique</span>
         </h2>
         <p className="mt-5 max-w-3xl mx-auto text-[19px] sm:text-[21px] leading-[1.33] font-normal text-[#6e6e73] dark:text-zinc-400">
-          Portail officiel de renforcement des capacités — <strong className="font-semibold text-zinc-900 dark:text-white">République Démocratique du Congo</strong>. 6 modules DFAT, de Kinshasa aux 26 provinces, CGPMP, DGCMP, ARMP & CRD.
+          Portail officiel de renforcement des capacités — <strong className="font-semibold text-zinc-900 dark:text-white">République Démocratique du Congo</strong>. Des parcours pédagogiques, de Kinshasa aux 26 provinces, CGPMP, DGCMP, ARMP & CRD.
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs">
           <span className="px-3 py-1 rounded-full bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-medium">📍 Kinshasa • Gombe</span>
-          <span className="px-3 py-1 rounded-full bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-medium">🏛 47 CGPMP ministérielles</span>
+          <span className="px-3 py-1 rounded-full bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-medium">🏛 Parcours pour les CGPMP</span>
           <span className="px-3 py-1 rounded-full bg-[#f5f5f7] dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-medium">⚖ Loi 10/010 • 2010</span>
-          <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 font-medium text-amber-800 dark:text-amber-300">🎓 DFAT • 88,6% certifiés</span>
+          <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 font-medium text-amber-800 dark:text-amber-300">🎓 Évaluations et attestations pédagogiques</span>
         </div>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-6 text-[17px]">
           <button onClick={onExploreCourses} className="inline-flex items-center gap-1.5 text-[#06c] hover:underline font-normal">
@@ -84,7 +84,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
                     <div className="flex-1 flex justify-center">
                       <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur rounded-full px-3 py-1 border border-white/10">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
-                        <span className="text-[11px] font-medium text-white/90 tracking-wide">armpacademia.vercel.app</span>
+                        <span className="text-[11px] font-medium text-white/90 tracking-wide">armpacademiav2.vercel.app</span>
                       </div>
                     </div>
                     <div className="hidden sm:flex items-center gap-1.5 text-white/30">
@@ -115,7 +115,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
             </div>
           </div>
           <p className="mt-3 text-xs text-[#6e6e73] dark:text-zinc-500">
-            Capture réelle — <span className="font-medium text-zinc-900 dark:text-zinc-300">armpacademia.vercel.app</span> sur MacBook Pro 14" • PWA 1,2 Mo • 100% hors-ligne • Firestore
+            Capture réelle — <span className="font-medium text-zinc-900 dark:text-zinc-300">armpacademiav2.vercel.app</span> sur MacBook Pro 14" • Portail web • Supports PDF • Progression enregistrée
           </p>
         </div>
       </section>
@@ -210,7 +210,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
                   </div>
                 </a>
               </div>
-              <p className="mt-3 text-[11px] font-medium tracking-wide text-zinc-500 dark:text-zinc-400">PWA • Offline • 24/7 • QR • 1,2 Mo</p>
+              <p className="mt-3 text-[11px] font-medium tracking-wide text-zinc-500 dark:text-zinc-400">Web • Smartphone • Supports PDF</p>
             </div>
 
             {/* — Colonne tuto steps — */}
@@ -223,7 +223,7 @@ export const TutorialSection: React.FC<{ onExploreCourses: () => void; onOpenTut
                 <span className="bg-gradient-to-r from-[#0C3B7C] to-[#0071e3] bg-clip-text text-transparent">Commencez ici.</span>
               </h3>
               <p className="mt-3 text-[15px] sm:text-[16px] leading-[1.5] text-[#6e6e73] dark:text-zinc-400">
-                Installez la PWA 1,2 Mo à Kinshasa, poursuivez sans réseau jusqu’à Kikwit. Le Tuteur IA vous guide jusqu’à l’attestation DFAT.
+                Ouvrez le portail sur votre smartphone, étudiez en ligne et emportez vos supports PDF. La tutrice vous accompagne dans votre apprentissage.
               </p>
 
               {/* Steps timeline */}

@@ -1,3 +1,4 @@
+import { operationsApi, downloadOperation } from '../lib/operationsApi';
 import { authenticatedFetch } from '../lib/adminApi';
 import { TutorVideoPlayer } from './TutorVideoPlayer';
 import { useTutorVideoReply } from '../utils/useTutorVideoReply';
@@ -171,52 +172,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [questionInput, setQuestionInput] = useState('');
   const [qaFilter, setQaFilter] = useState<'all' | 'mine'>('all');
   const [resourceSearch, setResourceSearch] = useState('');
-  const defaultQA: QAItem[] = [
-    {
-      id: `qa-seed-1-${course.id}`,
-      author: 'M. Alain (CGPMP - Santé)',
-      avatar: currentProfile.avatarUrl,
-      question: 'Quelle est la différence entre ANO et avis de non-objection DGCMP pour ce module ?',
-      answer: 'L’ANO DGCMP est l’acte préalable obligatoire avant conclusion du marché > seuil. Voir Loi 10/010 art. 28 et DAO Type ARMP.',
-      likes: 8,
-      time: 'Il y a 2j'
-    },
-    {
-      id: `qa-seed-2-${course.id}`,
-      author: currentProfile.name,
-      avatar: currentProfile.avatarUrl,
-      question: 'Le PPM 2026 doit-il être publié avant le DAO ?',
-      answer: 'Oui, le PPM est préalable et conditionne la recevabilité du DAO (art. 12). Le Tuteur IA peut détailler.',
-      likes: 3,
-      time: 'Hier'
-    }
-  ];
-  const [qaItems, setQaItems] = useState<QAItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(`armp_qa_${course.id}`);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return defaultQA;
-  });
-
-  // Charger les Q&A persistés depuis Firestore
-  useEffect(() => {
-    let mounted = true;
-    fetchCourseQAFromFirestore(course.id).then(remote => {
-      if (mounted && remote && remote.length > 0) {
-        setQaItems(prev => {
-          const map = new Map<string, QAItem>();
-          [...remote, ...prev].forEach(item => map.set(item.id, item));
-          const merged = Array.from(map.values());
-          try {
-            localStorage.setItem(`armp_qa_${course.id}`, JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
-      }
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, [course.id]);
+  const [qaItems,setQaItems] = useState<QAItem[]>([]);
+  useEffect(()=> {let active=true;fetchCourseQAFromFirestore(course.id).then(remote=>{if(active)setQaItems(remote as QAItem[]);}).catch(()=>setTutorQaError('Les questions enregistrées ne peuvent pas être chargées.'));return()=>{active=false;};},[course.id,currentProfile.id]);
 
   const safeLessons = Array.isArray(course.lessons) && course.lessons.length > 0
     ? course.lessons
@@ -229,22 +186,11 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
         format: 'animation' as const,
         templateId: 'whiteboard' as const,
       }];
-  const safeQuiz = Array.isArray(course.quiz) && course.quiz.length > 0
-    ? course.quiz
-    : [{
-        question: `Quel est le cadre légal de référence applicable au module « ${course.title} » ?`,
-        options: [
-          `La Loi n° 10/010 du 27 avril 2010 (${course.legalRef || 'Marchés Publics RDC'})`,
-          'Une simple note interne sans valeur réglementaire',
-          'Uniquement un accord verbal entre parties'
-        ],
-        correctIndex: 0,
-        explanation: `Conformément à la Loi n° 10/010 du 27 avril 2010 (${course.legalRef || 'Code des Marchés Publics'}), toute procédure est encadrée par les textes officiels ARMP.`
-      }];
+  const safeQuiz = Array.isArray(course.quiz) ? course.quiz : [];
   const currentLesson = safeLessons[activeLessonIndex] || safeLessons[0];
   const currentKeyArticles = Array.isArray(currentLesson?.keyArticles) ? currentLesson.keyArticles : [];
   const progress = Math.max(
-    Math.round(((activeLessonIndex + 1) / Math.max(1, safeLessons.length)) * 100),
+    0,
     Math.round((completedLessons.size / Math.max(1, safeLessons.length)) * 100)
   );
 
@@ -529,20 +475,33 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
     setSelectedAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
   };
 
-  const submitQuiz = () => {
-    let correct = 0;
-    safeQuiz.forEach((q, idx) => {
-      if (selectedAnswers[idx] === q.correctIndex) correct++;
-    });
-    const finalScore = Math.round((correct / Math.max(1, safeQuiz.length)) * 100);
-    setQuizScore(finalScore);
-    setIsQuizSubmitted(true);
-    const allLessonIndices = safeLessons.map((_, idx) => idx);
-    onUpdateCourseProgress?.(course.id, finalScore >= 70 ? 100 : progress, allLessonIndices, finalScore);
-    if (finalScore >= 70) {
-      onCompleteModule(course.id, finalScore);
-    }
+  const [quizBusy,setQuizBusy] = useState(false);
+  const [documentError,setDocumentError] = useState<string | null>(null);
+  const verifiedCertificate = currentProfile.certificates?.find(cert => cert.courseId === course.id && (cert as any).source === 'server-assessment');
+  const submitQuiz = async () => {
+    if(quizBusy) return;
+    setQuizBusy(true); setDocumentError(null);
+    try {
+      const result=await operationsApi(`/courses/${course.id}/attempt`,{answers:safeQuiz.map((_,i)=>selectedAnswers[i])});
+      setQuizScore(result.score); setIsQuizSubmitted(true);
+      if(result.passed) await onCompleteModule(course.id,result.score);
+    } catch(error) {setDocumentError(error instanceof Error ? error.message : 'Évaluation non enregistrée.');}
+    finally {setQuizBusy(false);}
   };
+  const downloadDocument = async (kind='support') => {
+    setDocumentError(null);
+    try { await downloadOperation(`/courses/${course.id}/document?kind=${kind}`,`${kind}-${course.code}.pdf`); }
+    catch(error) {setDocumentError(error instanceof Error ? error.message : 'Téléchargement impossible.');}
+  };
+  useEffect(() => {
+    let visibleSeconds=0,last=Date.now();
+    const tick=window.setInterval(()=>{
+      const now=Date.now(),elapsed=Math.min(5,Math.round((now-last)/1000));last=now;
+      if(document.visibilityState==='visible') visibleSeconds+=elapsed;
+      if(visibleSeconds>=60){const seconds=Math.min(90,visibleSeconds);visibleSeconds=0;void operationsApi(`/courses/${course.id}/study`,{seconds}).catch(()=>{});}
+    },5000);
+    return()=>window.clearInterval(tick);
+  },[course.id]);
 
   // Q&A (persisté dans Firestore + localStorage + réponse IA en direct avec voix d'Aïsha)
   const [isAskingTutorQA, setIsAskingTutorQA] = useState(false);
@@ -611,7 +570,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
         avatar: currentProfile.avatarUrl,
         question: qText,
         answer: aiAnswer,
-        likes: 1,
+        likes: 0,
         time: "À l'instant",
         createdAt: new Date().toISOString()
       };
@@ -620,7 +579,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       try {
         localStorage.setItem(`armp_qa_${course.id}`, JSON.stringify(nextList));
       } catch {}
-      saveCourseQAToFirestore(newQ).catch(() => {});
+      await saveCourseQAToFirestore(newQ);
 
       // Lecture vocale automatique de la réponse d'Aïsha
       setTimeout(() => speakQaAnswer(aiAnswer, qaId), 80);
@@ -634,21 +593,9 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
   // Resources
   const resources = [
-    { id: 'r1', title: `Support officiel complet ${course.code}`, type: 'PDF ARMP', size: '4.2 Mo', icon: FileText, color: 'text-red-500', bg: 'bg-red-500/10', action: 'Télécharger' },
-    { id: 'r2', title: `DAO Type ARMP — ${course.category}`, type: 'Modèle Standard', size: '1.8 Mo', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10', action: 'Consulter' },
-    { id: 'r3', title: `Masterclass Vidéo Chapitre ${activeLessonIndex + 1}`, type: 'Vidéo HD 1080p', size: currentLesson.duration, icon: Video, color: 'text-purple-500', bg: 'bg-purple-500/10', action: 'Visionner' },
-    { id: 'r4', title: `Loi n° 10/010 du 27 avril 2010 — ${course.legalRef}`, type: 'Texte Légal Intégral', size: 'Journal Officiel RDC', icon: Scale, color: 'text-amber-500', bg: 'bg-amber-500/10', action: 'Ouvrir' },
-    ...(currentKeyArticles.map((a, i) => ({
-      id: `art-${i}`,
-      title: `${a} — Manuel des Procédures de passation`,
-      type: 'Article Fondateur',
-      size: 'Homologué DFAT',
-      icon: Bookmark,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
-      action: 'Étudier'
-    })))
-  ].filter(r => !resourceSearch || r.title.toLowerCase().includes(resourceSearch.toLowerCase()) || r.type.toLowerCase().includes(resourceSearch.toLowerCase()));
+    { id:'support',title:`Support pédagogique ${course.code}`,type:'PDF généré à partir du module',size:`${safeLessons.length} chapitres`,icon:FileText,color:'text-blue-500',bg:'bg-blue-500/10',action:'Télécharger le support PDF',run:()=>downloadDocument() },
+    ...safeLessons.filter(l=>l.mediaUrl && /^https:\/\//.test(l.mediaUrl)).map(l=>({id:l.id,title:l.title,type:'Pièce jointe du formateur',size:'Fichier lié au chapitre',icon:FileText,color:'text-purple-500',bg:'bg-purple-500/10',action:'Ouvrir le document',run:()=>window.open(l.mediaUrl,'_blank','noopener,noreferrer')}))
+  ].filter(r=>!resourceSearch || r.title.toLowerCase().includes(resourceSearch.toLowerCase()));
 
   // Dynamic Theme Colors for Reading Body
   const themeStyles = {
@@ -1036,7 +983,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   </div>
                   <div className="p-2 rounded-xl bg-blue-950/40 border border-blue-900/50 text-[11px] flex items-center justify-between">
                     <span className="text-blue-300 font-mono font-bold">{course.legalRef}</span>
-                    <span className="text-[10px] text-emerald-400 font-bold">✓ Homologué DFAT</span>
+                    <span className="text-[10px] text-emerald-400 font-bold">Contenu de formation</span>
                   </div>
                 </div>
               )}
@@ -1503,7 +1450,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                           </span>
                         </div>
                         <button
-                          onClick={() => alert(`Téléchargement de « ${r.title} » en cours...`)}
+                          onClick={r.run}
                           className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
                           title={r.action}
                         >
@@ -1833,10 +1780,10 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   {!isQuizSubmitted ? (
                     <button
                       onClick={submitQuiz}
-                      disabled={Object.keys(selectedAnswers).length < safeQuiz.length}
+                      disabled={quizBusy || !safeQuiz.length || Object.keys(selectedAnswers).length !== safeQuiz.length}
                       className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 disabled:opacity-40 text-slate-950 font-black text-sm shadow-xl transition"
                     >
-                      Soumettre l'examen et calculer le score
+                      {quizBusy ? 'Enregistrement de l’évaluation…' : !safeQuiz.length ? 'Aucune évaluation configurée' : 'Soumettre l’examen et calculer le score'}
                     </button>
                   ) : (
                     <div className={`p-6 rounded-3xl text-center space-y-4 border ${quizScore >= 70 ? 'bg-emerald-950/40 border-emerald-800' : 'bg-rose-950/40 border-rose-800'}`}>
@@ -1877,7 +1824,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
             )}
 
             {/* TAB 6: OFFICIAL PRINTABLE CERTIFICATE */}
-            {mode === 'certificate' && (
+            {mode === 'certificate' && verifiedCertificate && (
               <div className="w-full max-w-4xl mx-auto space-y-6 pb-20">
                 <div className="bg-white rounded-3xl p-8 sm:p-10 border-8 border-double border-amber-600 text-slate-900 text-center space-y-5 shadow-2xl relative">
                   
@@ -1889,7 +1836,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                       <ArmpLogo size="lg" isDarkMode={false} />
                     </div>
                     <h1 className="font-serif font-black text-2xl uppercase tracking-tight text-slate-950">
-                      Certificat d'Aptitude & de Réussite
+                      Attestation pédagogique de réussite
                     </h1>
                     <span className="text-xs font-mono font-bold text-amber-700">
                       Loi n° 10/010 du 27 avril 2010 • Marchés Publics
@@ -1910,23 +1857,23 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 max-w-lg mx-auto">
                       <span className="text-xs font-mono font-bold text-amber-800">{course.code}</span>
                       <h3 className="text-sm font-black text-slate-900">{course.title}</h3>
-                      <span className="text-xs font-bold text-emerald-700">Score officiel : {quizScore}%</span>
+                      <span className="text-xs font-bold text-emerald-700">Score enregistré : {verifiedCertificate?.score ?? quizScore}%</span>
                     </div>
                   </div>
 
                   <div className="border-t-2 border-slate-200 pt-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
                     <div className="flex items-center space-x-2 text-left">
                       <div className="p-1.5 rounded-lg border border-slate-200 bg-white shadow-xs shrink-0">
-                        <QrCode className="w-10 h-10 text-slate-900" />
+                        <FileText className="w-10 h-10 text-slate-900" />
                       </div>
                       <div>
-                        <div className="font-mono text-[10px] text-slate-500 font-bold">Réf: CERT-ARMP-2026-{course.code}</div>
-                        <div className="text-[10px] text-slate-400">Kinshasa, le {new Date().toLocaleDateString('fr-FR')}</div>
+                        <div className="font-mono text-[10px] text-slate-500 font-bold">Réf: {verifiedCertificate?.sealNumber}</div>
+                        <div className="text-[10px] text-slate-400">Kinshasa, le {verifiedCertificate ? new Date(verifiedCertificate.issuedAt).toLocaleDateString('fr-FR') : ''}</div>
                       </div>
                     </div>
                     <div className="text-center sm:text-right">
-                      <span className="font-bold text-slate-900 block text-xs">La Direction de la Formation (DFAT)</span>
-                      <span className="text-[10px] text-emerald-700 font-bold">✓ Homologation ARMP Validée</span>
+                      <span className="font-bold text-slate-900 block text-xs">ARMP Academia</span>
+                      <span className="text-[10px] text-emerald-700 font-bold">Réussite pédagogique enregistrée</span>
                     </div>
                   </div>
 
@@ -1939,7 +1886,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                       <span>Imprimer le certificat</span>
                     </button>
                     <button
-                      onClick={() => alert(`Téléchargement du certificat CERT-ARMP-2026-${course.code}.pdf`)}
+                      onClick={() => downloadDocument('certificate')}
                       className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md"
                     >
                       <Download className="w-4 h-4" />
@@ -1957,6 +1904,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
       </div>
 
+      {documentError && <div role="alert" className="fixed bottom-5 left-1/2 z-[120] w-[min(92vw,600px)] -translate-x-1/2 rounded-xl border border-red-200 bg-white p-4 text-sm text-red-800 shadow-xl">{documentError}<button onClick={()=>setDocumentError(null)} className="ml-4 underline">Fermer</button></div>}
       {/* Toast de validation de test d'assimilation */}
       {validationToast && (
         <div className="fixed bottom-6 right-6 z-[210] p-4 rounded-2xl bg-slate-900 border border-amber-400 text-amber-200 font-bold text-xs shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300 max-w-md">

@@ -37,14 +37,14 @@ const SLIDES = [
     id: 1,
     bg: bgSeminar,
     foreground: fg1,
-    badge: 'CGPMP  •  47 Cellules  •  Membre Acheteur',
+    badge: 'CGPMP  •  Formation  •  Membre Acheteur',
     badgeIcon: Building2,
     title: 'Membre CGPMP',
     titleAccent: 'sécurisez chaque marché',
     description: 'PPM conforme, DAO types ARMP, avis de non-objection DGCMP en 72h et recours CRD maîtrisés. Intégrez le contenu local dès l’allotissement — préférence 20%, sous-traitance 51% capital RDC contrôlée par l’ARSP — et évitez toute irrecevabilité.',
     ctaPrimary: 'Explorer les formations',
     ctaSecondary: 'Tester mon niveau',
-    stat: 'ANO 72h  •  Recours CRD  •  0 rejet',
+    stat: 'Planification  •  Contrôle  •  Traçabilité',
   },
   {
     id: 2,
@@ -76,27 +76,27 @@ const SLIDES = [
     id: 4,
     bg: bgSeminar,
     foreground: fg4,
-    badge: 'Certification  •  Attestation QR  •  Évolution Carrière',
+    badge: 'Formation  •  Attestation pédagogique  •  Évolution',
     badgeIcon: Award,
     title: 'Valorisez vos',
     titleAccent: 'compétences',
-    description: 'Que vous soyez CGPMP, ARMP ou PME, obtenez l’attestation DFAT 70% avec QR vérifiable Firestore. Rejoignez 2 500+ alumni, faites reconnaître votre expertise contenu local et faites évoluer votre carrière ou votre entreprise.',
+    description: 'Suivez les chapitres, passez l’évaluation et retrouvez votre attestation pédagogique après réussite. Vos résultats et références sont sauvegardés dans votre espace personnel.',
     ctaPrimary: 'Obtenir ma certification',
     ctaSecondary: 'Voir les attestations',
-    stat: 'QR vérifiable  •  Alumni 2 500+',
+    stat: 'Évaluation  •  Résultats enregistrés',
   },
   {
     id: 5,
     bg: bgTraining,
     foreground: fg5,
-    badge: 'Application Mobile  •  PWA 1,2 Mo  •  100% Hors-ligne',
+    badge: 'Sur smartphone  •  Supports PDF téléchargeables',
     badgeIcon: Smartphone,
     title: 'L\'ARMP dans',
     titleAccent: 'votre poche',
-    description: 'Installez l’app en un tap à Kinshasa, Lubumbashi ou Goma. 6 modules dont contenu local, vidéos et attestations accessibles sur smartphone, même sans internet — synchronisation Firestore au retour.',
-    ctaPrimary: 'Installer l\'application',
+    description: 'Consultez les formations sur smartphone et téléchargez leurs supports PDF pour les relire sans connexion. Les évaluations, les vidéos de la tutrice et la synchronisation nécessitent internet.',
+    ctaPrimary: 'Explorer les cours',
     ctaSecondary: 'Voir la capture',
-    stat: 'PWA  •  Offline  •  24/7  •  QR',
+    stat: 'Mobile  •  PDF  •  Formation',
   },
 ];
 
@@ -427,10 +427,10 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
       <div className="border-t border-sky-100 bg-white px-4 py-4 sm:py-5">
         <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 text-center">
           {[
-            { k: '6 Modules', v: 'Parcours progressif', icon: BookOpen },
-            { k: '45h+ de contenu', v: 'Vidéos • Cas pratiques', icon: Play },
-            { k: '2 500+ apprenants', v: 'Communauté active', icon: Sparkles },
-            { k: 'Attestation', v: 'QR vérifiable • 24/7', icon: Award },
+            { k: 'Catalogue de cours', v: 'Parcours progressif', icon: BookOpen },
+            { k: 'Supports pédagogiques', v: 'Vidéos • Cas pratiques', icon: Play },
+            { k: 'Communauté Academia', v: 'Échanges pédagogiques', icon: Sparkles },
+            { k: 'Attestation', v: 'PDF après réussite', icon: Award },
           ].map((it, idx) => (
             <div key={it.k} className={`px-2 sm:px-4 py-1.5 ${idx % 2 === 0 ? 'border-r border-sky-100' : ''} ${idx < 2 ? 'border-b lg:border-b-0 border-sky-100 pb-3 lg:pb-1.5' : ''} lg:border-r lg:last:border-r-0`}>
               <div className="flex items-center justify-center gap-1.5 text-[#0C3B7C] text-[11px] font-black uppercase tracking-wider">

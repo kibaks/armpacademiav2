@@ -1,3 +1,6 @@
+import { synthesizeVoiceNote } from '../utils/synthesizeVoiceNote';
+import { teaches, learner } from '../../shared/operationalStats';
+import { operationsApi, downloadOperation } from '../lib/operationsApi';
 import { OtpInput } from './OtpInput';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef } from 'react';
@@ -267,74 +270,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   } | null>(null);
 
   // Facebook Feed Posts State (synchronisé avec Firestore + localStorage)
-  const defaultPosts: PostItem[] = [
-    {
-      id: 'post-1',
-      author: currentProfile.name,
-      roleTitle: currentProfile.roleTitle,
-      avatar: currentProfile.avatarUrl,
-      timeAgo: 'Il y a 3 heures • Kinshasa • 🌐',
-      badgeTag: 'Certification Officielle',
-      content: "Fier d'avoir validé avec succès le module d'excellence ARMP MOD-002 sur « L'Élaboration du Plan de Passation des Marchés (PPM) et Rédaction des DAO Types ». Une étape clé pour la régularité des marchés publics de notre institution et la réduction des délais d'ANO DGCMP !",
-      certificateData: {
-        title: 'Élaboration du PPM et Rédaction des DAO Types ARMP',
-        code: 'CERT-ARMP-2026-0884',
-        score: currentProfile.placementScore || 92,
-        sealText: 'République Démocratique du Congo • Autorité de Régulation des Marchés Publics'
-      },
-      image: imgCoverSeminar,
-      likes: 38,
-      userLiked: false,
-      comments: [
-        {
-          id: 'c-1',
-          author: 'Me Christian Ilunga (DGCMP)',
-          avatar: imgMentor,
-          text: 'Toutes nos félicitations confrère ! La maîtrise des DAO types facilite grandement le contrôle a priori.',
-          timeAgo: 'Il y a 2h'
-        }
-      ]
-    },
-    {
-      id: 'post-2',
-      author: currentProfile.name,
-      roleTitle: currentProfile.roleTitle,
-      avatar: currentProfile.avatarUrl,
-      timeAgo: 'Hier à 14:30 • 🏛️',
-      badgeTag: 'Dossier CGPMP',
-      content: `Dossier de renforcement des capacités soumis à la DFAT/ARMP pour les membres de notre cellule (${currentProfile.institution}). La modernisation des procédures de la Loi 10/010 avance résolument grâce à ACADEMIA ITECH !`,
-      likes: 24,
-      userLiked: true,
-      comments: []
-    }
-  ];
-
-  const [posts, setPosts] = useState<PostItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('armp_social_posts');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return defaultPosts;
-  });
-
-  // Charger les publications depuis Firestore au montage
-  React.useEffect(() => {
-    let mounted = true;
-    fetchPostsFromFirestore().then(remote => {
-      if (mounted && remote && remote.length > 0) {
-        setPosts(prev => {
-          const map = new Map<string, PostItem>();
-          [...remote, ...prev].forEach(p => map.set(p.id, p as PostItem));
-          const merged = Array.from(map.values());
-          try {
-            localStorage.setItem('armp_social_posts', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
-      }
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, []);
+  const [posts,setPosts] = useState<PostItem[]>([]);
+  const [postPending,setPostPending] = useState<string | null>(null);
+  React.useEffect(()=> {let active=true;fetchPostsFromFirestore().then(remote=> {if(active) setPosts(remote.map(p=>({...p,userLiked:(p.likedBy || []).includes(currentProfile.id)})) as PostItem[]);}).catch(()=>onShowToast?.('Les publications n’ont pas pu être chargées.'));return()=>{active=false;};},[currentProfile.id]);
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [isGalleryUploading, setIsGalleryUploading] = useState(false);
@@ -411,7 +349,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   // Liste réelle de tous les profils apprenants enregistrés (hors formateur et administrateur)
   const realLearnersList = React.useMemo(() => {
     if (!allProfiles) return [];
-    return Object.values(allProfiles).filter((p) => p.role !== 'formateur' && p.role !== 'dfat_admin');
+    return Object.values(allProfiles).filter((p) => learner(p));
   }, [allProfiles]);
 
   const realLearnersCount = realLearnersList.length;
@@ -439,43 +377,13 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
   // Moyenne réelle des scores des apprenants
   const realTrainerAvgScore = React.useMemo(() => {
-    if (realLearnersList.length === 0) return 85;
-    const totalScore = realLearnersList.reduce((acc, p) => acc + (p.placementScore || 80), 0);
+    if (realLearnersList.length === 0) return 0;
+    const totalScore = realLearnersList.reduce((acc, p) => acc + (p.placementScore ?? 0), 0);
     return Math.round(totalScore / realLearnersList.length);
   }, [realLearnersList]);
 
   // Modules enregistrés du formateur (chaque formateur ne suit, ne voit ou ne gère que ses modules)
-  const trainerRegisteredCourses = React.useMemo(() => {
-    if (!isTrainer) return courses;
-    const registeredIds = new Set<string>();
-    if (Array.isArray(currentProfile.registeredCourseIds)) {
-      currentProfile.registeredCourseIds.forEach((id) => registeredIds.add(id));
-    }
-    if (Array.isArray(currentProfile.assignedCourseIds)) {
-      currentProfile.assignedCourseIds.forEach((id) => registeredIds.add(id));
-    }
-    const isSylvie =
-      currentProfile.id === 'USR-FORM-06' ||
-      currentProfile.email === 'sylvie.tshilomba@academia-itech.cd' ||
-      currentProfile.name?.includes('Sylvie');
-    if (isSylvie && registeredIds.size === 0) {
-      registeredIds.add('MOD-001');
-      registeredIds.add('MOD-002');
-    }
-    return courses.filter((c) => {
-      if (registeredIds.has(c.id) || registeredIds.has(c.code)) return true;
-      if (c.trainerId && c.trainerId === currentProfile.id) return true;
-      if (c.authorId && c.authorId === currentProfile.id) return true;
-      if (c.createdBy && (c.createdBy === currentProfile.id || c.createdBy === currentProfile.name)) return true;
-      if (
-        c.trainerName &&
-        (c.trainerName.toLowerCase().includes(currentProfile.name.toLowerCase()) ||
-          currentProfile.name.toLowerCase().includes(c.trainerName.toLowerCase()))
-      )
-        return true;
-      return false;
-    });
-  }, [courses, currentProfile, isTrainer]);
+  const trainerRegisteredCourses=React.useMemo(()=>isTrainer?courses.filter(c=>teaches(currentProfile,c)):courses,[courses,currentProfile,isTrainer]);
 
   // Données de suivi individuelles réelles par apprenant
   const realLearnersData = React.useMemo(() => {
@@ -487,9 +395,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
           ? Math.round(progressEntries.reduce((a, b) => a + b, 0) / progressEntries.length)
           : completedModules > 0
           ? 100
-          : Math.min(95, learner.placementScore || 75);
-      const isCertified = completedModules > 0 || avgProg >= 100;
-      const quizScore = learner.placementScore || 82;
+          : 0;
+      const isCertified = !!learner.certificates?.length;
+      const scores=Object.values(learner.quizScoresByCourse || {}); const quizScore=scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
       return {
         learner,
         completedModules,
@@ -502,22 +410,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   }, [realLearnersList]);
 
   const handleLogStudySession = async () => {
-    const nextHistory = persistedHistory.map((h, idx) =>
-      idx === persistedHistory.length - 1
-        ? { ...h, hours: Number((h.hours + 1.5).toFixed(1)), score: Math.min(100, h.score + 2) }
-        : h
-    );
-    const nextScore = Math.min(100, (currentProfile.placementScore || 82) + 2);
-    const updated: UserProfile = {
-      ...currentProfile,
-      placementScore: nextScore,
-      studyHoursHistory: nextHistory,
-      totalStudyMinutes: (currentProfile.totalStudyMinutes || 180) + 90,
-      streakDays: currentStreak + 1,
-      lastActiveDate: new Date().toISOString().slice(0, 10)
-    };
-    if (onUpdateProfile) await onUpdateProfile(updated);
-    onShowToast?.('Séance d’étude (+1h30) enregistrée et synchronisée avec Firestore ✓');
+    const next=lastLearningCourse || courses[0];
+    if(next) (onOpenCourse || onOpenCoursePlayer)?.(next);
+    onShowToast?.('Le temps de lecture est mesuré pendant que le cours est ouvert et visible.');
   };
 
   const handleGalleryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -911,52 +806,12 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   const generateAndUploadSynthesizedPostVoice = async () => {
-    const sampleRate = 22050;
-    const durationSec = 4;
-    const numSamples = sampleRate * durationSec;
-    const buffer = new ArrayBuffer(44 + numSamples * 2);
-    const view = new DataView(buffer);
-    const writeStr = (offset: number, str: string) => {
-      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-    };
-    writeStr(0, 'RIFF');
-    view.setUint32(4, 36 + numSamples * 2, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, 'data');
-    view.setUint32(40, numSamples * 2, true);
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate;
-      const env = 0.35 + 0.65 * Math.abs(Math.sin(2 * Math.PI * 3.0 * t));
-      const fade = Math.min(1, t / 0.08) * Math.min(1, (durationSec - t) / 0.15);
-      const wave = 0.5 * Math.sin(2 * Math.PI * 210 * t) + 0.25 * Math.sin(2 * Math.PI * 420 * t);
-      view.setInt16(44 + i * 2, wave * env * fade * 0.18 * 32767, true);
-    }
-    const blob = new Blob([buffer], { type: 'audio/wav' });
-    const localUrl = URL.createObjectURL(blob);
-    setSelectedAudio(localUrl);
-    setSelectedAudioName(`Note vocale ARMP (0:04)`);
-    setMediaPickerModal(null);
     try {
-      const acad = await uploadBlob(blob, `voice_${Date.now()}.wav`, {
-        category: 'posts_audios',
-        visibility: 'private',
-        uploadedBy: currentProfile.email,
-        entityId: currentProfile.id
-      });
-      setSelectedAudio(acad.url);
-      setSelectedAudioFile(acad);
-      onShowToast?.('Note vocale générée et prête à publier ✓');
-    } catch {
-      onShowToast?.('Note vocale prête à publier ✓');
-    }
+      const blob=await synthesizeVoiceNote(newPostText);
+      const acad=await uploadBlob(blob,`voice_${Date.now()}.wav`,{category:'posts_audios',visibility:'private',uploadedBy:currentProfile.email,entityId:currentProfile.id});
+      setSelectedAudio(acad.url);setSelectedAudioFile(acad);setSelectedAudioName('Lecture vocale de la publication');setMediaPickerModal(null);
+      onShowToast?.('Synthèse vocale créée et sauvegardée.');
+    }catch(error) {onShowToast?.(error instanceof Error ? error.message : 'Audio non créé.');}
   };
 
   const handleSelectLibraryImage = (url: string, name: string) => {
@@ -1026,18 +881,19 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   };
 
   // Create post in the Facebook feed (supports Text, Image, Video, Audio ou combinaisons — Academia + Firestore)
-  const handleCreatePost = (e: React.FormEvent) => {
+  const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostText.trim() && !selectedImage && !selectedVideo && !selectedAudio) return;
+    if(isPosting) return;
     setIsPosting(true);
-
+    try {
     const newPost: SocialPost = {
-      id: `post-${Date.now()}`,
+      id: `post-${crypto.randomUUID()}`,
       authorId: currentProfile.id,
       author: currentProfile.name,
       roleTitle: currentProfile.roleTitle,
       avatar: currentProfile.avatarUrl,
-      timeAgo: "À l'instant • 🌐 (Academia 137.184.59.184)",
+      timeAgo: "À l’instant",
       createdAt: new Date().toISOString(),
       content: newPostText.trim(),
       image: selectedImage || undefined,
@@ -1050,12 +906,12 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       comments: []
     };
 
+    await savePostToFirestore(newPost);
     const nextPosts = [newPost as PostItem, ...posts];
     setPosts(nextPosts);
     try {
       localStorage.setItem('armp_social_posts', JSON.stringify(nextPosts));
     } catch {}
-    savePostToFirestore(newPost).catch(() => {});
 
     setNewPostText('');
     setSelectedImage(null);
@@ -1068,59 +924,24 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     setSelectedAudioName(null);
     setSelectedAudioFile(null);
     setIsPosting(false);
-    onShowToast?.('Publication partagée et persistée dans Firestore ✓');
+    onShowToast?.('Publication sauvegardée sur le serveur.');
+    } catch(error) {onShowToast?.(error instanceof Error ? error.message : 'Publication non enregistrée.');}
+    finally {setIsPosting(false);}
   };
 
-  const handleToggleLike = (postId: string) => {
-    setPosts(prev => {
-      const next = prev.map(p => {
-        if (p.id === postId) {
-          const nextLiked = !p.userLiked;
-          const updated = {
-            ...p,
-            userLiked: nextLiked,
-            likes: nextLiked ? p.likes + 1 : Math.max(0, p.likes - 1)
-          };
-          savePostToFirestore(updated as SocialPost).catch(() => {});
-          return updated;
-        }
-        return p;
-      });
-      try {
-        localStorage.setItem('armp_social_posts', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+  const handleToggleLike = async (postId:string) => {
+    if(postPending) return;
+    setPostPending(postId);
+    try {const post=posts.find(p=>p.id===postId);const result=await operationsApi(`/posts/${postId}/like`,{liked:!post?.userLiked});setPosts(prev=>prev.map(p=>p.id===postId?result.post:p));}
+    catch(error) {onShowToast?.(error instanceof Error ? error.message : 'Réaction non enregistrée.');}
+    finally {setPostPending(null);}
   };
-
-  const handleAddComment = (postId: string, commentText: string) => {
-    if (!commentText.trim()) return;
-    setPosts(prev => {
-      const next = prev.map(p => {
-        if (p.id === postId) {
-          const updated = {
-            ...p,
-            comments: [
-              ...p.comments,
-              {
-                id: `c-${Date.now()}`,
-                author: currentProfile.name,
-                avatar: currentProfile.avatarUrl,
-                text: commentText.trim(),
-                timeAgo: "À l'instant"
-              }
-            ]
-          };
-          savePostToFirestore(updated as SocialPost).catch(() => {});
-          return updated;
-        }
-        return p;
-      });
-      try {
-        localStorage.setItem('armp_social_posts', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+  const handleAddComment = async (postId:string,text:string) => {
+    if(postPending || !text.trim()) return;
+    setPostPending(postId);
+    try {const result=await operationsApi(`/posts/${postId}/comment`,{text});setPosts(prev=>prev.map(p=>p.id===postId?result.post:p));}
+    catch(error) {onShowToast?.(error instanceof Error ? error.message : 'Commentaire non enregistré.');}
+    finally {setPostPending(null);}
   };
 
   const handleOpenCoursePlayer = onOpenCourse || onOpenCoursePlayer || (() => {});
@@ -1799,7 +1620,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     className="px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold transition flex items-center gap-1"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>+1h30 d'étude</span>
+                    <span>Commencer une séance</span>
                   </button>
                 </div>
               </div>
@@ -2408,9 +2229,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <div className="flex items-start space-x-3">
                   <Smartphone className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
                   <div>
-                    <span>WhatsApp certifié : </span>
+                    <span>WhatsApp enregistré : </span>
                     <strong className="text-emerald-600 dark:text-emerald-400">
-                      {currentProfile.whatsapp || '+243 81 234 5678'}
+                      {currentProfile.whatsapp || 'Aucun numéro enregistré'}
                     </strong>
                   </div>
                 </div>
@@ -2889,7 +2710,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                         </div>
                         <div>
                           <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
-                            Attestation Officielle ARMP
+                            Attestation pédagogique
                           </span>
                           <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
                             {post.certificateData.title}
@@ -2980,7 +2801,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   {/* Facebook Action Buttons (Like, Comment, Share) */}
                   <div className="px-4 sm:px-5 py-1.5 grid grid-cols-3 gap-1 text-xs font-bold text-slate-600 dark:text-slate-400">
                     <button
-                      onClick={() => handleToggleLike(post.id)}
+                      onClick={() => void handleToggleLike(post.id)} disabled={postPending === post.id}
                       className={`py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center space-x-2 transition ${
                         post.userLiked ? 'text-[#1877F2]' : ''
                       }`}
@@ -3103,7 +2924,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               <div className="space-y-2 text-slate-700 dark:text-slate-300">
                 <div><span className="text-slate-400">Email professionnel :</span> <strong>{currentProfile.email}</strong></div>
                 <div><span className="text-slate-400">Téléphone d'appel :</span> <strong>{currentProfile.phone || '+243 81 234 5678'}</strong></div>
-                <div><span className="text-slate-400">Numéro WhatsApp :</span> <strong className="text-emerald-600">{currentProfile.whatsapp || '+243 81 234 5678'}</strong></div>
+                <div><span className="text-slate-400">Numéro WhatsApp :</span> <strong className="text-emerald-600">{currentProfile.whatsapp || 'Aucun numéro enregistré'}</strong></div>
                 <div><span className="text-slate-400">Lieu d'exercice :</span> <strong>{currentProfile.location || 'Kinshasa, RDC'}</strong></div>
               </div>
             </div>
@@ -3380,22 +3201,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               </div>
             </div>
             <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
-              Canal Actif
+              Envoi automatique non configuré
             </span>
           </div>
 
           <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
               <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                Numéro WhatsApp enregistré : {currentProfile.whatsapp || '+243 81 234 5678'}
+                Numéro WhatsApp enregistré : {currentProfile.whatsapp || 'Aucun numéro enregistré'}
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Notifications instantanées lors de la publication d'un nouveau modèle de DAO ou d'un visa DFAT.
+                Votre numéro et vos préférences sont sauvegardés. Le service d’envoi WhatsApp doit être configuré par l’administrateur.
               </p>
             </div>
             <button
               onClick={() => {
-                window.open(`https://wa.me/243812345678?text=Bonjour%20ACADEMIA%20ARMP%20RDC`, '_blank');
+                const number=(currentProfile.whatsapp || '').replace(/\D/g,''); if(number) window.open(`https://wa.me/${number}`, '_blank','noopener,noreferrer'); else onShowToast?.('Ajoutez votre numéro WhatsApp dans votre profil.');
               }}
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 flex-shrink-0"
             >
@@ -3415,7 +3236,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             >
               <div>
                 <span className="font-bold text-slate-900 dark:text-white block">Alertes Décrets & Arrêtés ARMP</span>
-                <span className="text-[11px] text-slate-500">Notification en temps réel</span>
+                <span className="text-[11px] text-slate-500">Préférence sauvegardée ; envoi non configuré</span>
               </div>
               <span className={`w-9 h-5 rounded-full flex items-center px-1 transition ${currentProfile.whatsappNotifications !== false ? 'bg-emerald-500 justify-end' : 'bg-slate-300 dark:bg-slate-600 justify-start'}`}>
                 <span className="w-3.5 h-3.5 bg-white rounded-full shadow-xs" />
@@ -3795,7 +3616,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 RÉPUBLIQUE DÉMOCRATIQUE DU CONGO • AUTORITÉ DE RÉGULATION DES MARCHÉS PUBLICS
               </h2>
               <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-                Certificat Officiel de Réussite
+                Attestation pédagogique de réussite
               </h1>
               <p className="text-xs text-amber-700 font-semibold font-mono">
                 Délivré conformément à la Loi n° 10/010 du 27 avril 2010
@@ -3822,11 +3643,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             <div className="border-t-2 border-slate-200 pt-6 flex items-center justify-between text-xs">
               <div>
                 <div className="font-mono text-[10px] text-slate-400">Date d'émission : {previewCertificate.date}</div>
-                <div className="font-mono text-[10px] text-slate-400">Identifiant : ARMP-CERT-{Math.floor(100000 + Math.random() * 900000)}</div>
+                <div className="font-mono text-[10px] text-slate-400">Identifiant : {currentProfile.certificates?.find(c=>c.courseTitle===previewCertificate.courseTitle)?.sealNumber || 'Non vérifiée'}</div>
               </div>
               <div className="text-right">
                 <span className="font-bold text-slate-800 block">La Direction de la Formation (DFAT)</span>
-                <span className="text-[10px] text-emerald-700 font-bold">✓ Sceau officiel validé</span>
+                <span className="text-[10px] text-emerald-700 font-bold">Référence de réussite pédagogique</span>
               </div>
             </div>
 

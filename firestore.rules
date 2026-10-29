@@ -59,9 +59,6 @@ service cloud.firestore {
     function isTrainer() {
       return isSignedIn() && request.auth.token.role == 'formateur';
     }
-    function isPublicRole(role) {
-      return role in ['cgpmp_member', 'ac_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier'];
-    }
     function isValidUser(data) {
       return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
         data.id is string && data.id.size() <= 128 &&
@@ -133,12 +130,16 @@ service cloud.firestore {
         data.executiveSummary is string && data.executiveSummary.size() <= 3000;
     }
 
+    // users: identity and session claims are server-owned. Profiles retain editable
+    // display fields, reading progress and notes. Assessment/certificate/timer maps
+    // are written by authenticated server transactions only.
+    // courseAttempts, courseCertificates, trainerObservations: server-only (default deny).
     // Authentication and privilege claims are assigned by the server only.
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
-      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().id == userId && incoming().email == request.auth.token.email && isPublicRole(incoming().role) && incoming().role == request.auth.token.role && (!('twoFactorEnabled' in incoming()) || incoming().twoFactorEnabled == false);
-      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled', 'twoFactorEnabled']);
+      allow get: if isOwner(userId);
+      allow list: if false; // administrative lists go through scoped server endpoints
+      allow create: if false; // registration creates profiles on the server
+      allow update: if isOwner(userId) && isValidUser(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['id', 'email', 'role', 'disabled', 'twoFactorEnabled', 'certificates', 'certificationsCount', 'completedCourseIds', 'completedModulesCount', 'quizScoresByCourse', 'totalStudyMinutes', 'studyMinutesByCourse', 'studyMinutesByDay', 'studyTimerAt']);
       allow delete: if false;
     }
     match /trainingRequests/{requestId} {
@@ -161,8 +162,8 @@ service cloud.firestore {
     // Social Feed Posts collection
     match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && incoming().authorId == request.auth.uid && isValidId(postId) && isValidPost(incoming());
-      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin()) && incoming().authorId == resource.data.authorId && isValidPost(incoming());
+      allow create: if isSignedIn() && incoming().authorId == request.auth.uid && isValidId(postId) && isValidPost(incoming()) && incoming().likes == 0 && incoming().comments == [] && (!('likedBy' in incoming()) || incoming().likedBy == []);
+      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin()) && incoming().authorId == resource.data.authorId && isValidPost(incoming()) && !incoming().diff(resource.data).affectedKeys().hasAny(['likes', 'likedBy', 'comments', 'createdAt']);
       allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
     }
 

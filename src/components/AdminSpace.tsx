@@ -1,3 +1,4 @@
+import { courseActivity } from '../../shared/operationalStats';
 import { TutorAdminSettings } from './TutorAdminSettings';
 import { AdminProfileHeader } from './AdminProfileHeader';
 import { AdminPagination } from './AdminPagination';
@@ -595,8 +596,8 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   // Performances des formateurs en fonction des modules ajoutés
   const trainerPerf = trainers.map((t) => {
     const mods = courses.filter((c) => (c.authorId || moduleAuthors[c.id]?.id) === t.id);
-    const students = mods.reduce((s, c) => s + (c.studentsCount || 0), 0);
-    const rated = mods.filter((c) => (c.rating || 0) > 0);
+    const students = learners.filter(p=>mods.some(c=>courseActivity(p,c))).length;
+    const rated: CourseModule[] = []; // No learner-review feature exists; do not invent ratings.
     const avgRating = rated.length ? rated.reduce((s, c) => s + c.rating, 0) / rated.length : null;
     return {
       trainer: t,
@@ -646,7 +647,7 @@ export const AdminSpace: React.FC<AdminSpaceProps> = ({
   const trainerAvgProgress = trainerProgVals.length
     ? Math.round(trainerProgVals.reduce((a, b) => a + b, 0) / trainerProgVals.length)
     : null;
-  const trainerRatingVals = courses.filter((c) => (c.rating || 0) > 0).map((c) => c.rating);
+  const trainerRatingVals: number[] = [];
   const trainerAvgRating = trainerRatingVals.length
     ? trainerRatingVals.reduce((a, b) => a + b, 0) / trainerRatingVals.length
     : null;

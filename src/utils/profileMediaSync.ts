@@ -9,6 +9,7 @@ export function profileWriteData(profile: UserProfile, patch?: Partial<UserProfi
     delete editable.coverUrl;
   }
   delete editable.mediaRevision;
+  for (const key of ['certificates','certificationsCount','completedCourseIds','completedModulesCount','quizScoresByCourse','totalStudyMinutes','studyMinutesByCourse','studyMinutesByDay','studyTimerAt']) delete (editable as any)[key];
   return JSON.parse(JSON.stringify(editable)) as Partial<UserProfile>;
 }
 

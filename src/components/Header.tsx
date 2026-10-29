@@ -147,11 +147,11 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         <div className="flex items-center space-x-2 text-[10.5px] shrink-0">
           <button
-            onClick={() => setIsOfflineMode(!isOfflineMode)}
+            disabled title="État réel de votre connexion. Les documents téléchargés restent consultables hors ligne."
             className={`flex items-center space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded-full transition font-bold text-[10px] sm:text-[10.5px] ${isOfflineMode ? 'bg-[#C89628] text-slate-950 shadow-xs' : 'bg-white/10 hover:bg-white/20 text-white'}`}
           >
             {isOfflineMode ? <WifiOff className="w-3 h-3 text-slate-950 shrink-0" /> : <Wifi className="w-3 h-3 text-emerald-400 shrink-0" />}
-            <span className="hidden xs:inline sm:inline">{isOfflineMode ? 'Mode Hors-ligne (Province)' : 'Portail En Ligne (Kinshasa)'}</span>
+            <span className="hidden xs:inline sm:inline">{isOfflineMode ? 'Connexion interrompue' : 'Connexion disponible'}</span>
             <span className="xs:hidden sm:hidden">{isOfflineMode ? 'Hors-ligne' : 'En ligne'}</span>
           </button>
         </div>

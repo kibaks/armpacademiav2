@@ -1,3 +1,4 @@
+import { operationsApi } from '../lib/operationsApi';
 import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -21,7 +22,7 @@ import {
   Trash2,
   Eye
 } from 'lucide-react';
-import { INSTITUTIONAL_ANALYTICS } from '../data/initialData';
+import { operationalAnalytics } from '../../shared/operationalStats';
 import { CourseModule, TrainingRequest, UserProfile, SavedAnalyticsReport } from '../types';
 import {
   saveAnalyticsReportToFirestore,
@@ -46,22 +47,15 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   onShowToast
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
-    return localStorage.getItem('armp_analytics_period') || 'Trimestre 3 - 2026';
+    return 'Toutes les périodes';
   });
   const [selectedInstitutionFilter, setSelectedInstitutionFilter] = useState<string>(() => {
-    return localStorage.getItem('armp_analytics_inst_filter') || 'Toutes';
+    return 'Toutes';
   });
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // Persisted AI Executive Reports (localStorage + Firestore)
-  const [savedReports, setSavedReports] = useState<SavedAnalyticsReport[]>(() => {
-    try {
-      const cached = localStorage.getItem('armp_saved_analytics_reports');
-      return cached ? JSON.parse(cached) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [savedReports, setSavedReports] = useState<SavedAnalyticsReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -76,22 +70,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   useEffect(() => {
     fetchAnalyticsReportsFromFirestore()
       .then((remoteReports) => {
-        if (remoteReports && remoteReports.length > 0) {
-          setSavedReports((prev) => {
-            const map = new Map<string, SavedAnalyticsReport>();
-            remoteReports.forEach((r) => map.set(r.id, r));
-            prev.forEach((r) => {
-              if (!map.has(r.id)) map.set(r.id, r);
-            });
-            const merged = Array.from(map.values()).sort((a, b) => b.id.localeCompare(a.id));
-            try {
-              localStorage.setItem('armp_saved_analytics_reports', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
-        }
+        setSavedReports((remoteReports || []).filter(r=>(r as any).source==='recorded-data'));
       })
-      .catch(() => {});
+      .catch(() => onShowToast?.('Les rapports enregistrés ne peuvent pas être chargés.'));
   }, []);
 
   const activeReport = useMemo(() => {
@@ -99,217 +80,32 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     return savedReports.find((r) => r.id === activeReportId) || null;
   }, [savedReports, activeReportId]);
 
-  // Combine Demo + Firestore profiles without duplicates for live telemetry
-  const combinedProfiles = useMemo(() => {
-    const map = new Map<string, UserProfile>();
-    Object.values(allProfiles).forEach((p) => map.set(p.id || p.role, p));
-    firestoreProfiles.forEach((p) => map.set(p.id || p.role, p));
-    return Array.from(map.values());
-  }, [allProfiles, firestoreProfiles]);
-
-  // Period multiplier for realistic temporal comparison
-  const periodFactor = useMemo(() => {
-    if (selectedPeriod === 'Trimestre 2 - 2026') return 0.82;
-    if (selectedPeriod === 'Année Budgétaire 2026') return 2.35;
-    return 1.0; // Trimestre 3 - 2026
-  }, [selectedPeriod]);
-
-  // Dynamic live telemetry computed from actual profiles, courses, and CGPMP requests
-  const dynamicStats = useMemo(() => {
-    const extraCompletedModules = combinedProfiles.reduce((acc, p) => acc + (p.completedModulesCount || 0), 0);
-    const extraCerts = combinedProfiles.reduce((acc, p) => acc + (p.certificationsCount || 0), 0);
-    const extraMinutes = combinedProfiles.reduce((acc, p) => acc + (p.totalStudyMinutes || 0), 0);
-    const requestParticipants = requests.reduce((acc, r) => acc + (Number(r.participantsCount) || 0), 0);
-
-    const avgPlacement =
-      combinedProfiles.length > 0
-        ? Math.round(
-            combinedProfiles.reduce((acc, p) => acc + (p.placementScore || 82), 0) /
-              combinedProfiles.length
-          )
-        : 84;
-
-    const totalLearners = Math.round(
-      INSTITUTIONAL_ANALYTICS.totalLearners * periodFactor +
-        combinedProfiles.length * 4 +
-        requestParticipants
-    );
-
-    const globalPassRate = Math.min(
-      98,
-      Math.max(
-        72,
-        Math.round((INSTITUTIONAL_ANALYTICS.globalPassRate * 0.7) + (avgPlacement * 0.3))
-      )
-    );
-
-    const uniqueInstitutions = new Set([
-      ...INSTITUTIONAL_ANALYTICS.breakdownByInstitution.map((i) => i.name),
-      ...combinedProfiles.map((p) => p.institution).filter(Boolean),
-      ...requests.map((r) => r.ministereOrEntite).filter(Boolean)
-    ]);
-
-    const activeInstitutions =
-      Math.round(INSTITUTIONAL_ANALYTICS.activeInstitutions * (periodFactor > 1 ? 1.15 : 1)) +
-      Math.max(0, uniqueInstitutions.size - 5);
-
-    const hoursDelivered = Math.round(
-      INSTITUTIONAL_ANALYTICS.hoursDelivered * periodFactor +
-        extraCompletedModules * 6 +
-        Math.round(extraMinutes / 60) +
-        Math.max(0, courses.length - 6) * 18
-    );
-
-    // Breakdown by institution enriched with real requests & profile completions
-    const breakdownByInstitution = INSTITUTIONAL_ANALYTICS.breakdownByInstitution
-      .map((inst) => {
-        const matchingReqs = requests.filter((r) =>
-          (r.ministereOrEntite || '').toLowerCase().includes(inst.name.split(' ')[1]?.toLowerCase() || '___') ||
-          (r.cgpmpCellule || '').toLowerCase().includes(inst.name.split(' ')[0]?.toLowerCase() || '___')
-        );
-        const addedLearners = matchingReqs.reduce((s, r) => s + (Number(r.participantsCount) || 0), 0);
-        const matchingProfiles = combinedProfiles.filter((p) =>
-          (p.institution || '').toLowerCase().includes(inst.name.split(' ')[0]?.toLowerCase() || '___')
-        );
-        const addedCerts = matchingProfiles.reduce((s, p) => s + (p.certificationsCount || 0), 0);
-
-        const learners = Math.round(inst.learners * periodFactor) + addedLearners;
-        const completed = Math.round(inst.completed * periodFactor) + addedCerts;
-        const passRate = Math.min(98, Math.max(68, Math.round((completed / Math.max(1, learners)) * 100)));
-
-        return {
-          ...inst,
-          learners,
-          completed,
-          passRate
-        };
-      })
-      .filter((inst) =>
-        selectedInstitutionFilter === 'Toutes' ? true : inst.name === selectedInstitutionFilter
-      );
-
-    // Dynamic competency axes enriched by completed courses in each category
-    const categoryBoosts: Record<string, number> = {};
-    courses.forEach((c) => {
-      const doneCount = combinedProfiles.filter((p) =>
-        p.completedCourseIds?.includes(c.id)
-      ).length;
-      categoryBoosts[c.category] = (categoryBoosts[c.category] || 0) + doneCount;
-    });
-
-    const competencyAxes = INSTITUTIONAL_ANALYTICS.competencyAxes.map((ax, idx) => {
-      const boost =
-        idx === 0
-          ? (categoryBoosts['Passation'] || 0)
-          : idx === 1
-          ? (categoryBoosts['Passation'] || 0) + (categoryBoosts['Réglementation'] || 0)
-          : idx === 2
-          ? (categoryBoosts['Contrôle'] || 0)
-          : idx === 3
-          ? (categoryBoosts['Contentieux'] || 0)
-          : (categoryBoosts['Gestion & Audit'] || 0);
-      return {
-        axis: ax.axis,
-        score: Math.min(99, ax.score + Math.min(8, boost + (extraCerts > 3 ? 2 : 0)))
-      };
-    });
-
-    // Monthly Evolution Series (6 months) for interactive SVG chart
-    const baseMonths =
-      selectedPeriod === 'Trimestre 2 - 2026'
-        ? [
-            { month: 'Jan', learners: 145, certs: 112, passRate: 77 },
-            { month: 'Fév', learners: 172, certs: 138, passRate: 80 },
-            { month: 'Mar', learners: 198, certs: 160, passRate: 81 },
-            { month: 'Avr', learners: 220, certs: 182, passRate: 83 },
-            { month: 'Mai', learners: 248, certs: 208, passRate: 84 },
-            { month: 'Juin', learners: 276 + extraCerts * 2, certs: 234 + extraCerts, passRate: globalPassRate }
-          ]
-        : [
-            { month: 'Avr', learners: 195, certs: 158, passRate: 81 },
-            { month: 'Mai', learners: 230, certs: 190, passRate: 83 },
-            { month: 'Juin', learners: 264, certs: 222, passRate: 84 },
-            { month: 'Juil', learners: 298, certs: 254, passRate: 85 },
-            { month: 'Août', learners: 335, certs: 289, passRate: 86 },
-            {
-              month: 'Sep',
-              learners: 372 + requestParticipants,
-              certs: 324 + extraCerts * 3,
-              passRate: globalPassRate
-            }
-          ];
-
-    // CGPMP Requests status breakdown
-    const approvedCount = requests.filter((r) => r.status === 'Approuvé par DFAT').length;
-    const pendingCount = requests.filter((r) => r.status === 'En attente').length;
-    const rejectedCount = requests.filter((r) => r.status === 'Rejeté').length;
-
-    return {
-      totalLearners,
-      globalPassRate,
-      activeInstitutions,
-      hoursDelivered,
-      breakdownByInstitution,
-      competencyAxes,
-      monthlySeries: baseMonths,
-      cgpmpStats: {
-        total: requests.length,
-        approved: approvedCount,
-        pending: pendingCount,
-        rejected: rejectedCount,
-        totalParticipants: requestParticipants
-      }
-    };
-  }, [combinedProfiles, requests, courses, periodFactor, selectedInstitutionFilter]);
+  const [analytics, setAnalytics] = useState<ReturnType<typeof operationalAnalytics> | null>(null);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [institutionOptions, setInstitutionOptions] = useState<string[]>([]);
+  const [retry, setRetry] = useState(0);
+  const year = new Date().getFullYear();
+  const periods = ['Toutes les périodes', ...[year, year - 1].flatMap(y => [`Année Budgétaire ${y}`, ...[4,3,2,1].map(q => `Trimestre ${q} - ${y}`)])];
+  useEffect(() => {
+    let active = true;
+    setAnalyticsLoading(true); setAnalyticsError(null);
+    operationsApi(`/analytics?period=${encodeURIComponent(selectedPeriod)}&institution=${encodeURIComponent(selectedInstitutionFilter)}`).then(data => {
+      if(active) {setAnalytics(data); if(selectedInstitutionFilter === 'Toutes') setInstitutionOptions(data.institutions);}
+    }).catch(error => {if(active) {setAnalytics(null); setAnalyticsError(error.message);}}).finally(() => {if(active) setAnalyticsLoading(false);});
+    return () => {active=false;};
+  },[selectedPeriod, selectedInstitutionFilter, retry]);
+  const dynamicStats = analytics || operationalAnalytics([], [], [], 'Toutes les périodes');
 
   const handleGenerateAIReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const res = await authenticatedFetch('/api/ai/generate-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          institution: institutionName,
-          period: selectedPeriod,
-          stats: dynamicStats
-        })
-      });
-      const data = await res.json();
-      const newReport: SavedAnalyticsReport = {
-        id: `REP-${Date.now()}`,
-        reportTitle: data.reportTitle || `Synthèse Décisionnelle DFAT — ${selectedPeriod}`,
-        generatedAt: data.generatedAt || new Date().toLocaleDateString('fr-FR'),
-        period: selectedPeriod,
-        institution: institutionName,
-        executiveSummary:
-          data.executiveSummary ||
-          "Synthèse consolidée des indicateurs de gouvernance éducative sur la Loi n° 10/010.",
-        keyObservations: Array.isArray(data.keyObservations)
-          ? data.keyObservations
-          : [
-              `Taux global de conformité et de réussite : ${dynamicStats.globalPassRate}%`,
-              `${dynamicStats.cgpmpStats.approved} dossiers CGPMP homologués par visa DFAT (${dynamicStats.cgpmpStats.totalParticipants} agents inscrits)`,
-              `${dynamicStats.hoursDelivered.toLocaleString()} heures pédagogiques délivrées sur ${courses.length || 6} modules`
-            ],
-        complianceScore: data.complianceScore || dynamicStats.globalPassRate,
-        recommendationsDFAT:
-          data.recommendationsDFAT ||
-          "Renforcer les sessions pratiques sur la détection des offres anormalement basses et les recours devant le CRD."
-      };
-
-      setSavedReports((prev) => {
-        const updated = [newReport, ...prev];
-        try {
-          localStorage.setItem('armp_saved_analytics_reports', JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
+      const newReport: SavedAnalyticsReport = await operationsApi('/analytics/report', {period:selectedPeriod,institution:selectedInstitutionFilter});
+      setSavedReports(prev => [newReport, ...prev]);
       setActiveReportId(newReport.id);
-      onShowToast?.('Synthèse décisionnelle IA générée et sauvegardée dans Firestore ✓');
-
-      await saveAnalyticsReportToFirestore(newReport).catch(() => {});
+      onShowToast?.('Synthèse calculée à partir des données enregistrées et sauvegardée sur le serveur.');
     } catch (err) {
-      console.error(err);
+      onShowToast?.(err instanceof Error ? err.message : 'Rapport non enregistré. Réessayez.');
     } finally {
       setIsGeneratingReport(false);
     }
@@ -321,7 +117,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       `RÉPUBLIQUE DÉMOCRATIQUE DU CONGO • ARMP / DIRECTION DFAT`,
       `${report.reportTitle.toUpperCase()}`,
       `Date : ${report.generatedAt} | Période : ${report.period} | Institution : ${report.institution}`,
-      `Score de Conformité Loi 10/010 : ${report.complianceScore}%`,
+      `Taux de réussite pédagogique : ${report.complianceScore}%`,
       `====================================================================`,
       ``,
       `1. SYNTHÈSE EXÉCUTIVE :`,
@@ -347,10 +143,15 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   };
 
   // Max value for SVG chart scaling
-  const maxMonthlyVal = Math.max(...dynamicStats.monthlySeries.map((m) => m.learners), 400);
+  const maxMonthlyVal = Math.max(...dynamicStats.monthlySeries.flatMap(m=>[m.learners,m.certs]), 1);
+  const columnWidth=520 / Math.max(1,dynamicStats.monthlySeries.length);
 
   return (
     <div className="space-y-6">
+      {analyticsLoading && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">Chargement des indicateurs enregistrés…</p>}
+      {analyticsError && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{analyticsError} <button onClick={() => setRetry(n=>n+1)} className="underline">Réessayer</button></div>}
+      {!analyticsLoading && !analyticsError && <p className="text-xs text-slate-500">{dynamicStats.dataNote}</p>}
+
       
       {/* Top Header & AI Executive Report Action */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -360,7 +161,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <BarChart3 className="w-5 h-5" />
             </span>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Tableau de Bord Décisionnel Temps Réel • Direction DFAT
+              Tableau de Bord Décisionnel Données enregistrées • Direction DFAT
             </h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -375,9 +176,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             className="text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500"
           >
             <option value="Toutes">Toutes les Cellules & Institutions</option>
-            {INSTITUTIONAL_ANALYTICS.breakdownByInstitution.map((inst) => (
-              <option key={inst.name} value={inst.name}>
-                {inst.name}
+            {institutionOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
               </option>
             ))}
           </select>
@@ -387,14 +188,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 font-medium focus:ring-2 focus:ring-blue-500"
           >
-            <option>Trimestre 3 - 2026</option>
-            <option>Trimestre 2 - 2026</option>
-            <option>Année Budgétaire 2026</option>
+            {periods.map(period => <option key={period}>{period}</option>)}
           </select>
 
           <button
             onClick={handleGenerateAIReport}
-            disabled={isGeneratingReport}
+            disabled={isGeneratingReport || analyticsLoading || !!analyticsError}
             className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition cursor-pointer"
           >
             {isGeneratingReport ? (
@@ -405,7 +204,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Générer Synthèse Décisionnelle IA</span>
+                <span>Générer la synthèse des données</span>
               </>
             )}
           </button>
@@ -417,7 +216,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         
         <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold">Total Apprenants Formés</span>
+            <span className="text-xs font-semibold">Apprenants enregistrés</span>
             <Users className="w-4 h-4 text-blue-500" />
           </div>
           <div className="flex items-baseline space-x-2">
@@ -425,11 +224,11 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               {dynamicStats.totalLearners.toLocaleString()}
             </span>
             <span className="text-xs font-bold text-emerald-600 flex items-center">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +{selectedPeriod === 'Trimestre 2 - 2026' ? '18%' : '26%'}
+              Profils enregistrés
             </span>
           </div>
           <p className="text-[11px] text-slate-400">
-            Inclut {dynamicStats.cgpmpStats.totalParticipants} agents issus des demandes CGPMP
+            {dynamicStats.cgpmpStats.totalParticipants} participants demandés (comptés séparément)
           </p>
         </div>
 
@@ -443,10 +242,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               {dynamicStats.globalPassRate}%
             </span>
             <span className="text-xs font-bold text-emerald-600 flex items-center">
-              <CheckCircle2 className="w-3 h-3 mr-0.5" /> Conforme
+              <CheckCircle2 className="w-3 h-3 mr-0.5" /> Évaluations
             </span>
           </div>
-          <p className="text-[11px] text-slate-400">Seuil de conformité ARMP fixé à 70%</p>
+          <p className="text-[11px] text-slate-400">Réussite pédagogique à partir de 70%</p>
         </div>
 
         <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
@@ -476,7 +275,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
               {dynamicStats.hoursDelivered.toLocaleString()} h
             </span>
-            <span className="text-xs text-amber-600 font-semibold">{courses.length || 6} modules</span>
+            <span className="text-xs text-amber-600 font-semibold">{courses.length} modules</span>
           </div>
           <p className="text-[11px] text-slate-400">Enseignement synchrone & asynchrone</p>
         </div>
@@ -541,9 +340,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
               {/* Bars per month */}
               {dynamicStats.monthlySeries.map((item, idx) => {
-                const xBase = 68 + idx * 88;
-                const hLearners = Math.max(8, (item.learners / maxMonthlyVal) * 135);
-                const hCerts = Math.max(6, (item.certs / maxMonthlyVal) * 135);
+                const xBase = 50 + idx * columnWidth;
+                const hLearners = (item.learners / maxMonthlyVal) * 135;
+                const hCerts = (item.certs / maxMonthlyVal) * 135;
                 const yLearners = 165 - hLearners;
                 const yCerts = 165 - hCerts;
 
@@ -553,16 +352,16 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     <rect
                       x={xBase}
                       y={yLearners}
-                      width="22"
+                      width={Math.min(22,columnWidth/2-3)}
                       height={hLearners}
                       rx="5"
                       className="fill-blue-600/85 hover:fill-blue-500 transition-all"
                     />
                     {/* Certified Bar */}
                     <rect
-                      x={xBase + 26}
+                      x={xBase + Math.min(26,columnWidth/2)}
                       y={yCerts}
-                      width="22"
+                      width={Math.min(22,columnWidth/2-3)}
                       height={hCerts}
                       rx="5"
                       className="fill-emerald-500/90 hover:fill-emerald-400 transition-all"
@@ -577,7 +376,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       {item.learners}
                     </text>
                     <text
-                      x={xBase + 37}
+                      x={xBase + Math.min(37,columnWidth*0.75)}
                       y={yCerts - 5}
                       textAnchor="middle"
                       className="fill-emerald-600 dark:fill-emerald-400 text-[9px] font-mono font-bold"
@@ -586,7 +385,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     </text>
                     {/* Month label */}
                     <text
-                      x={xBase + 24}
+                      x={xBase + columnWidth/2}
                       y="184"
                       textAnchor="middle"
                       className="fill-slate-600 dark:fill-slate-300 text-[11px] font-bold"
@@ -606,7 +405,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 strokeLinejoin="round"
                 points={dynamicStats.monthlySeries
                   .map((item, idx) => {
-                    const x = 68 + idx * 88 + 24;
+                    const x = 50 + idx * columnWidth + columnWidth/2;
                     const y = 165 - (item.certs / maxMonthlyVal) * 135;
                     return `${x},${y}`;
                   })

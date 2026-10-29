@@ -107,7 +107,7 @@ export function buildChapterGraphForCourse(
     const progressPct = isCompleted
       ? 100
       : isCurrent
-      ? Math.max(35, Math.min(85, courseProgressPct || 45))
+      ? Math.min(99,Math.max(0,courseProgressPct))
       : 0;
 
     return {
@@ -191,19 +191,6 @@ export function computeUserLearningStats(
   const savedProgress = profile.courseProgress || {};
   const completedIds = new Set(profile.completedCourseIds || []);
 
-  // Ensure baseline completedModulesCount from profile is always reflected in completedIds
-  const targetBaselineCompleted = Math.min(courses.length, profile.completedModulesCount || 0);
-  if (completedIds.size < targetBaselineCompleted) {
-    for (let i = 0; i < courses.length && completedIds.size < targetBaselineCompleted; i++) {
-      const cid = courses[i].id;
-      const hasPartialProgress =
-        typeof savedProgress[cid] === 'number' && savedProgress[cid] > 0 && savedProgress[cid] < 100;
-      if (!hasPartialProgress && !completedIds.has(cid)) {
-        completedIds.add(cid);
-      }
-    }
-  }
-
   let totalCompletedLessonsCount = 0;
 
   courses.forEach((c) => {
@@ -214,18 +201,6 @@ export function computeUserLearningStats(
     const fromProfileLessons = profile.completedLessonsByCourse?.[c.id];
     if (Array.isArray(fromProfileLessons) && fromProfileLessons.length > 0) {
       lessonIndices = Array.from(new Set(fromProfileLessons));
-    } else if (typeof window !== 'undefined') {
-      try {
-        const localRaw = localStorage.getItem(`armp_completed_lessons_${c.id}`);
-        if (localRaw) {
-          const parsed = JSON.parse(localRaw);
-          if (Array.isArray(parsed)) {
-            lessonIndices = Array.from(new Set(parsed));
-          }
-        }
-      } catch {
-        // ignore storage errors
-      }
     }
 
     // 2. Resolve course progress percentage
@@ -279,59 +254,11 @@ export function computeUserLearningStats(
   const quizScoreValues = Object.values(profile.quizScoresByCourse || {}).filter(
     (v): v is number => typeof v === 'number' && !Number.isNaN(v)
   );
-  const basePlacement = profile.placementScore ?? 78;
-  const averageScore =
-    quizScoreValues.length > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            Math.round(
-              (basePlacement + quizScoreValues.reduce((a, b) => a + b, 0)) /
-                (1 + quizScoreValues.length)
-            )
-          )
-        )
-      : Math.min(100, Math.max(0, basePlacement));
-
-  // Study hours history (6 months) synchronized with totalStudyMinutes & averageScore
-  const defaultHistory = [
-    { month: 'Avr', hours: 4.5, score: Math.max(50, averageScore - 18) },
-    { month: 'Mai', hours: 6.0, score: Math.max(54, averageScore - 14) },
-    { month: 'Juin', hours: 5.8, score: Math.max(58, averageScore - 10) },
-    { month: 'Juil', hours: 7.0, score: Math.max(62, averageScore - 7) },
-    { month: 'Août', hours: 7.8, score: Math.max(66, averageScore - 3) },
-    { month: 'Sep', hours: 6.9, score: averageScore }
-  ];
-
-  const rawHistory =
-    profile.studyHoursHistory && profile.studyHoursHistory.length === 6
-      ? profile.studyHoursHistory
-      : defaultHistory;
-
-  const baseHistoryHours = rawHistory.reduce((sum, h) => sum + (Number(h.hours) || 0), 0);
-  const extraMinutesFromProfile = Math.max(0, (profile.totalStudyMinutes || 180) - 180);
-  const extraHoursFromActivity = Number((extraMinutesFromProfile / 60).toFixed(1));
-
-  const studyHoursHistory = rawHistory.map((item, idx) =>
-    idx === rawHistory.length - 1
-      ? {
-          ...item,
-          hours: Number((item.hours + extraHoursFromActivity).toFixed(1)),
-          score: averageScore
-        }
-      : item
-  );
-
-  const totalStudyHours = Number(
-    Math.max(
-      baseHistoryHours + extraHoursFromActivity,
-      totalCompletedLessonsCount * 0.4 + completedCoursesCount * 2.5
-    ).toFixed(1)
-  );
-
-  const firstMonthScore = studyHoursHistory[0]?.score ?? Math.max(50, averageScore - 12);
-  const monthlyDeltaPct = Math.max(2, averageScore - firstMonthScore);
+  const scores = [...quizScoreValues, ...(typeof profile.placementScore === 'number' ? [profile.placementScore] : [])];
+  const averageScore = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+  const studyHoursHistory = profile.studyHoursHistory || [];
+  const totalStudyHours = Number((Math.max(0,profile.totalStudyMinutes || 0)/60).toFixed(1));
+  const monthlyDeltaPct = studyHoursHistory.length > 1 ? (studyHoursHistory.at(-1)?.score || 0) - (studyHoursHistory[0]?.score || 0) : 0;
 
   // Recent courses: prioritize explicit recentReadings, then in-progress, then completed
   const courseById = new Map<string, CourseModule>();
@@ -350,18 +277,9 @@ export function computeUserLearningStats(
     : null;
 
   const lastLearningCourse: CourseModule | null =
-    explicitLastCourse || recentInProgress[0] || recentCompleted[0] || courses[0] || null;
+    explicitLastCourse || recentInProgress[0] || recentCompleted[0] || null;
 
-  const lastCourseProgress = lastLearningCourse
-    ? Math.max(
-        courseProgressMap[lastLearningCourse.id] ?? 0,
-        explicitLastCourse ? 15 : 0
-      )
-    : 0;
-
-  if (lastLearningCourse && (courseProgressMap[lastLearningCourse.id] ?? 0) === 0 && explicitLastCourse) {
-    courseProgressMap[lastLearningCourse.id] = lastCourseProgress;
-  }
+  const lastCourseProgress = lastLearningCourse ? courseProgressMap[lastLearningCourse.id] ?? 0 : 0;
 
   const lastCourseTotalChapters = lastLearningCourse
     ? Math.max(1, lastLearningCourse.lessons?.length || lastLearningCourse.chaptersCount || 1)
@@ -376,7 +294,7 @@ export function computeUserLearningStats(
       ? lastCourseTotalChapters
       : Math.max(
           lastCourseCompletedIndices.length,
-          Math.max(1, Math.floor((lastCourseProgress / 100) * lastCourseTotalChapters))
+          0
         );
 
   let lastCourseNextLessonLabel = '';
@@ -430,14 +348,14 @@ export function computeUserLearningStats(
 
     const pct = Math.max(
       courseProgressMap[c.id] ?? 0,
-      c.id === lastLearningCourse?.id ? lastCourseProgress : 15
+      c.id === lastLearningCourse?.id ? lastCourseProgress : 0
     );
     const totalCh = Math.max(1, c.lessons?.length || c.chaptersCount || 1);
     const doneIndices = completedLessonsMap[c.id] || [];
     const completedCh =
       pct >= 100
         ? totalCh
-        : Math.max(doneIndices.length, Math.max(1, Math.floor((pct / 100) * totalCh)));
+        : Math.max(doneIndices.length, 0);
 
     const resolvedLessonIdx =
       typeof explicitLessonIdx === 'number'
@@ -489,18 +407,11 @@ export function computeUserLearningStats(
 
   // 3. Then add in-progress and completed courses so "Récentes lectures" is always populated
   recentInProgress.forEach((c, idx) => {
-    addCourseEntry(c, idx === 0 ? 'Aujourd’hui' : 'Cette semaine');
+    addCourseEntry(c);
   });
   recentCompleted.forEach((c, idx) => {
-    addCourseEntry(c, idx === 0 ? 'Hier' : `Il y a ${idx + 2} jours`);
+    addCourseEntry(c);
   });
-
-  // 4. Ensure at least 4 entries for visual richness if user is new
-  if (recentReadEntries.length < 4) {
-    courses.slice(0, 4).forEach((c, idx) => {
-      addCourseEntry(c, idx === 0 ? "Aujourd'hui" : `Il y a ${idx + 1} j`);
-    });
-  }
 
   const recentCourses = recentReadEntries.slice(0, 4).map((e) => e.course);
 
@@ -509,7 +420,7 @@ export function computeUserLearningStats(
     (profile.certificates || []).length
   );
 
-  const streakDays = profile.streakDays ?? Math.max(1, completedCoursesCount * 2 + inProgressCoursesCount);
+  const streakDays = profile.streakDays ?? 0;
 
   return {
     courseProgressMap,
