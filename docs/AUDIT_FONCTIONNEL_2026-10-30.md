@@ -34,6 +34,18 @@ Les contenus de cours et les illustrations sont des ressources éditoriales : le
 | P2 | Promesses de PWA complète, 2 500 alumni, QR vérifiable et homologation sans mécanisme correspondant | Textes d’accueil et attestations ajustés aux fonctions disponibles ; aucune homologation administrative ni signature officielle inventée | Implémenté |
 | P2 | Bibliothèque promettant des textes intégraux alors que seuls des extraits sont indexés | Export PDF des extraits, explicitement étiquetés comme pédagogiques ; pas de faux DAO ni de document officiel fabriqué | Implémenté |
 
+## Ordre de livraison et effort indicatif
+
+Les estimations ci-dessous décrivent la taille relative des lots pour leur maintenance, pas un relevé des heures réellement passées.
+
+| Lot | Impact attendu | Effort indicatif | Dépendance |
+|---|---|---|---|
+| 1. Fiabilité des données, évaluations et périmètres | Éviter les réussites, temps et effectifs inventés | Moyen à élevé (1 à 3 jours de développement classique) | Prioritaire avant les exports et rapports |
+| 2. Documents, studio et génération de supports | Remplacer les actions simulées par des fichiers réellement utilisables | Moyen (1 à 2 jours) | Services locaux et stockage existants |
+| 3. Sauvegardes du forum, du suivi et du guichet | Éviter les pertes et confirmations trompeuses | Moyen (1 à 2 jours) | Contrôles du lot 1 |
+| 4. Libellés, graphes et suppression des promesses non fournies | Rendre le fonctionnement compréhensible et vérifiable | Faible (une demi-journée à une journée) | Lots 1 à 3 |
+| 5. Notifications externes, PWA et homologation officielle | Étendre les capacités au-delà du périmètre actuellement configuré | À chiffrer après choix des canaux et règles institutionnelles | Configuration fournisseur et décisions métier |
+
 ## Fonctions déjà reliées à des services
 
 - Authentification, récupération de compte, sessions et double authentification : API et contrôles serveur existants conservés.

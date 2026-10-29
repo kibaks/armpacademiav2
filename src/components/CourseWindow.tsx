@@ -1413,10 +1413,10 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                     <div>
                       <h3 className="text-lg font-black text-white flex items-center space-x-2">
                         <FileText className="w-5 h-5 text-[#0866FF]" />
-                        <span>Ressources & Documentation Officielle ARMP</span>
+                        <span>Ressources du module</span>
                       </h3>
                       <p className="text-xs text-slate-400">
-                        Supports de cours, modèles types de DAO, décrets et fiches pratiques
+                        Support pédagogique et pièces jointes disponibles pour ce module
                       </p>
                     </div>
 

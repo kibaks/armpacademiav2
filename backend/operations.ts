@@ -127,7 +127,7 @@ export function createOperationsRouter(deps: { authenticate?: RequestHandler; db
     res.type('application/pdf').set('Content-Disposition',`attachment; filename="${kind==='certificate'?'attestation':'support'}-${c.code.replace(/[^\w-]/g,'')}.pdf"`); pdf.pipe(res);
     pdf.fillColor('#114488').fontSize(22).text('ARMP ACADEMIA'); pdf.moveDown(); pdf.fontSize(17).text(cert?'Attestation pédagogique':`Support de formation — ${c.code}`); pdf.moveDown(); pdf.fillColor('#203047').fontSize(14).text(c.title); pdf.moveDown();
     if(cert) { pdf.fontSize(12).text(`Apprenant : ${cert.name}`).moveDown().text(`Évaluation réussie : ${cert.score}%`).text(`Date : ${new Date(cert.issuedAt).toLocaleDateString('fr-FR')}`).text(`Référence stable : ${cert.sealNumber}`).moveDown().text('Cette attestation constate la réussite pédagogique dans Academia. Elle ne constitue pas une homologation administrative ni une signature de la DFAT.'); }
-    else { pdf.fontSize(10).text('Support pédagogique issu du module enregistré. Les références citées doivent être rapprochées des textes officiels en vigueur.'); c.lessons.forEach(l=> {pdf.moveDown().fontSize(14).fillColor('#114488').text(l.title); pdf.moveDown().fontSize(11).fillColor('#203047').text(l.content); if(l.keyArticles?.length) pdf.moveDown().fontSize(9).text(`Références du module : ${l.keyArticles.join(', ')}`);}); }
+    else { pdf.fontSize(10).text('Support pédagogique issu du module enregistré. Les références citées doivent être rapprochées des textes officiels en vigueur.'); c.lessons.forEach(l=> {pdf.moveDown().fontSize(14).fillColor('#114488').text(l.title); pdf.moveDown().fontSize(11).fillColor('#203047').text(l.content.replace(/\[Sc[èe]ne:[^\]]*\]\s*/gi,'').replace(/^\s*#{1,6}\s*/gm,'').replace(/\*\*/g,'')); if(l.keyArticles?.length) pdf.moveDown().fontSize(9).text(`Références du module : ${l.keyArticles.join(', ')}`);}); }
     pdf.end();
   }));
   router.get('/legal/:id/document',wrap(async (req,res) => {
@@ -135,7 +135,7 @@ export function createOperationsRouter(deps: { authenticate?: RequestHandler; db
     const {default:PDFDocument}=await import('pdfkit'); const pdf=new PDFDocument({margin:48}); res.type('application/pdf').set('Content-Disposition',`attachment; filename="extraits-${d.id}.pdf"`); pdf.pipe(res); pdf.fontSize(20).text(d.title).moveDown().fontSize(11).text('Extraits pédagogiques indexés dans Academia — ne remplace pas le texte officiel intégral.').moveDown().text(d.summary || ''); (d.articles || []).forEach(a=>pdf.moveDown().fontSize(14).text(`${a.number} — ${a.title}`).fontSize(11).text(a.content)); pdf.end();
   }));
   router.get('/capabilities',(_req,res)=>res.json({whatsappDelivery:false,smsDelivery:false,webPush:false,voiceInput:true,certificate:'pedagogical',offline:'downloaded-documents'}));
-  router.use((error:any,_req:any,res:any,_next:any)=> { if(res.headersSent) return res.end(); console.error('[Operations]',error.status || 'unavailable'); res.status(error.status || 503).json({error:error.status ? error.message : 'Service indisponible. Aucune réussite ni sauvegarde n’a été confirmée. Réessayez.'}); });
+  router.use((error:any,_req:any,res:any,_next:any)=> { if(res.headersSent) return res.end(); if(!error.status || error.status>=500) console.error('[Operations]',error.status || 'unavailable'); res.status(error.status || 503).json({error:error.status ? error.message : 'Service indisponible. Aucune réussite ni sauvegarde n’a été confirmée. Réessayez.'}); });
   return router;
 }
 export const operationsRouter=createOperationsRouter();
