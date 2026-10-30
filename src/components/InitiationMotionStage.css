@@ -12,3 +12,5 @@
 .lesson-context-figure li{border-left:3px solid #d6a53e;background:#fff;padding:8px 10px;font-size:12px;line-height:1.4;max-width:100%;overflow-wrap:anywhere}
 .lesson-explainer .lesson-motion-board__phrase--long{font-size:clamp(20px,2.5cqw,28px);line-height:1.5}
 @container(max-width:620px){.lesson-context-figure svg{min-height:170px}.lesson-explainer .lesson-motion-board__phrase--long{font-size:21px}.lesson-context-figure figcaption{font-size:12px}}
+
+.lesson-explainer__body--reference{padding:18px;background:#f1f6fb}.lesson-explainer__body--reference .reference-explanation{border-radius:16px}.lesson-explainer__body--reference .reference-explanation__illustration .lesson-context-figure svg{max-height:260px}.lesson-explainer__body--reference .lesson-explainer__source{padding:12px 12px 0;margin-top:12px}@container(max-width:620px){.lesson-explainer__body--reference{padding:10px}.lesson-explainer__body--reference .reference-explanation__illustration .lesson-context-figure svg{max-height:200px}}

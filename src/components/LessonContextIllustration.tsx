@@ -53,7 +53,7 @@ const spots: Record<VisualSubject, number[][]> = {
   };
 
 // Distinct visual metaphors; all movement uses the player's clock, including seeking.
-export function LessonContextIllustration({ topic, progress, still, labels, narration = '', narrationProgress = 0 }: {topic: string; progress: number; still: boolean; labels: string[]; narration?: string; narrationProgress?: number}) {
+export function LessonContextIllustration({ topic, progress, still, labels, narration = '', narrationProgress = 0, entrance = false }: {topic: string; progress: number; still: boolean; labels: string[]; narration?: string; narrationProgress?: number; entrance?: boolean}) {
   const spokenType = lessonIllustration(narration);
   const primary = lessonIllustration(topic);
   const fallback = primary === 'book' ? lessonIllustration(labels.join(' ')) : primary;
@@ -65,7 +65,7 @@ export function LessonContextIllustration({ topic, progress, still, labels, narr
   const type = spokenType !== 'book' && !generic ? spokenType : fallback;
   const focus = lessonVisualFocus(type, narration, narrationProgress);
   const p = still ? 1 : Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
-  const reveal = (i: number) => ({ initial: false as const, animate: { opacity: narration ? 1 : p >= i * .15 ? 1 : .12, y: narration || p >= i * .15 ? 0 : 10 }, transition: { duration: 0 } });
+  const reveal = (i: number) => ({ initial: entrance && !still ? {opacity:0,y:12} : false as const, animate: { opacity: narration ? 1 : p >= i * .15 ? 1 : .12, y: narration || p >= i * .15 ? 0 : 10 }, transition: { duration: entrance && !still ? .32 : 0, delay: entrance && !still ? i * .1 : 0 } });
   const stroke = '#214b80', gold = '#e4b34e', pale = '#dbe8f8';
   const spot = focus.index >= 0 ? spots[type][focus.index] : undefined;
   return <figure className={'lesson-context-figure lesson-context-figure--' + type}>

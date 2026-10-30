@@ -1,3 +1,4 @@
+import { ReferenceExplanationStage } from './ReferenceExplanationStage';
 import { synthesizeVoiceNote } from '../utils/synthesizeVoiceNote';
 import { tutorHistoryForStorage, tutorAudioMime } from '../../shared/tutorVoice';
 import { DEFAULT_TUTOR_PRESENTATION, normalizeTutorPresentation } from '../../shared/tutorPresentation';
@@ -606,9 +607,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         if (st.emotion) {
           setDetectedSpeechEmotion(st.emotion as AvatarEmotion);
         }
-        if (!st.isPlaying) {
-          setActiveSpeakingMsgId(null);
-        }
+        setActiveSpeakingMsgId(st.isPlaying || st.isLoading ? st.currentId.slice('tutor-'.length) : null);
       } else if (!st.isPlaying) {
         setIsSpeaking(false);
         setActiveSpeakingMsgId(null);
@@ -689,7 +688,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       .slice(0, 1800);
   };
 
-  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number) => {
+  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, preferDiagram = false) => {
     if (!text) return;
     speechService.unlockAudio();
 
@@ -699,7 +698,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
 
-    if ((!isCallActive || isVideoCallActive) && await tutorVideo.start(text, voiceToUse)) return;
+    if (!preferDiagram && (!isCallActive || isVideoCallActive) && await tutorVideo.start(text, voiceToUse)) return;
     tutorVideo.stop();
 
     if (msgId) setActiveSpeakingMsgId(msgId);
@@ -1268,7 +1267,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       persistMessages(updatedConversation);
 
       if (autoSpeak || mediaToSend?.type === 'audio' || isCallActive || isVideoCallActive) {
-        setTimeout(() => speak(reply, botMsgId), 80);
+        setTimeout(() => speak(reply, botMsgId, undefined, undefined, !isVideoCallActive && !isCallActive), 80);
       }
     } catch (error) {
       const fallbackBotMsg: EnhancedMessage = {
@@ -1378,6 +1377,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/70 dark:from-slate-900 dark:to-slate-950">
               {messages.map((msg, msgIdx) => {
                 const isThisMsgSpeaking = isSpeaking && activeSpeakingMsgId === msg.id;
+                const illustratedReply = msg.sender === 'tuteur' && msg.id.startsWith('bot-') && !msg.interactiveQuiz && msg.text.trim().split(/\s+/).length >= 18;
+                const previousQuestion = messages.slice(0,msgIdx).reverse().find(m=>m.sender==='user');
+                const question = previousQuestion?.media?.transcriptText || previousQuestion?.text || learningContext?.lastCourseTitle || 'Comprendre la notion';
                 const isLastBotMsg =
                   msg.sender === 'tuteur' && msgIdx === messages.length - 1;
 
@@ -1430,9 +1432,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         )}
 
                         {/* Contenu formaté */}
-                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id, undefined, undefined, true)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
                           {renderMarkdown(msg.text)}
-                        </div>
+                        </div>}
 
                         {/* Carte Quiz Interactive Q/R si présente */}
                         {msg.interactiveQuiz && (
@@ -1557,7 +1559,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => speak(msg.text, msg.id)}
+                                  onClick={() => speak(msg.text, msg.id, undefined, undefined, illustratedReply)}
                                   className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline"
                                   title="Écouter cette réponse avec le profil sélectionné"
                                 >
