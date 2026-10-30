@@ -1,21 +1,8 @@
 import { auth } from '../firebase';
 import { MAX_IMAGE_BYTES, imageMime, IMAGE_EXTENSIONS } from '../../shared/imageUpload';
-/**
- * Academia Storage API — Service centralisé pour images | vidéos | audios
- * Stockage 100% serveur 137.184.59.184 (pas S3 / Firestore)
- * Docs : https://academia.137.184.59.184.nip.io/
- */
-
-// =============================================================================
-// CONFIG
-// =============================================================================
-export const ACADEMIA_API_URL =
-  (import.meta as any).env?.VITE_ACADEMIA_API_URL ||
-  'https://academia.137.184.59.184.nip.io';
-
-
-
-const API = `${ACADEMIA_API_URL}/api`;
+/** Authenticated uploads go directly to the configured Vast storage service. */
+export const ACADEMIA_API_URL = '';
+const API = '/api/storage';
 
 // =============================================================================
 // TYPES
@@ -66,12 +53,12 @@ const ALL_ALLOWED = [
   'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp',
   'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp',
   'txt', 'csv', 'rtf', 'zip', 'rar', '7z',
-  'mp3', 'mp4', 'wav', 'avi', 'mov', 'webm', 'mkv', 'json', 'xml',
+  'mp3', 'mp4', 'wav', 'avi', 'mov', 'webm', 'mkv', 'json', 'xml', 'ogg', 'm4a', 'flac', 'aac',
 ];
 
 export function isAlreadyAcademiaUrl(url: string): boolean {
   if (!url) return false;
-  return url.includes('academia.137.184.59.184.nip.io') || url.includes('/storage/academia/');
+  return url.includes('academia.137.184.59.184.nip.io') || url.includes('/storage/academia/') || url.includes('/api/storage/files/');
 }
 
 export function isDataUrl(url: string): boolean {
@@ -94,113 +81,48 @@ export function isExtensionAllowed(fileName: string): boolean {
   return ALL_ALLOWED.includes(ext);
 }
 
-function headers(): Record<string, string> {
-  const h: Record<string, string> = {};
-
-  return h;
-}
-
 // =============================================================================
 // CORE — UPLOAD (multipart) & BASE64 fallback
 // =============================================================================
 
-async function uploadImageThroughApp(file: File, opts: UploadOptions): Promise<AcademiaFile> {
-  if (!imageMime(file.name)) throw new Error('Formats acceptés : JPG, JPEG, PNG, GIF et WebP.');
-  if (file.size > MAX_IMAGE_BYTES) throw new Error('Image trop volumineuse : maximum 3 Mo. Réduisez sa taille.');
-  if (!file.size) throw new Error('Le fichier image est vide.');
+async function accessHeaders(): Promise<Record<string, string>> {
   await auth.authStateReady();
-  if (!auth.currentUser) throw new Error('Connectez-vous pour importer une image.');
-  const user = auth.currentUser;
-  const token = await user.getIdToken();
-  if (auth.currentUser !== user) throw new Error('La session a changé.');
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/storage/images');
-    xhr.timeout = 60000;
-    xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    xhr.setRequestHeader('X-Upload-Filename', encodeURIComponent(file.name));
-    xhr.setRequestHeader('X-Upload-Category', opts.category || 'images');
-    xhr.setRequestHeader('X-Upload-Visibility', opts.visibility || 'public');
-    if (opts.entityId) xhr.setRequestHeader('X-Upload-Entity', opts.entityId);
-    if (opts.description) xhr.setRequestHeader('X-Upload-Description', encodeURIComponent(opts.description));
-    xhr.upload.onprogress = e => { if (e.lengthComputable) opts.onProgress?.(Math.min(99, Math.round(e.loaded / e.total * 100))); };
-    xhr.onload = () => {
-      try {
-        const payload = JSON.parse(xhr.responseText || '{}');
-        if (auth.currentUser !== user) throw new Error('La session a changé.');
-        if (['SESSION_INVALID', 'AUTH_REQUIRED', 'MFA_REQUIRED'].includes(payload.code)) window.dispatchEvent(new CustomEvent('academia-session-required', { detail: { uid: user.uid, code: payload.code } }));
-        if (xhr.status < 200 || xhr.status >= 300) throw new Error(payload.message || payload.error || 'Upload refusé (' + xhr.status + ').');
-        if (!payload.data?.url) throw new Error('Réponse du serveur de stockage invalide.');
-        opts.onProgress?.(100); resolve(payload.data);
-      } catch (error) { reject(error instanceof Error ? error : new Error('Réponse d’upload invalide.')); }
-    };
-    xhr.onerror = () => reject(new Error('Connexion interrompue pendant l’upload. Réessayez.'));
-    xhr.ontimeout = () => reject(new Error('Délai d’upload dépassé. Réessayez.'));
-    xhr.onabort = () => reject(new Error('Upload annulé.'));
-    xhr.send(file);
-  });
+  if (!auth.currentUser) throw new Error('Connectez-vous pour accéder aux fichiers.');
+  return { Authorization: 'Bearer ' + await auth.currentUser.getIdToken() };
 }
 
-export async function uploadFile(
-  file: File,
-  opts: UploadOptions = {}
-): Promise<AcademiaFile> {
-  const {
-    category = 'divers',
-    visibility = inferKindFromFile(file) === 'image' ? 'public' : 'private',
-    entityId,
-    description,
-    uploadedBy,
-    onProgress,
-  } = opts;
-
-  if (inferKindFromFile(file) === 'image') return uploadImageThroughApp(file, opts);
-
-  // Validations côté client
-  if (file.size > MAX_SIZE_BYTES) {
-    throw new Error(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Limite 100 Mo.`);
-  }
-  if (!isExtensionAllowed(file.name)) {
-    throw new Error(`Extension .${file.name.split('.').pop()} non autorisée.`);
-  }
-
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('category', category);
-  fd.append('visibility', visibility);
-  if (entityId) fd.append('entity_id', entityId);
-  if (description) fd.append('description', description);
-  if (uploadedBy) fd.append('uploaded_by', uploadedBy);
-
-  // XHR pour progress (fetch ne gère pas upload progress)
-  return new Promise<AcademiaFile>((resolve, reject) => {
+export async function uploadFile(file: File, opts: UploadOptions = {}): Promise<AcademiaFile> {
+  const image = inferKindFromFile(file) === 'image';
+  const max = image ? MAX_IMAGE_BYTES : MAX_SIZE_BYTES;
+  if (!file.size || file.size > max) throw new Error(image ? 'Image vide ou trop volumineuse : maximum 3 Mo.' : 'Fichier vide ou trop volumineux : maximum 100 Mo.');
+  if (!isExtensionAllowed(file.name)) throw new Error('Format de fichier non autorisé.');
+  const authorization = await accessHeaders();
+  const user = auth.currentUser;
+  const response = await fetch(API + '/upload-ticket', {
+    method:'POST', headers:{...authorization, 'Content-Type':'application/json'},
+    body:JSON.stringify({name:file.name, size:file.size, category:opts.category || 'divers', visibility:opts.visibility || (image ? 'public' : 'private'), entityId:opts.entityId, description:opts.description}),
+  });
+  const ticket = await response.json();
+  if (!response.ok) throw new Error(ticket.message || ticket.error || 'Autorisation d’upload refusée.');
+  return new Promise((resolve,reject)=>{
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API}/files`);
-    Object.entries(headers()).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-
-    if (onProgress && xhr.upload) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
-    }
-
+    xhr.open('POST', ticket.url); xhr.timeout = 300000;
+    xhr.setRequestHeader('Authorization', 'Bearer ' + ticket.token);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) opts.onProgress?.(Math.min(99,Math.round(e.loaded/e.total*100))); };
     xhr.onload = () => {
       try {
-        const json = JSON.parse(xhr.responseText || '{}');
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const data: AcademiaFile = json.data;
-          if (!data?.url) throw new Error('Réponse API invalide');
-          resolve(data);
-        } else {
-          reject(new Error(json.message || `Upload échoué (${xhr.status})`));
-        }
-      } catch (e: any) {
-        reject(new Error(e.message || 'Réponse API invalide'));
-      }
+        const payload=JSON.parse(xhr.responseText || '{}');
+        if (auth.currentUser !== user) throw new Error('La session a changé.');
+        if (xhr.status<200 || xhr.status>=300) throw new Error(payload.detail || payload.message || 'Upload refusé ('+xhr.status+').');
+        if (!payload.data?.url) throw new Error('Réponse de stockage invalide.');
+        opts.onProgress?.(100); resolve(payload.data);
+      } catch (error) { reject(error); }
     };
-    xhr.onerror = () => reject(new Error('Erreur réseau upload Academia'));
-    xhr.send(fd);
+    xhr.onerror=()=>reject(new Error('Connexion au serveur de fichiers interrompue. Réessayez.'));
+    xhr.ontimeout=()=>reject(new Error('Délai d’upload dépassé. Réessayez.'));
+    xhr.onabort=()=>reject(new Error('Upload annulé.'));
+    xhr.send(file);
   });
 }
 
@@ -233,27 +155,9 @@ export async function uploadBase64(
   opts: UploadOptions = {}
 ): Promise<AcademiaFile> {
   const clean = base64.includes(',') ? base64.split(',')[1] : base64;
-  const mime = imageMime(fileName);
-  if (mime) {
-    const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
-    return uploadFile(new File([bytes], fileName, { type: mime }), opts);
-  }
-  const res = await fetch(`${API}/files`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers() },
-    body: JSON.stringify({
-      fileBase64: clean,
-      fileName,
-      category: opts.category || 'divers',
-      visibility: opts.visibility || 'private',
-      entity_id: opts.entityId,
-      description: opts.description,
-      uploaded_by: opts.uploadedBy,
-    }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `Base64 upload échoué (${res.status})`);
-  return json.data as AcademiaFile;
+  const mime = imageMime(fileName) || 'application/octet-stream';
+  const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+  return uploadFile(new File([bytes], fileName, { type: mime }), opts);
 }
 
 // Si l'URL est déjà une URL Academia ou http externe, on la laisse.
@@ -292,14 +196,14 @@ export async function listFiles(params: {
   if (params.entityId) q.set('entity_id', params.entityId);
   if (params.visibility) q.set('visibility', params.visibility);
   if (params.limit) q.set('limit', String(params.limit));
-  const res = await fetch(`${API}/files?${q.toString()}`, { headers: headers() });
+  const res = await fetch(`${API}/files?${q.toString()}`, { headers: await accessHeaders() });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'listFiles échoué');
   return json.data as AcademiaFile[];
 }
 
 export async function getFile(id: string): Promise<AcademiaFile> {
-  const res = await fetch(`${API}/files/${id}`, { headers: headers() });
+  const res = await fetch(`${API}/files/${id}`, { headers: await accessHeaders() });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'getFile échoué');
   return json.data as AcademiaFile;
@@ -308,7 +212,7 @@ export async function getFile(id: string): Promise<AcademiaFile> {
 export async function deleteFile(id: string): Promise<void> {
   const res = await fetch(`${API}/files/${id}`, {
     method: 'DELETE',
-    headers: headers(),
+    headers: await accessHeaders(),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((json as any).message || 'delete échoué');
@@ -316,7 +220,7 @@ export async function deleteFile(id: string): Promise<void> {
 
 export async function getStorageStats(category?: string) {
   const q = category ? `?category=${encodeURIComponent(category)}` : '';
-  const res = await fetch(`${API}/storage-stats${q}`, { headers: headers() });
+  const res = await fetch(`${API}/storage-stats${q}`, { headers: await accessHeaders() });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'stats échoué');
   return json.data as { totalFiles: number; totalSize: number; byCategory: { category: string; count: number; size: string }[]; quota: number };
