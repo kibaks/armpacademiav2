@@ -203,3 +203,92 @@
 .identity-fields__optional summary:focus-visible { outline: 2px solid #315b85; outline-offset: 3px; }
 .dark .identity-fields__optional summary { color: #b0c8e2; border-color: #324055; }
 @media (max-width: 639px) { .auth-register-form .identity-field :is(input, select) { font-size: 16px; } }
+
+/* Keep sign-in within the visible screen; exceptional heights retain one accessible scroll area. */
+.auth-portal--login {
+  height: 100dvh;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+.auth-portal--login .auth-portal__panel {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: clamp(16px, 3dvh, 28px) clamp(22px, 3vw, 48px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.auth-portal--login .auth-portal__content {
+  display: grid;
+  gap: clamp(10px, 1.8dvh, 18px);
+  max-width: 380px;
+  margin-block: auto;
+  flex: 0 0 auto;
+}
+.auth-portal--login .auth-portal__content > * { margin-block: 0; }
+.auth-portal--login .auth-portal__brand { gap: 12px; }
+.auth-portal--login .auth-portal__brand img { height: clamp(40px, 7dvh, 54px); width: auto; }
+.auth-portal--login .auth-portal__brand-text { padding-left: 12px; }
+.auth-login__form { display: grid; gap: clamp(10px, 1.6dvh, 16px); }
+.auth-login__form > * { margin-block: 0; }
+.auth-portal--login .auth-portal__welcome { margin-bottom: 0; }
+.auth-portal--login .auth-portal__welcome h2 { margin-top: 6px; font-size: clamp(27px, 4.4dvh, 34px); }
+.auth-portal--login .auth-portal__welcome p { margin-top: 8px; line-height: 1.5; }
+.auth-portal--login .auth-portal__credentials { display: grid; gap: 12px; }
+.auth-portal--login .auth-portal__credentials > * { margin-block: 0; }
+.auth-portal--login .auth-portal__credentials input { min-height: 46px; padding-block: 11px; }
+.auth-portal--login .auth-portal__submit,
+.auth-portal--login .auth-portal__google { min-height: 46px; padding-block: 11px; }
+.auth-login__secondary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; }
+.auth-login__secondary .auth-portal__signup { display: flex; align-items: center; padding: 0; }
+.auth-login__secondary .auth-portal__signup button { display: inline-flex; align-items: center; min-height: 40px; margin: 0; }
+.auth-login__secondary .auth-portal__cgpmp { min-height: 40px; margin: 0; font-size: 11px; }
+.auth-portal--login .auth-portal__footer { flex-shrink: 0; margin-top: 0; padding-top: 12px; }
+.auth-portal--login .auth-login__context { padding: 10px 12px; font-size: 11px; line-height: 1.4; }
+.auth-portal--login [role='alert'] { padding: 10px 12px; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+@media (max-width: 1023px) {
+  .auth-portal--login { grid-template-rows: auto minmax(0, 1fr); }
+  .auth-portal--login .auth-showcase { height: clamp(60px, 11dvh, 84px); min-height: 0; }
+  .auth-portal--login .auth-showcase__header { height: 100%; padding: 8px 22px; }
+  .auth-portal--login .auth-showcase__bottom { display: none; }
+  .auth-portal--login .auth-showcase__identity strong { font-size: 15px; }
+  .auth-portal--login .auth-showcase__identity span { font-size: 7px; }
+  .auth-portal--login .auth-showcase__shade { background: rgba(8, 36, 77, .8); }
+  .auth-portal--login .auth-portal__panel { padding: 16px 24px 12px; }
+  .auth-portal--login .auth-portal__credentials input { font-size: 16px; }
+}
+@media (max-height: 740px) {
+  .auth-portal--login .auth-portal__content { gap: 12px; }
+  .auth-portal--login .auth-portal__welcome p { display: none; }
+  .auth-portal--login .auth-portal__welcome h2 { font-size: 28px; line-height: 1.15; }
+  .auth-portal--login .auth-portal__welcome h2 br { display: none; }
+  .auth-portal--login .auth-portal__brand img { height: 38px; }
+  .auth-portal--login .auth-portal__footer { padding-top: 8px; }
+}
+@media (max-height: 620px) {
+  .auth-portal--login .auth-portal__panel { padding-block: 12px; }
+  .auth-portal--login .auth-portal__brand-text span,
+  .auth-portal--login .auth-portal__welcome .auth-portal__eyebrow,
+  .auth-portal--login .auth-portal__footer { display: none; }
+  .auth-portal--login .auth-portal__brand img { height: 32px; }
+  .auth-portal--login .auth-portal__welcome h2 { font-size: 25px; }
+  .auth-portal--login .auth-login__form { gap: 10px; }
+}
+@media (max-width: 1023px) and (max-height: 620px) {
+  .auth-portal--login { grid-template-rows: minmax(0, 1fr); }
+  .auth-portal--login .auth-showcase { display: none; }
+}
+@media (max-height: 740px) {
+  .auth-portal--login-notice .auth-portal__welcome { display: none; }
+}
+@media (min-width: 600px) and (max-height: 480px) {
+  .auth-portal--login .auth-portal__brand,
+  .auth-portal--login .auth-portal__welcome { display: none; }
+  .auth-portal--login .auth-portal__panel { padding-block: 10px; }
+}
+.auth-login__close { display: none; }
+@media (max-width: 1023px) and (max-height: 620px) {
+  .auth-login__close { position: absolute; right: 10px; top: 8px; z-index: 2; display: grid; place-items: center; width: 44px; height: 44px; color: #16467d; border-radius: 50%; background: #fff; }
+  .dark .auth-login__close { background: #020617; color: #9ec5f7; }
+}

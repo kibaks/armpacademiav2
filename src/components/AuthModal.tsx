@@ -6,6 +6,7 @@ import {
   Lock,
   User,
   ArrowRight,
+  X,
   ArrowLeft,
   CheckCircle2,
   Building2,
@@ -1600,7 +1601,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const first = elements[0], last = elements[elements.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }} className={`auth-portal ${isVisualAuth ? 'auth-portal--compact' : ''} ${mode === 'register' ? 'auth-portal--register' : ''} fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200`}>
+    }} className={`auth-portal ${isVisualAuth ? 'auth-portal--compact' : ''} ${mode === 'register' ? 'auth-portal--register' : ''} ${mode === 'login' ? 'auth-portal--login' : ''} ${mode === 'login' && (stepError || courseTitle) ? 'auth-portal--login-notice' : ''} fixed inset-0 z-50 w-full h-screen overflow-y-auto lg:overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 grid grid-cols-1 lg:grid-cols-12 animate-in fade-in duration-200`}>
+      {mode === 'login' && canClose && <button type="button" className="auth-login__close" aria-label="Retour au portail" onClick={onClose}><X size={18} aria-hidden="true" /></button>}
       {isVisualAuth ? <AuthShowcase onClose={canClose ? onClose : undefined} /> : <div className="lg:col-span-6 lg:h-screen lg:overflow-y-auto bg-[#08244D] text-white border-b lg:border-b-0 lg:border-r border-slate-800 p-6 sm:p-8 xl:p-10">
         <AuthPortalLeftColumn
           mode={mode}
@@ -1688,7 +1690,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <RegistrationProgress step={registerStep} isCgpmp={isCgpmp} onSelectStep={step => { setRegisterStep(step); setStepError(null); }} />
           </>}
           {courseTitle && (
-            <div className="p-3.5 rounded-2xl bg-blue-950 text-white border border-blue-700 flex items-center justify-between gap-3 text-xs">
+            <div className="auth-login__context p-3.5 rounded-2xl bg-blue-950 text-white border border-blue-700 flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
                 <span>
@@ -1877,10 +1879,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   )}
                   {mode === 'login' && !twoFAProfile && (
-                    <div className="space-y-4">
+                    <div className="auth-login__form space-y-4">
                       <div className="auth-portal__welcome">
                         <span className="auth-portal__eyebrow">VOTRE PARCOURS CONTINUE ICI</span>
-                        <h2>Heureux de vous<br />retrouver.</h2>
+                        <h2>Heureux de vous{' '}<br />retrouver.</h2>
                         <p>Connectez-vous pour retrouver vos formations et votre progression.</p>
                       </div>
 
@@ -1983,8 +1985,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <span>Continuer avec Google</span>
                       </button>
 
-                      <p className="auth-portal__signup">Vous découvrez ACADEMIA ? <button type="button" onClick={() => { if (isCgpmp) handleSelectRoleInRegistration('particulier'); setMode('register'); setRegisterStep(1); setStepError(null); }}>Créer un compte</button></p>
-                      <button type="button" className="auth-portal__cgpmp" onClick={() => { handleSelectRoleInRegistration('cgpmp_member'); setMode('register'); setRegisterStep(1); setStepError(null); }}>Demander un compte CGPMP <ArrowRight size={14} aria-hidden="true" /></button>
+                      <div className="auth-login__secondary"><p className="auth-portal__signup"><button type="button" onClick={() => { if (isCgpmp) handleSelectRoleInRegistration('particulier'); setMode('register'); setRegisterStep(1); setStepError(null); }}>Créer un compte</button></p>
+                      <button type="button" className="auth-portal__cgpmp" onClick={() => { handleSelectRoleInRegistration('cgpmp_member'); setMode('register'); setRegisterStep(1); setStepError(null); }}>Demande CGPMP <ArrowRight size={14} aria-hidden="true" /></button></div>
 
                       {/* 3. REGROUPEMENT DES COMPTES DÉMOS DANS UN EXPANDABLE POUR ÉVITER LA SURCHARGE */}
                       {import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO === 'true' && <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
