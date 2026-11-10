@@ -688,7 +688,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       .slice(0, 1800);
   };
 
-  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, preferDiagram = false) => {
+  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number) => {
     if (!text) return;
     speechService.unlockAudio();
 
@@ -698,7 +698,11 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
 
-    if (!preferDiagram && (!isCallActive || isVideoCallActive) && await tutorVideo.start(text, voiceToUse)) return;
+    if (!isCallActive || isVideoCallActive) {
+      // Keep the player visible when a reply starts, including after hiding the portrait.
+      if (!isVideoCallActive) setShowStudioStage(true);
+      if (await tutorVideo.start(text, voiceToUse)) return;
+    }
     tutorVideo.stop();
 
     if (msgId) setActiveSpeakingMsgId(msgId);
@@ -1267,7 +1271,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       persistMessages(updatedConversation);
 
       if (autoSpeak || mediaToSend?.type === 'audio' || isCallActive || isVideoCallActive) {
-        setTimeout(() => speak(reply, botMsgId, undefined, undefined, !isVideoCallActive && !isCallActive), 80);
+        setTimeout(() => speak(reply, botMsgId), 80);
       }
     } catch (error) {
       const fallbackBotMsg: EnhancedMessage = {
@@ -1432,7 +1436,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         )}
 
                         {/* Contenu formaté */}
-                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id, undefined, undefined, true)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
+                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
                           {renderMarkdown(msg.text)}
                         </div>}
 
@@ -1559,7 +1563,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => speak(msg.text, msg.id, undefined, undefined, illustratedReply)}
+                                  onClick={() => speak(msg.text, msg.id)}
                                   className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline"
                                   title="Écouter cette réponse avec le profil sélectionné"
                                 >
