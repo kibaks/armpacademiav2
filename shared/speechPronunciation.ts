@@ -5,6 +5,12 @@ export const PRONUNCIATION_EXAMPLES: PronunciationEntry[] = [
   { word: 'Bakongo', pronunciation: 'Bakongo' }, { word: 'Bandundu', pronunciation: 'Bandoundou' },
   { word: 'Ester', pronunciation: 'Estère' }, { word: 'Esther', pronunciation: 'Estère' },
   { word: 'David', pronunciation: 'David' }, { word: 'Landry', pronunciation: 'Landri' },
+  // French-engine hints, not universal pronunciations; administrator entries override them.
+  { word: 'Ilunga', pronunciation: 'Ilounga' },
+  { word: 'Kibakweto', pronunciation: 'Kibakouéto' },
+  // Approximation informed by CSU's Wa-Kalonji guide (2025: wah-KUH-LONE-jee).
+  // Keep an audible n and dj rather than French nasal 'on' followed by j.
+  { word: 'Kalonji', pronunciation: 'Kalonne-dji' },
 ];
 const PROVINCE_PRONUNCIATIONS: PronunciationEntry[] = [
   {

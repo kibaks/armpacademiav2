@@ -44,3 +44,11 @@ test('compound personal names use the configured pronunciation without changing 
   assert.equal(speak(source, entries), 'Bonjour Jean Pol Moukèndi. Bienvenue au Haut-Katanga.');
   assert.equal(source, 'Bonjour Jean‑Paul Mukendi. Bienvenue au Haut Katanga.');
 });
+
+
+test('requested surnames are handled throughout full spoken replies and in uppercase', () => {
+  const text = 'ILUNGA ouvre la séance. KIBAKWETO intervient au Kasaï-Central ; KALONJI répond à Ilunga.';
+  assert.equal(speak(text), 'Ilounga ouvre la séance. Kibakouéto intervient au Kassaï-Central ; Kalonne-dji répond à Ilounga.');
+  assert.equal(speak('KALONJI', [{ word: 'Kalonji', pronunciation: 'Prononciation choisie' }]), 'Prononciation choisie');
+  assert.equal(speak('Ilungaville et Kalonjiste'), 'Ilungaville et Kalonjiste');
+});
