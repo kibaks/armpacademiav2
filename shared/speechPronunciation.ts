@@ -274,20 +274,25 @@ function regionalPronunciation(text: string): string {
       // 5. General Congolese proper-noun phonetic rule for capitalized Tsh- names
       .replace(/\bTsh([a-zàâéèêëîïôùû]+)/g, 'Tch$1');
 }
+const nameKey = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('fr').replace(/[\s\u00a0\u2010-\u2015-]+/g, ' ');
 const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function normalizeSpeechPronunciation(text: string, custom: PronunciationEntry[] = []) {
   const aliases = new Map<string, string>();
+  const spellings = new Set<string>();
   // First win: administrator overrides precede the built-in examples.
   for (const entry of [...custom, ...PRONUNCIATION_EXAMPLES, ...PROVINCE_PRONUNCIATIONS]) {
-    for (const word of [entry.word, regionalPronunciation(entry.word)]) {
-      const key = word.normalize('NFC').toLocaleLowerCase('fr');
+    for (const original of [entry.word, regionalPronunciation(entry.word)]) {
+      for (const word of [original, original.normalize('NFD').replace(/\p{M}/gu, '')]) {
+      const key = nameKey(word);
       if (!aliases.has(key)) aliases.set(key, entry.pronunciation);
+      spellings.add(word);
+      }
     }
   }
-  const pattern = new RegExp('(?<![\\p{L}\\p{N}])(?:' + [...aliases.keys()].sort((a,b) => b.length-a.length).map(escapePattern).join('|') + ')(?![\\p{L}\\p{N}])', 'giu');
+  const pattern = new RegExp('(?<![\\p{L}\\p{N}])(?:' + [...spellings].sort((a,b) => b.length-a.length).map(word => word.split(/[\s\u00a0\u2010-\u2015-]+/u).map(escapePattern).join('[\\s\\u00a0\\u2010-\\u2015-]+')).join('|') + ')(?![\\p{L}\\p{N}])', 'giu');
   const replacements: string[] = [];
   // Protect substitutions from cascading through the legacy geographical rules.
   const source = text.normalize('NFC').replace(/[\uE000\uE001]/g, '');
-  const protectedText = source.replace(pattern, name => { const index = replacements.push(aliases.get(name.toLocaleLowerCase('fr'))!) - 1; return `\uE000${index}\uE001`; });
+  const protectedText = source.replace(pattern, name => { const index = replacements.push(aliases.get(nameKey(name))!) - 1; return `\uE000${index}\uE001`; });
   return regionalPronunciation(protectedText).replace(/\uE000(\d+)\uE001/g, (_token, index) => replacements[Number(index)]);
 }

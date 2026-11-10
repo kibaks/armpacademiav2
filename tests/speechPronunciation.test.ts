@@ -30,3 +30,17 @@ test('a browser-prepared pronunciation is not transformed a second time on the s
   const prepared = speak('Bonjour David', [{ word: 'David', pronunciation: 'Ester' }]);
   assert.equal(await prepareTutorSpeech(prepared, true), 'Bonjour Ester');
 });
+
+test('province aliases handle accents, whitespace and Unicode hyphens consistently', () => {
+  assert.equal(speak('haut uele, KASAI CENTRAL, Nord‑Ubangi et Mai–Ndombe.'), 'Haut-Ouélé, Kassaï-Central, Nord-Oubangui et Maï-Ndombé.');
+  assert.equal(speak('Equateur et Kongo Central.'), 'Équateur et Kongo-Central.');
+  assert.equal(speak('Nord‑Ubangi', [{ word: 'Nord-Ubangi', pronunciation: 'Nord Oubangui' }]), 'Nord Oubangui');
+  assert.equal(speak('Nord-Ubangien et Kasailand'), 'Nord-Ubangien et Kasailand');
+});
+
+test('compound personal names use the configured pronunciation without changing the original', () => {
+  const source = 'Bonjour Jean‑Paul Mukendi. Bienvenue au Haut Katanga.';
+  const entries = [{ word: 'Jean-Paul Mukendi', pronunciation: 'Jean Pol Moukèndi' }];
+  assert.equal(speak(source, entries), 'Bonjour Jean Pol Moukèndi. Bienvenue au Haut-Katanga.');
+  assert.equal(source, 'Bonjour Jean‑Paul Mukendi. Bienvenue au Haut Katanga.');
+});
