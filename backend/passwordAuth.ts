@@ -1,3 +1,5 @@
+import { authEmailConfigured, sendAppEmail } from './authEmail.js';
+import { passwordEmail } from './emailTemplates.js';
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import { services } from './services.js';
@@ -122,13 +124,12 @@ passwordRouter.post('/auth/password/request', wrap(async (req, res) => {
   const address = email(req.body?.email);
   if (!address) return res.status(400).json({ error: 'Email valide requis.' });
   if (!(await limit(req, 'reset', address))) return res.status(429).json({ error: 'Trop de demandes. Réessayez plus tard.' });
-  if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Le lien ne peut pas être envoyé pour le moment. Réessayez plus tard.' });
+  if (!authEmailConfigured()) return res.status(503).json({ error: 'Le lien ne peut pas être envoyé pour le moment. Réessayez plus tard.' });
   let user;
   try { user = await services().auth.getUserByEmail(address); } catch (error: any) { if (error.code !== 'auth/user-not-found') throw error; }
   if (user && !user.disabled) {
     const link = await resetLink(user.uid);
-    const result = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.AUTH_EMAIL_FROM || 'ARMP RDC Academia <no-reply@armp-rdc.org>', to: [address], subject: 'Définissez votre mot de passe ACADEMIA', text: `Définissez votre mot de passe avec ce lien personnel, valable trente minutes : ${link}` }), signal: AbortSignal.timeout(15000) });
-    if (!result.ok) throw new Error('password-email-unavailable');
+    await sendAppEmail(address, passwordEmail(link, user.displayName));
   }
   res.json({ ok: true });
 }));

@@ -39,7 +39,7 @@ authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {
   });
   if (!accepted) return res.status(429).json({ error: 'Attendez une minute avant de demander un nouveau code.' });
   try {
-    await sendOtpEmail(identity.email, code);
+    await sendOtpEmail(identity.email, code, profile?.name || identity.name);
     await db.runTransaction(async tx => { const current = (await tx.get(ref)).data(); if (current?.salt === salt) tx.update(ref, { delivered: true }); });
     return res.json({ ok: true });
   } catch (error) {

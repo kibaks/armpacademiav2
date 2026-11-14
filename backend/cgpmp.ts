@@ -1,3 +1,5 @@
+import { authEmailConfigured, sendAppEmail } from './authEmail.js';
+import { passwordEmail } from './emailTemplates.js';
 import { resetLink } from './nativeSession.js';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
@@ -12,7 +14,7 @@ cgpmpRouter.post('/send-credentials-email', authenticate, requireAdmin, async (r
   try {
     const requestId = String(req.body?.requestId || '');
     if (!/^[\w-]{1,128}$/.test(requestId)) return res.status(400).json({ error: 'Identifiant de demande invalide.' });
-    if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Service de messagerie non configuré.' });
+    if (!authEmailConfigured()) return res.status(503).json({ error: 'Service de messagerie non configuré.' });
     const { auth, db } = services();
     const ref = db.collection('cgpmpAccountRequests').doc(requestId);
     const snap = await ref.get();
@@ -48,8 +50,7 @@ cgpmpRouter.post('/send-credentials-email', authenticate, requireAdmin, async (r
       const deliveryRef = db.collection('cgpmpDeliveries').doc(`${requestId}-${user.uid}`);
       if (!(await deliveryRef.get()).exists) {
         const link = await resetLink(user.uid);
-        const sent = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.AUTH_EMAIL_FROM || 'ARMP RDC Academia <no-reply@armp-rdc.org>', to: [email], subject: 'Activation de votre compte ACADEMIA', text: `Bonjour ${recipient.fullName}, votre compte est créé. Définissez votre mot de passe avec ce lien personnel : ${link}` }), signal: AbortSignal.timeout(15000) });
-        if (!sent.ok) throw new Error('email-delivery-failed');
+        await sendAppEmail(email, passwordEmail(link, recipient.fullName, true));
         await deliveryRef.set({ uid: user.uid, sentAt: new Date().toISOString() });
       }
       dispatchedEmails.push({ id: `MAIL-${user.uid}`, uid: user.uid, recipientName: recipient.fullName, recipientEmail: email, recipientRoleInCell: recipient.functionInCell || 'Membre CGPMP', loginEmail: email, tempPassword: '', matricule: recipient.matricule || `CGPMP-${index + 1}`, subject: 'Activation de votre compte ACADEMIA', bodyPreview: 'Lien personnel de définition du mot de passe envoyé par email.', sentAt: new Date().toISOString(), validatedByAdmin: req.identity.email || req.identity.uid });
