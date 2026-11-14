@@ -1,3 +1,4 @@
+import { normalizeStorageUrls } from '../shared/storageUrls';
 import { operationsApi } from './lib/operationsApi';
 import { initializeApp, getApps } from 'firebase/app';
 import { 
@@ -172,7 +173,7 @@ export async function fetchCustomCoursesFromFirestore(): Promise<CourseModule[]>
   try {
     const snap = await getDocs(collection(db, 'courses'));
     const list: CourseModule[] = [];
-    snap.forEach(d => list.push(d.data() as CourseModule));
+    snap.forEach(d => list.push(normalizeStorageUrls(d.data()) as CourseModule));
     return list;
   } catch (error) {
     console.warn('Could not fetch custom courses from Firestore:', error);
@@ -199,7 +200,7 @@ export async function fetchPostsFromFirestore(): Promise<SocialPost[]> {
   try {
     const snap = await getDocs(collection(db, 'posts'));
     const list: SocialPost[] = [];
-    snap.forEach(d => list.push(d.data() as SocialPost));
+    snap.forEach(d => list.push(normalizeStorageUrls(d.data()) as SocialPost));
     return list.sort((a, b) => (b.createdAt || b.id).localeCompare(a.createdAt || a.id));
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
@@ -235,7 +236,7 @@ export async function fetchCourseQAFromFirestore(courseId: string): Promise<Cour
     const q = query(collection(db, 'courseQA'), where('courseId', '==', courseId));
     const snap = await getDocs(q);
     const list: CourseQAItem[] = [];
-    snap.forEach(d => list.push(d.data() as CourseQAItem));
+    snap.forEach(d => list.push(normalizeStorageUrls(d.data()) as CourseQAItem));
     return list.sort((a, b) => (b.createdAt || b.id).localeCompare(a.createdAt || a.id));
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
@@ -260,7 +261,7 @@ export async function fetchStudioVideosFromFirestore(): Promise<StudioVideoItem[
   try {
     const snap = await getDocs(collection(db, 'studioVideos'));
     const list: StudioVideoItem[] = [];
-    snap.forEach(d => list.push(d.data() as StudioVideoItem));
+    snap.forEach(d => list.push(normalizeStorageUrls(d.data()) as StudioVideoItem));
     return list;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
@@ -285,7 +286,7 @@ export async function fetchQuizBankFromFirestore(): Promise<QuizBankItem[]> {
   try {
     const snap = await getDocs(collection(db, 'quizBank'));
     const list: QuizBankItem[] = [];
-    snap.forEach(d => list.push(d.data() as QuizBankItem));
+    snap.forEach(d => list.push(normalizeStorageUrls(d.data()) as QuizBankItem));
     return list;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
@@ -310,7 +311,7 @@ export async function fetchAnalyticsReportsFromFirestore(): Promise<SavedAnalyti
   try {
     const snap = await getDocs(collection(db, 'analyticsReports'));
     const list: SavedAnalyticsReport[] = [];
-    snap.forEach(d => list.push(d.data() as SavedAnalyticsReport));
+    snap.forEach(d => list.push(normalizeStorageUrls(d.data()) as SavedAnalyticsReport));
     return list.sort((a, b) => b.id.localeCompare(a.id));
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
@@ -339,7 +340,7 @@ export async function fetchTutorHistoryFromFirestore(userId: string): Promise<an
   try {
     const snap = await getDoc(doc(db, 'tutorConversations', userId));
     if (snap.exists()) {
-      return snap.data()?.messages || null;
+      return normalizeStorageUrls(snap.data())?.messages || null;
     }
     return null;
   } catch (error) {
@@ -355,7 +356,7 @@ export async function getOrInitUserProfile(user: FirebaseUser, fallbackRole: Use
     const snap = await getDoc(userDocRef);
 
     if (snap.exists()) {
-      const profile = snap.data() as UserProfile;
+      const profile = normalizeStorageUrls(snap.data()) as UserProfile;
       const token = await user.getIdTokenResult();
       const privileged = ['super_admin', 'dfat_admin', 'formateur', 'armp_agent', 'dgcmp_agent'];
       if (privileged.includes(profile.role) && !token.claims.role) throw new Error('Les permissions Firebase du compte ne sont pas configurées. Contactez le superadministrateur.');
@@ -404,7 +405,7 @@ export async function checkExistingRegisteredUser(params: {
     try {
       const snap = await getDoc(doc(db, 'users', cleanUid));
       if (snap.exists()) {
-        const found = snap.data() as UserProfile;
+        const found = normalizeStorageUrls(snap.data()) as UserProfile;
         saveProfileToLocalRegistry(found);
         return { exists: true, profile: found, source: 'firestore_uid' };
       }
@@ -419,7 +420,7 @@ export async function checkExistingRegisteredUser(params: {
       const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
       const qSnap = await getDocs(q);
       if (!qSnap.empty) {
-        const found = qSnap.docs[0].data() as UserProfile;
+        const found = normalizeStorageUrls(qSnap.docs[0].data()) as UserProfile;
         saveProfileToLocalRegistry(found);
         return { exists: true, profile: found, source: 'firestore_email' };
       }
@@ -502,7 +503,7 @@ export async function syncUserProfileToFirestore(profile: UserProfile, patch?: P
 export function subscribeProfileMedia(uid: string, receive: (media: Partial<UserProfile>) => void, onError: () => void) {
   return onSnapshot(doc(db, 'users', uid), { includeMetadataChanges: true }, snapshot => {
     if (auth.currentUser?.uid !== uid || !snapshot.exists() || snapshot.metadata.hasPendingWrites || snapshot.metadata.fromCache) return;
-    const data = snapshot.data();
+    const data = normalizeStorageUrls(snapshot.data());
     receive({ avatarUrl: data.avatarUrl, coverUrl: data.coverUrl, mediaRevision: data.mediaRevision || 0 });
   }, onError);
 }
@@ -533,7 +534,7 @@ export async function fetchTrainingRequestsFromFirestore(): Promise<TrainingRequ
     const querySnapshot = await getDocs(q);
     const requests: TrainingRequest[] = [];
     querySnapshot.forEach((docSnap) => {
-      requests.push(docSnap.data() as TrainingRequest);
+      requests.push(normalizeStorageUrls(docSnap.data()) as TrainingRequest);
     });
     return requests;
   } catch (error) {
@@ -609,7 +610,7 @@ export async function fetchCgpmpAccountRequestsFromFirestore(): Promise<CgpmpAcc
     : query(collection(db, 'cgpmpAccountRequests'), where('permanentSecretaryEmail', '==', user.email));
   const snap = await getDocs(source);
   if (auth.currentUser !== user) return [];
-  return snap.docs.map(d => ({ ...d.data(), id: d.id }) as CgpmpAccountCreationRequest);
+  return snap.docs.map(d => ({ ...normalizeStorageUrls(d.data()), id: d.id }) as CgpmpAccountCreationRequest);
 }
 
 export async function validateCgpmpAccountRequestByArmp(

@@ -6,18 +6,33 @@ import { storageConfig, storageToken } from './storageTokens.js';
 const allowed = new Set('pdf jpg jpeg png gif webp doc docx xls xlsx ppt pptx odt ods odp txt csv rtf zip rar 7z mp3 mp4 wav avi mov webm mkv json xml ogg m4a flac aac'.split(' '));
 export function createStorageRouter(dependencies: { authenticate?: RequestHandler; fetch?: typeof fetch } = {}) {
   const router = Router();
+  const ready = async () => {
+    const { url } = storageConfig();
+    const response = await (dependencies.fetch || fetch)(`${url}/api/health`, {headers:{Authorization:`Bearer ${storageToken({scope:'health',sub:'application'},30)}`}, redirect:'error',signal:AbortSignal.timeout(8000)});
+    if (!response.ok || !(await response.json()).ready) throw new Error('Storage unavailable');
+  };
+  router.get('/health', async (_req,res) => {
+    try { await ready(); res.set('Cache-Control','no-store').json({ready:true}); }
+    catch { res.status(503).set('Cache-Control','no-store').json({ready:false}); }
+  });
+  router.get('/public/:stored', (req,res) => {
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.[a-z0-9]{1,8}$/.test(req.params.stored)) return res.sendStatus(404);
+    try { res.set('Cache-Control','no-store').redirect(307,`${storageConfig().url}/storage/academia/${req.params.stored}`); }
+    catch { res.status(503).json({message:'Stockage indisponible.'}); }
+  });
   router.use(dependencies.authenticate || authenticate);
-  router.post('/upload-ticket', express.json({ limit: '8kb' }), (req: any, res) => {
+  router.post('/upload-ticket', express.json({ limit: '8kb' }), async (req: any, res) => {
     const { name, size, category = 'divers', visibility = 'private', entityId, description } = req.body || {};
     if (typeof name !== 'string' || name.length > 180 || /[\/\\\x00-\x1f]/.test(name) || !allowed.has(name.split('.').pop()?.toLowerCase() || '')) return res.status(400).json({ message: 'Nom ou format de fichier non autorisé.' });
     const limit = imageMime(name) ? MAX_IMAGE_BYTES : 100 * 1024 * 1024;
     if (!Number.isSafeInteger(size) || size <= 0 || size > limit) return res.status(413).json({ message: imageMime(name) ? 'Image trop volumineuse : maximum 3 Mo.' : 'Fichier vide ou trop volumineux : maximum 100 Mo.' });
     if (typeof category !== 'string' || !/^[a-zA-Z0-9_-]{1,60}$/.test(category) || !['public','private'].includes(visibility) || (entityId && (typeof entityId !== 'string' || entityId.length > 128)) || (description && (typeof description !== 'string' || description.length > 1000))) return res.status(400).json({ message: 'Paramètres de stockage invalides.' });
     try {
+      await ready();
       const { url } = storageConfig();
       const token = storageToken({ scope:'upload', jti:randomUUID(), sub:req.identity.uid, name, size, category, visibility, entityId:entityId || req.identity.uid, description });
       res.set('Cache-Control','no-store').json({ url: `${url}/api/files`, token });
-    } catch { res.status(503).json({ message: 'Le stockage du serveur n’est pas configuré.' }); }
+    } catch { res.status(503).json({ message: 'Le service de stockage est indisponible. Réessayez dans quelques instants.' }); }
   });
   const forward: RequestHandler = async (req: any, res) => {
     try {

@@ -19,7 +19,7 @@ class StorageTests(unittest.TestCase):
   self.assertEqual(client.get('/api/files').status_code,401)
  def test_public_upload_read_and_owner_enforcement(self):
   r=upload();self.assertEqual(r.status_code,201,r.text);item=r.json()['data']
-  path=item['url'].split('/files-api')[1]
+  path='/storage/academia/'+item['storedName']
   self.assertEqual(client.get(path).content,png)
   self.assertEqual(client.get('/api/files/'+item['id'],headers=headers(token(sub='other'))).status_code,403)
   self.assertEqual(client.delete('/api/files/'+item['id'],headers=headers(token(sub='other'))).status_code,403)

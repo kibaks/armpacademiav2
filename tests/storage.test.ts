@@ -12,7 +12,7 @@ app.use('/api/storage',createStorageRouter({authenticate:(req:any,res,next)=>{
  req.identity={uid:'owner-123',role:'particulier'};next();
 },fetch:(async(url:any,opts:any)=>{
  forwarded={url,opts};
- return new Response(JSON.stringify(String(url).endsWith('/preview')?{url:'https://storage.example.com/files-api/content/file-1?ticket=temporary'}:{data:[]}),{status:200});
+ return new Response(JSON.stringify(String(url).endsWith('/preview')?{url:'https://storage.example.com/files-api/content/file-1?ticket=temporary'}:String(url).endsWith('/api/health')?{ready:true}:{data:[]}),{status:200});
 }) as typeof fetch}));
 const server=app.listen(0,'127.0.0.1'); await new Promise<void>(r=>server.once('listening',r));
 const base=`http://127.0.0.1:${(server.address() as any).port}/api/storage`;
@@ -45,4 +45,11 @@ test('private media redirects only after authorization to a short-lived server l
  assert.equal((await fetch(base+'/files/file-1/preview',{redirect:'manual'})).status,401);
  const res=await fetch(base+'/files/file-1/preview',{redirect:'manual',headers:{Authorization:'Bearer valid'}});
  assert.equal(res.status,307);assert.match(res.headers.get('location')!,/^https:\/\/storage.example.com\/files-api\/content\//);
+});
+
+test('public references use the current gateway without granting private access',async()=>{
+ const res=await fetch(base+'/public/12345678-1234-1234-1234-123456789abc.png',{redirect:'manual'});
+ assert.equal(res.status,307);
+ assert.equal(res.headers.get('location'),'https://storage.example.com/files-api/storage/academia/12345678-1234-1234-1234-123456789abc.png');
+ assert.equal((await fetch(base+'/public/invalid.png')).status,404);
 });

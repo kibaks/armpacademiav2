@@ -12,6 +12,8 @@ if not p.exists():
  p.write_text('ACADEMIA_STORAGE_KEY='+secrets.token_urlsafe(48)+'\nACADEMIA_STORAGE_URL='+os.environ['ACADEMIA_STORAGE_URL']+'\nAPP_ORIGIN=https://armpacademiav2.vercel.app\nSTORAGE_ROOT=/workspace/academia/storage\n')
 p.chmod(0o600)
 PY
+python3 -m venv --system-site-packages "$base/storage-venv"
+"$base/storage-venv/bin/pip" install 'fastapi==0.115.12' 'uvicorn==0.34.2'
 cat > /opt/supervisor-scripts/academia-storage.sh <<'SH'
 #!/bin/bash
 set -euo pipefail
@@ -19,7 +21,7 @@ set -a
 . /workspace/academia/private/storage.env
 set +a
 cd /workspace/academia/app/deploy/storage
-exec /workspace/academia/stt-venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8063 --no-access-log
+exec /workspace/academia/storage-venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8063 --no-access-log
 SH
 chmod +x /opt/supervisor-scripts/academia-storage.sh
 cat > /etc/supervisor/conf.d/academia-storage.conf <<CFG
@@ -41,5 +43,5 @@ if 'handle_path /files-api/*' not in s:
 PY
 /opt/instance-tools/bin/caddy validate --config "$base/Gateway.Caddyfile" --adapter caddyfile
 supervisorctl reread
-supervisorctl update
-supervisorctl restart academia-gateway
+supervisorctl update academia-storage
+supervisorctl signal USR1 academia-gateway

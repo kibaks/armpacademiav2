@@ -1,3 +1,4 @@
+import { normalizeStorageUrls, stableStorageUrl } from '../../shared/storageUrls';
 import { auth } from '../firebase';
 import { MAX_IMAGE_BYTES, imageMime, IMAGE_EXTENSIONS } from '../../shared/imageUpload';
 /** Authenticated uploads go directly to the configured Vast storage service. */
@@ -58,7 +59,7 @@ const ALL_ALLOWED = [
 
 export function isAlreadyAcademiaUrl(url: string): boolean {
   if (!url) return false;
-  return url.includes('academia.137.184.59.184.nip.io') || url.includes('/storage/academia/') || url.includes('/api/storage/files/');
+  return url.includes('academia.137.184.59.184.nip.io') || url.includes('/storage/academia/') || url.includes('/api/storage/files/') || url.includes('/api/storage/public/');
 }
 
 export function isDataUrl(url: string): boolean {
@@ -116,7 +117,7 @@ export async function uploadFile(file: File, opts: UploadOptions = {}): Promise<
         if (auth.currentUser !== user) throw new Error('La session a changé.');
         if (xhr.status<200 || xhr.status>=300) throw new Error(payload.detail || payload.message || 'Upload refusé ('+xhr.status+').');
         if (!payload.data?.url) throw new Error('Réponse de stockage invalide.');
-        opts.onProgress?.(100); resolve(payload.data);
+        opts.onProgress?.(100); resolve(normalizeStorageUrls(payload.data));
       } catch (error) { reject(error); }
     };
     xhr.onerror=()=>reject(new Error('Connexion au serveur de fichiers interrompue. Réessayez.'));
@@ -167,7 +168,7 @@ export async function ensureAcademiaUrl(
   opts: UploadOptions & { fileName?: string } = {}
 ): Promise<string> {
   if (!urlOrDataUrl) return urlOrDataUrl;
-  if (isAlreadyAcademiaUrl(urlOrDataUrl)) return urlOrDataUrl;
+  if (isAlreadyAcademiaUrl(urlOrDataUrl)) return stableStorageUrl(urlOrDataUrl);
   if (urlOrDataUrl.startsWith('http')) return urlOrDataUrl; // externe (ex: sample video) — on garde
   if (!isDataUrl(urlOrDataUrl)) return urlOrDataUrl;
 
@@ -238,7 +239,7 @@ export function previewUrl(id: string): string {
 // =============================================================================
 export function fileToPreviewUrl(file: AcademiaFile): string {
   // Pour <img> / <video> / <audio> : public → url direct, private → preview
-  if (file.visibility === 'public') return file.url;
+  if (file.visibility === 'public') return stableStorageUrl(file.url);
   return previewUrl(file.id);
 }
 

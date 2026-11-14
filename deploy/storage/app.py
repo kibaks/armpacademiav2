@@ -52,7 +52,7 @@ def permitted(item, actor):
     if item['uploadedBy'] != actor['sub'] and actor.get('role') not in ['super_admin','dfat_admin']:
         raise HTTPException(403, 'Accès au fichier refusé.')
 def view(item):
-    return {**item, 'url': f"{PUBLIC_URL}/storage/academia/{item['storedName']}" if item['visibility']=='public' else f"{APP_URL}/api/storage/files/{item['id']}/preview"}
+    return {**item, 'url': f"{APP_URL}/api/storage/public/{item['storedName']}" if item['visibility']=='public' else f"{APP_URL}/api/storage/files/{item['id']}/preview"}
 
 def valid_image(head, ext):
     if ext=='png': return head.startswith(b'\x89PNG\r\n\x1a\n')
@@ -62,6 +62,11 @@ def valid_image(head, ext):
 
 @app.get('/health')
 def health(): return {'ready':True, 'service':'academia-storage'}
+
+@app.get('/api/health')
+def authenticated_health(req: Request):
+    identity(req, 'health')
+    return health()
 
 @app.post('/api/files', status_code=201)
 async def upload(req: Request):
