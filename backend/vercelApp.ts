@@ -1,3 +1,5 @@
+import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './nationalLanguages.js';
+import { tutorLanguage } from '../shared/tutorLanguages.js';
 import { operationsRouter } from './operations.js';
 import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './tutorVoiceInput.js';
 import { prepareTutorSpeech, readSpeechPronunciation } from './speechPronunciation.js';
@@ -585,6 +587,8 @@ Pour t'y retrouver simplement : la cellule qui gère les marchés prépare, la d
 
 app.get('/api/ai/pronunciation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ entries: await readSpeechPronunciation() }); });
 
+app.get('/api/tutor/languages', getNationalCapabilities);
+
 app.get('/api/tutor/presentation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation()); });
 
 app.get('/api/health', (req, res) => {
@@ -592,7 +596,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // AI Tutor Chatbot endpoint — RAG cours + Arena Claude label + Gemini
-app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
+app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), async (req, res) => {
+  const language = tutorLanguage(req.body?.language);
+  const tutorJson = (payload: { reply: string; [key: string]: unknown }) => sendTutorReply(res, payload, language);
   const message = req.body?.message;
   if (!message) {
     return res.status(400).json({ error: 'Message requis' });
@@ -602,7 +608,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   const stage = await readLearningStage((req as any).identity.uid).catch(() => null);
   if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
-  if (learningRedirect) return res.json({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
+  if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
   const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
   const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
@@ -621,16 +627,16 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   if (qwenTutorConfig()) {
     try {
       const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage });
-      return res.json({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen3-14b' });
+      return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen2.5-7b-instruct' });
     } catch {
-      return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen3-14b' });
+      return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen2.5-7b-instruct' });
     }
   }
 
   if (!ai && !arenaAvailable) {
     console.log(`[AI Tutor] Fallback RAG (no GEMINI_API_KEY) for: "${message.slice(0,60)}..." rag:${ragLessons.map(r=>r.course.code+':'+r.lesson.id).join(',')}`);
     const fallback = tutorUnavailableReply();
-    return res.json(fallback);
+    return tutorJson(fallback);
   }
 
   // Tentative Arena d'abord (cerveaux Arena), puis Gemini
@@ -640,11 +646,11 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
     arenaReply = await callArenaLLM(arenaPrompt, verifiedTutorPolicy);
     if (arenaReply) {
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
-      return res.json({ reply: arenaReply, sources: ragLessons.map(r => formatCourseCitation(r)) });
+      return tutorJson({ reply: arenaReply, sources: ragLessons.map(r => formatCourseCitation(r)) });
     }
   }
 
-  if (!ai) return res.json(tutorUnavailableReply());
+  if (!ai) return tutorJson(tutorUnavailableReply());
   try {
     const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage));
 
@@ -660,14 +666,14 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
 
     const replyText = response?.text?.trim() || tutorUnavailableReply().reply;
 
-    return res.json({
+    return tutorJson({
       reply: replyText,
       sources: ragLessons.map(r => formatCourseCitation(r))
     });
   } catch (error: any) {
     console.warn('[AI Tutor] Model high demand or unavailable, serving RAG fallback:', error?.message);
     const fallback = tutorUnavailableReply();
-    return res.json(fallback);
+    return tutorJson(fallback);
   }
 });
 
@@ -950,6 +956,7 @@ app.post(['/api/tts/settings', '/tts/settings'], (_req, res) => {
 // Main TTS Endpoint
 // ------------------------------------------------------------------
 app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
+  if (tutorLanguage(req.body?.language) !== 'fr') return handleNationalSpeech(req, res);
   try {
     const rawText = (req.body?.text || '').toString().trim();
     const voiceChoice = (req.body?.voice || 'denise').toString().toLowerCase();

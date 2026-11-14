@@ -1,5 +1,6 @@
 import { explanationReview, EXPLANATION_REVISION_POLICY } from '../shared/tutorExplanationContract.js';
 import { learnerLevelGuidance, type LearningStage } from '../shared/learnerProgression.js';
+import { type TutorLanguage } from '../shared/tutorLanguages.js';
 import { TUTOR_RESPONSE_POLICY } from '../shared/tutorReplyPolicy.js';
 
 export function qwenTutorConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -13,7 +14,7 @@ export function qwenTutorConfig(env: NodeJS.ProcessEnv = process.env) {
 }
 
 // The gateway only exposes the fixed local tutor model; credentials stay server-side.
-export async function generateQwenTutor(prompt: string, options: { stage?: LearningStage; authoring?: boolean; env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
+export async function generateQwenTutor(prompt: string, options: { stage?: LearningStage; language?: TutorLanguage; authoring?: boolean; env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
   const config = qwenTutorConfig(options.env);
   if (!config) throw new Error('QWEN_NOT_CONFIGURED');
   const deadline=AbortSignal.timeout(45000);
@@ -32,7 +33,7 @@ export async function generateQwenTutor(prompt: string, options: { stage?: Learn
     if (attempt===0) continue;
     throw new Error('QWEN_INVALID_EXPLANATION');
   }
-  return reply;
+  return reply.normalize('NFC');
   }
   throw new Error('QWEN_INVALID_EXPLANATION');
 }

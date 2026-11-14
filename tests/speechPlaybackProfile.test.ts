@@ -7,3 +7,6 @@ test('mastered Piper voices retain their original pitch at normal speed',()=>{
  assert.equal(providerRate('piper',NaN),1);
  assert.equal(providerRate('cartesia-sonic',1),1.02);
 });
+
+
+test('national voices keep their trained playback speed', () => { assert.equal(providerRate('national-vits', 1), 1); });

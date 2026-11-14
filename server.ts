@@ -1,3 +1,5 @@
+import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './backend/nationalLanguages.js';
+import { tutorLanguage } from './shared/tutorLanguages.js';
 import { operationsRouter } from './backend/operations.js';
 import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './backend/tutorVoiceInput.js';
 import { prepareTutorSpeech, readSpeechPronunciation } from './backend/speechPronunciation.js';
@@ -1611,6 +1613,8 @@ async function getOrSynthesizeTtsPayload(
 // Health check endpoint
 app.get('/api/ai/pronunciation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ entries: await readSpeechPronunciation() }); });
 
+app.get('/api/tutor/languages', getNationalCapabilities);
+
 app.get('/api/tutor/presentation', async (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json(await readTutorPresentation()); });
 
 app.get('/api/health', (req, res) => {
@@ -1647,6 +1651,7 @@ app.post('/api/ai/tts/prewarm', async (req, res) => {
 
 // Expressive Neural Human Voice TTS Endpoint for Aïsha (ElevenLabs v2 + Vivienne HD / Denise / Eloise / Charline + Word Boundaries)
 app.post('/api/ai/tts', async (req, res) => {
+  if (tutorLanguage(req.body?.language) !== 'fr') return handleNationalSpeech(req, res);
   try {
     const { text, voice, emotion } = req.body || {};
     if (!text || typeof text !== 'string' || !text.trim()) {
@@ -1756,7 +1761,9 @@ const TUTOR_PERSONAS_META: Record<
 };
 
 // AI Tutor Chatbot endpoint — RAG cours + Arena Claude label + Gemini + Voice Note Transcription
-app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
+app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), async (req, res) => {
+  const language = tutorLanguage(req.body?.language);
+  const tutorJson = (payload: { reply: string; [key: string]: unknown }) => sendTutorReply(res, payload, language);
   let message = (req.body?.message || '').trim();
   const {
     history,
@@ -1795,7 +1802,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   const stage = await readLearningStage((req as any).identity.uid).catch(() => null);
   if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
-  if (learningRedirect) return res.json({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
+  if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
   const courseContext = typeof learningContext === 'object' && learningContext ? learningContext : lastCourse;
   const lc = (courseContext ? `${courseContext.lastCourseTitle || ''} (${courseContext.lastCourseCode || ''}) | Leçon active : ${courseContext.lastCourseExcerpt || ''}` : learningContext) || (lastCourse ? `${lastCourse.lastCourseTitle} (${lastCourse.lastCourseCode}, ${lastCourse.lastCourseProgress}% — ${lastCourse.lastCourseCategory})` : null);
@@ -1814,16 +1821,16 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   if (qwenTutorConfig()) {
     try {
       const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage });
-      return res.json({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen3-14b', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
+      return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen2.5-7b-instruct', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
     } catch {
-      return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen3-14b' });
+      return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen2.5-7b-instruct' });
     }
   }
 
   if (!ai && !arenaAvailable) {
     console.log(`[AI Tutor] Fallback RAG (no GEMINI_API_KEY) for: "${message.slice(0,60)}..." rag:${ragLessons.map(r=>r.course.code+':'+r.lesson.id).join(',')}`);
     const fallback = tutorUnavailableReply();
-    return res.json({
+    return tutorJson({
       ...fallback,
       reply: adaptReplyToPersona(fallback.reply),
       ...(transcription ? { transcription } : {}),
@@ -1837,7 +1844,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
     arenaReply = await callArenaLLM(arenaPrompt, verifiedTutorPolicy);
     if (arenaReply) {
       console.log(`[AI Tutor] Arena success (${ARENA_MODEL})`);
-      return res.json({
+      return tutorJson({
         reply: adaptReplyToPersona(arenaReply),
         ...(transcription ? { transcription } : {}),
         sources: ragLessons.map(r => formatCourseCitation(r))
@@ -1845,7 +1852,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
     }
   }
 
-  if (!ai) return res.json(tutorUnavailableReply());
+  if (!ai) return tutorJson(tutorUnavailableReply());
   try {
     const conversationPrompt = tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage));
 
@@ -1862,7 +1869,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
     const fallbackMeta = tutorUnavailableReply();
     const replyText = adaptReplyToPersona(response?.text?.trim() || fallbackMeta.reply);
 
-    return res.json({
+    return tutorJson({
       reply: replyText,
       ...(transcription ? { transcription } : {}),
       sources: ragLessons.map(r => formatCourseCitation(r)),
@@ -1870,7 +1877,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), async (req, res) => {
   } catch (error: any) {
     console.warn('[AI Tutor] Model high demand or unavailable, serving RAG fallback:', error?.message);
     const fallback = tutorUnavailableReply();
-    return res.json({
+    return tutorJson({
       ...fallback,
       reply: adaptReplyToPersona(fallback.reply),
       ...(transcription ? { transcription } : {}),

@@ -1,3 +1,4 @@
+import { tutorLanguage, type TutorLanguage, normalizeNationalSpeech } from '../../shared/tutorLanguages';
 import { normalizeSpeechPronunciation, parsePronunciationEntries, type PronunciationEntry } from '../../shared/speechPronunciation';
 import { providerRate } from './speechPlaybackProfile';
 import { samplePhoneme, type TimedPhoneme } from '../../shared/speechTiming';
@@ -48,6 +49,7 @@ export interface SpeechPlaybackState {
   currentSentenceText?: string;
   source: 'gemini-tts' | 'web-speech' | 'none';
   voiceProvider?:
+    | 'national-vits'
     | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'
@@ -517,6 +519,7 @@ class SpeechService {
     startSentenceIndex?: number;
     forceQueue?: boolean;
     customSentences?: string[];
+    language?: TutorLanguage;
   };
   private preferredPersona: NeuralVoicePersona = 'vivienne';
   private currentUtterance: SpeechSynthesisUtterance | null = null;
@@ -1078,7 +1081,8 @@ class SpeechService {
   }
 
   // Transform raw text into warm, natural spoken French (ZERO robotic letter-by-letter spelling or article stuttering!)
-  public normalizeForSpeech(raw: string): string {
+  public normalizeForSpeech(raw: string, language: TutorLanguage = 'fr'): string {
+    if (language !== 'fr') return normalizeNationalSpeech(raw);
     return this.normalizeCongoleseProperNounsForSpeech(
       raw
       .replace(/[*#`_>]/g, '')
@@ -1204,8 +1208,8 @@ class SpeechService {
     );
   }
 
-  public splitIntoSentences(raw: string): string[] {
-    const clean = this.normalizeForSpeech(raw);
+  public splitIntoSentences(raw: string, language: TutorLanguage = 'fr'): string[] {
+    const clean = this.normalizeForSpeech(raw, language);
     if (!clean) return [];
 
     // Do not split on ellipsis '...' so short greetings or transitions stay connected to their French sentence
@@ -1492,10 +1496,11 @@ class SpeechService {
   private async fetchNeuralAudioBuffer(
     sentence: string,
     voice: string = this.preferredPersona,
-    timeoutMs: number = 35000
+    timeoutMs: number = 35000,
+    language: TutorLanguage = 'fr'
   ): Promise<DecodedNeuralEntry | null> {
-    if (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable || !sentence.trim()) return null;
-    const cacheKey = `tutor_voice_v7::${voice}::${sentence}`;
+    if ((language === 'fr' && (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable)) || !sentence.trim()) return null;
+    const cacheKey = `tutor_voice_v8::${language}::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1523,6 +1528,7 @@ class SpeechService {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 text: sentence,
+                language,
                 pronunciationApplied: true,
                 voice,
                 emotion: detectSentenceEmotion(sentence),
@@ -1530,7 +1536,7 @@ class SpeechService {
               signal: controller.signal,
             }).finally(() => window.clearTimeout(timeoutId));
 
-            if ([401, 403, 429, 503].includes(response.status)) return null;
+            if ([401, 403, 422, 429, 503].includes(response.status)) return null;
             if (response.ok && response.status !== 204) {
               const data = await response.json();
               const rawAudio = data?.audioData || data?.audioBase64;
@@ -1709,6 +1715,7 @@ class SpeechService {
       startSentenceIndex?: number;
       forceQueue?: boolean;
       customSentences?: string[];
+      language?: TutorLanguage;
     }
   ) {
     this.unlockAudio();
@@ -1730,8 +1737,8 @@ class SpeechService {
 
     const sentences =
       options?.customSentences && options.customSentences.length > 0
-        ? options.customSentences.map((s) => this.normalizeForSpeech(s)).filter(Boolean)
-        : this.splitIntoSentences(text);
+        ? options.customSentences.map((s) => this.normalizeForSpeech(s, tutorLanguage(options.language))).filter(Boolean)
+        : this.splitIntoSentences(text, tutorLanguage(options?.language));
     if (sentences.length === 0) return;
 
     const startIdx = Math.max(
@@ -1791,12 +1798,13 @@ class SpeechService {
 
     const sentenceIdx = this.currentSentenceIndex;
     const sentence = this.queue[sentenceIdx];
+    const language = tutorLanguage(this.currentOptions?.language);
     const voiceName = this.currentOptions?.voice || this.preferredPersona;
     const userSpeed = this.currentOptions?.speed ?? 1.0;
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
-    if (this.neuralTtsAvailable && this.getVoiceMode() !== 'device') {
-      const cacheKey = `tutor_voice_v7::${voiceName}::${sentence}`;
+    if ((language !== 'fr' || this.neuralTtsAvailable) && (language !== 'fr' || this.getVoiceMode() !== 'device')) {
+      const cacheKey = `tutor_voice_v8::${language}::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,
@@ -1811,16 +1819,16 @@ class SpeechService {
         };
         this.notify();
       }
-      const currentAudio = this.fetchNeuralAudioBuffer(sentence, voiceName, 35000);
+      const currentAudio = this.fetchNeuralAudioBuffer(sentence, voiceName, 35000, language);
       // Cartesia can prepare the next phrase while the short opening is synthesized.
       // The client in-flight map deduplicates it with later playback/preload requests.
-      if (this.cartesiaAvailable && sentenceIdx === 0 && sentenceIdx + 1 < this.queue.length) void this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 35000);
+      if (language === 'fr' && this.cartesiaAvailable && sentenceIdx === 0 && sentenceIdx + 1 < this.queue.length) void this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 35000, language);
       const neuralEntry = await currentAudio;
       if (this.isCancelled || generation !== this.playbackGeneration || this.currentSentenceIndex !== sentenceIdx) return;
 
       // Now that the current sentence is ready, pre-fetch the next sentences in the background
       if (sentenceIdx + 1 < this.queue.length) {
-        this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 35000);
+        this.fetchNeuralAudioBuffer(this.queue[sentenceIdx + 1], voiceName, 35000, language);
 
       }
 
@@ -2198,7 +2206,7 @@ class SpeechService {
     //    paramétrage ⚙ Paramètres Voix (browserFallback, OFF par défaut).
     //    Sinon: arrêt propre, zéro voix robotisée — le message du chat reste
     //    entièrement lisible et la synthèse reprendra dès le retour du serveur.
-    const allowBrowserVoice = this.getVoiceMode() === 'device';
+    const allowBrowserVoice = language === 'fr' && this.getVoiceMode() === 'device';
     if (!allowBrowserVoice) {
       console.warn('[Speech] Voix sélectionnée indisponible.');
       this.stop();

@@ -1,3 +1,4 @@
+import { TUTOR_LANGUAGES, tutorLanguage, normalizeNationalSpeech, nationalVoiceAvailable, type TutorLanguage } from '../../shared/tutorLanguages';
 import { ReferenceExplanationStage } from './ReferenceExplanationStage';
 import { synthesizeVoiceNote } from '../utils/synthesizeVoiceNote';
 import { tutorHistoryForStorage, tutorAudioMime } from '../../shared/tutorVoice';
@@ -375,6 +376,9 @@ type MediaAttachment = {
 };
 
 type EnhancedMessage = ChatMessage & {
+  language?: TutorLanguage;
+  sourceReply?: string;
+  sourceText?: string;
   media?: MediaAttachment;
   isVoice?: boolean;
   suggestedFollowUps?: string[];
@@ -447,6 +451,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [inCallQuestionText, setInCallQuestionText] = useState('');
   const [isCallConnecting, setIsCallConnecting] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [language, setLanguage] = useState<TutorLanguage>('fr');
+  const [inputLanguage, setInputLanguage] = useState<TutorLanguage>('fr');
+  const [nationalCapabilities, setNationalCapabilities] = useState<{ translation: string[]; speech: string[] }>({ translation: [], speech: [] });
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
   const [voiceMode, setVoiceMode] = useState(() => speechService.getVoiceMode());
   const [isVoiceLoading, setIsVoiceLoading] = useState(false);
@@ -455,6 +462,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     if (!isOpen) return;
     let active = true;
     const controller = new AbortController();
+    fetch('/api/tutor/languages', { signal: controller.signal }).then(response => response.ok ? response.json() : null).then(data => { if (active && data) setNationalCapabilities({ translation: Array.isArray(data.translation) ? data.translation : [], speech: Array.isArray(data.speech) ? data.speech : [] }); }).catch(() => {});
     speechService.loadVoiceModeDefault().then(mode => { if (active) setVoiceMode(mode); });
     fetch('/api/tutor/presentation', { signal: controller.signal }).then(r => r.ok ? r.json() : null).then(data => {
       if (!active || !data) return;
@@ -688,17 +696,19 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       .slice(0, 1800);
   };
 
-  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number) => {
+  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, customLanguage?: TutorLanguage) => {
     if (!text) return;
+    const spokenLanguage = customLanguage || (msgId ? messages.find(message => message.id === msgId)?.language || 'fr' : 'fr');
+    if (!nationalVoiceAvailable(spokenLanguage, text)) { showNotice('La voix installée ne peut pas lire ce passage avec tous ses caractères. Le texte reste disponible.'); return; }
     speechService.unlockAudio();
 
-    const clean = humanizeForSpeech(text);
+    const clean = spokenLanguage === 'fr' ? humanizeForSpeech(text) : normalizeNationalSpeech(text);
     if (!clean) return;
 
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
 
-    if (!isCallActive || isVideoCallActive) {
+    if (spokenLanguage === 'fr' && (!isCallActive || isVideoCallActive)) {
       // Keep the player visible when a reply starts, including after hiding the portrait.
       if (!isVideoCallActive) setShowStudioStage(true);
       if (await tutorVideo.start(text, voiceToUse)) return;
@@ -710,7 +720,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
     speechService.play(clean, msgId ? `tutor-${msgId}` : `tutor-${Date.now()}`, {
       speed: speedToUse,
-      voice: voiceToUse
+      voice: voiceToUse,
+      language: spokenLanguage
     });
   };
 
@@ -961,6 +972,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const handleSendAssistedVoice = async (textForVoice?: string) => {
+    if (inputLanguage !== 'fr') { showNotice('Les notes vocales préparées sont disponibles en français. Envoyez votre question dans la langue choisie par écrit.'); return; }
     const rawText = (textForVoice ?? assistedVoiceText ?? inputText).trim();
     if (!rawText) {
       showNotice('Écrivez votre question pour générer et envoyer le Voice.');
@@ -1205,7 +1217,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
       const body: any = {
         message: effectiveMessage,
-        history: nextAfterUser.slice(-8).map(({ sender, text }) => ({ sender, text })),
+        language,
+        inputLanguage: mediaToSend?.type === 'audio' ? 'fr' : inputLanguage,
+        history: nextAfterUser.slice(-8).map(({ sender, text, sourceReply, sourceText }) => ({ sender, text: sourceReply || sourceText || text })),
         context: `Profil du tuteur sélectionné: ${activeTutor.name} (${activeTutor.title}) | Utilisateur: ${currentProfile.name}, Rôle: ${currentProfile.roleTitle}, Institution: ${currentProfile.institution}, Niveau: ${levelLabel(currentProfile.level, currentProfile.levelKey, peekLevelSettings())} | Dernier cours: ${
           learningContext
             ? `${learningContext.lastCourseTitle} (${learningContext.lastCourseCode}) ${learningContext.lastCourseProgress}%`
@@ -1239,18 +1253,21 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           )
         : nextAfterUser;
 
-      if (!response.ok || !data.reply?.trim()) throw new Error(data.error || 'La réponse n’a pas pu être chargée. Réessayez.');
+      if (!response.ok || !data.reply?.trim()) throw Object.assign(new Error(data.error || 'La réponse n’a pas pu être chargée. Réessayez.'), { sourceReply: typeof data.sourceReply === 'string' ? data.sourceReply : undefined });
 
       const reply: string =
         data.reply ||
         (response.ok
           ? "Pardonne-moi cette petite seconde d'attente, je suis de tout cœur avec toi — dis-moi comment je peux t'éclairer."
           : "Je reste tout près de toi pour t'expliquer chaque règle de la loi du 27 avril 2010 avec simplicité.");
+      if (typeof data.translatedQuestion === 'string') updatedUserMessages = updatedUserMessages.map(message => message.id === userMsgId ? { ...message, sourceText: data.translatedQuestion, language: inputLanguage } : message);
       const botMsgId = `bot-${Date.now()}`;
       const botMsg: EnhancedMessage = {
         id: botMsgId,
         sender: 'tuteur',
         text: reply,
+        language: tutorLanguage(data.language),
+        sourceReply: typeof data.sourceReply === 'string' ? data.sourceReply : undefined,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         sources: data.sources || [
           `${activeTutor.name} • Pédagogie humaine`,
@@ -1271,13 +1288,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       persistMessages(updatedConversation);
 
       if (autoSpeak || mediaToSend?.type === 'audio' || isCallActive || isVideoCallActive) {
-        setTimeout(() => speak(reply, botMsgId), 80);
+        setTimeout(() => speak(reply, botMsgId, undefined, undefined, tutorLanguage(data.language)), 80);
       }
     } catch (error) {
       const fallbackBotMsg: EnhancedMessage = {
         id: `bot-${Date.now()}`,
         sender: 'tuteur',
         text: error instanceof Error && error.name !== 'TimeoutError' ? error.message : 'Le tuteur met trop de temps à répondre. Réessayez dans un instant.',
+        sourceReply: error && typeof error === 'object' && 'sourceReply' in error && typeof error.sourceReply === 'string' ? error.sourceReply : undefined,
         timestamp: 'À l’instant',
         sources: [],
         suggestedFollowUps: [
@@ -1331,11 +1349,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
               <summary className="tutor-icon-button" aria-label="Préférences de lecture" title="Préférences"><Sliders size={18} /></summary>
               <div className="tutor-options-panel">
                 <h3>Votre confort de lecture</h3>
-                <label>Voix<select value={voiceMode} onChange={event => { const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode); }}><option value="studio">Voix naturelle</option><option value="device">Voix de cet appareil</option></select></label>
+                <label>Langue de réponse<select value={language} onChange={event => { stopSpeaking(); setLanguage(tutorLanguage(event.target.value)); }}>{TUTOR_LANGUAGES.map(item => <option key={item.code} value={item.code} disabled={item.code !== 'fr' && !nationalCapabilities.translation.includes(item.code)}>{item.label}</option>)}</select></label>
+                <label>Langue de ma question<select value={inputLanguage} onChange={event => setInputLanguage(tutorLanguage(event.target.value))}>{TUTOR_LANGUAGES.map(item => <option key={item.code} value={item.code} disabled={item.code !== 'fr' && !nationalCapabilities.translation.includes(item.code)}>{item.label}</option>)}</select></label>
+                {(language !== 'fr' || inputLanguage !== 'fr') && <p role="status">Traduction automatique à vérifier. {language === 'fr' ? '' : language === 'ln' ? 'La voix lingala ne peut pas lire ɛ, ɔ ni les tons écrits.' : language === 'sw' ? 'L’accent congolais reste à valider.' : 'Lecture audio indisponible dans cette langue.'} Les notes vocales sont transcrites en français.</p>}
+                <label>Voix<select value={language === 'fr' ? voiceMode : 'studio'} disabled={language !== 'fr'} onChange={event => { const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode); }}><option value="studio">Voix naturelle</option><option value="device">Voix de cet appareil</option></select></label>
                 <label>Vitesse<select value={tutorSpeed} onChange={e => setTutorSpeed(Number(e.target.value))}><option value={0.88}>Posée</option><option value={0.95}>Équilibrée</option><option value={1.1}>Rapide</option></select></label>
-                <label className="tutor-option-check"><input type="checkbox" checked={autoSpeak} onChange={e => { userChangedAutoSpeak.current = true; if (!e.target.checked) stopSpeaking(); setAutoSpeak(e.target.checked); }} />Lire les réponses à voix haute</label>
+                <label className="tutor-option-check"><input type="checkbox" checked={autoSpeak && (language === 'fr' || nationalCapabilities.speech.includes(language))} disabled={language !== 'fr' && !nationalCapabilities.speech.includes(language)} onChange={e => { userChangedAutoSpeak.current = true; if (!e.target.checked) stopSpeaking(); setAutoSpeak(e.target.checked); }} />Lire les réponses à voix haute</label>
                 <label className="tutor-option-check"><input type="checkbox" checked={showStudioStage} onChange={e => setShowStudioStage(e.target.checked)} />Afficher le portrait</label>
-                <button type="button" onClick={() => speak(activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed)}>Écouter cette voix</button>
+                <button type="button" disabled={language !== 'fr' && !nationalCapabilities.speech.includes(language)} onClick={() => speak(language === 'ln' ? 'Mbote. Tokoyekola elongo.' : language === 'sw' ? 'Habari. Tutajifunza pamoja.' : activeTutor.greeting(currentProfile.name), undefined, selectedVoice, tutorSpeed, language)}>Écouter cette voix</button>
                 <button type="button" onClick={handleResetConversation}>Nouvelle conversation</button>
                 <button type="button" onClick={() => setShowAssistedVoiceBox(v => !v)}>Préparer une note vocale</button>
               </div>
@@ -1381,7 +1402,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
             <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 bg-gradient-to-b from-white to-slate-50/70 dark:from-slate-900 dark:to-slate-950">
               {messages.map((msg, msgIdx) => {
                 const isThisMsgSpeaking = isSpeaking && activeSpeakingMsgId === msg.id;
-                const illustratedReply = msg.sender === 'tuteur' && msg.id.startsWith('bot-') && !msg.interactiveQuiz && msg.text.trim().split(/\s+/).length >= 18;
+                const illustratedReply = tutorLanguage(msg.language) === 'fr' && msg.sender === 'tuteur' && msg.id.startsWith('bot-') && !msg.interactiveQuiz && msg.text.trim().split(/\s+/).length >= 18;
                 const previousQuestion = messages.slice(0,msgIdx).reverse().find(m=>m.sender==='user');
                 const question = previousQuestion?.media?.transcriptText || previousQuestion?.text || learningContext?.lastCourseTitle || 'Comprendre la notion';
                 const isLastBotMsg =
@@ -1439,6 +1460,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
                           {renderMarkdown(msg.text)}
                         </div>}
+
+                        {msg.sourceReply && <details className="mt-3 text-sm"><summary className="cursor-pointer min-h-8">Traduction automatique · Voir la réponse française d’origine</summary><div className="prose prose-sm dark:prose-invert max-w-none pt-2" lang="fr">{renderMarkdown(msg.sourceReply)}</div></details>}
 
                         {/* Carte Quiz Interactive Q/R si présente */}
                         {msg.interactiveQuiz && (
