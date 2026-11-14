@@ -696,7 +696,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       .slice(0, 1800);
   };
 
-  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, customLanguage?: TutorLanguage) => {
+  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, customLanguage?: TutorLanguage, playbackMode?: 'audio' | 'video') => {
     if (!text) return;
     const spokenLanguage = customLanguage || (msgId ? messages.find(message => message.id === msgId)?.language || 'fr' : 'fr');
     if (!nationalVoiceAvailable(spokenLanguage, text)) { showNotice('La voix installée ne peut pas lire ce passage avec tous ses caractères. Le texte reste disponible.'); return; }
@@ -708,7 +708,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
 
-    if (spokenLanguage === 'fr' && (!isCallActive || isVideoCallActive)) {
+    if (spokenLanguage === 'fr' && playbackMode !== 'audio' && (playbackMode === 'video' || !isCallActive || isVideoCallActive)) {
       // Keep the player visible when a reply starts, including after hiding the portrait.
       if (!isVideoCallActive) setShowStudioStage(true);
       if (await tutorVideo.start(text, voiceToUse)) return;
@@ -850,6 +850,18 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     return '';
   };
 
+  const checkCallServices = async (video = false, recordingOnly = false) => {
+    try {
+      const response = await authenticatedFetch('/api/tutor/media/status');
+      if (!response.ok) throw new Error();
+      const status = await response.json();
+      if (!status.transcription) { showNotice('Le service de transcription est indisponible. Vous pouvez écrire votre question.'); return false; }
+      if (!recordingOnly && !status.speech) { showNotice('Le service de réponse vocale est indisponible. Réessayez dans un instant.'); return false; }
+      if (video && !status.video) { showNotice('La vidéo de la tutrice est indisponible. Vous pouvez utiliser l’appel audio.'); return false; }
+      return true;
+    } catch { showNotice('Impossible de vérifier les services audio et vidéo. Réessayez.'); return false; }
+  };
+
   const startVoiceRecord = async () => {
     if (capturePendingRef.current || isLoading || mediaRecorderRef.current?.state === 'recording') return;
     speechService.unlockAudio();
@@ -868,6 +880,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const capture = ++captureGenerationRef.current;
     let stream: MediaStream | null = null;
     try {
+      if (!await checkCallServices(false, true) || !modalOpenRef.current || capture !== captureGenerationRef.current) return;
+      if (typeof MediaRecorder === 'undefined') { showNotice('L’enregistrement n’est pas disponible sur ce navigateur. Joignez un fichier audio.'); return; }
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!modalOpenRef.current || capture !== captureGenerationRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
       recordingStreamRef.current = stream;
@@ -996,8 +1010,12 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     await handleSendMessage(rawText, mediaAttachment);
   };
 
-  const startCall = (tutorId?: VoicePersona) => {
+  const startCall = async (tutorId?: VoicePersona) => {
     speechService.unlockAudio();
+    recordActionRef.current = 'cancel';
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+    const callGeneration = ++captureGenerationRef.current;
+    if (!await checkCallServices() || !modalOpenRef.current || callGeneration !== captureGenerationRef.current) return;
     stopSpeaking();
     if (callGreetingTimerRef.current) {
       clearTimeout(callGreetingTimerRef.current);
@@ -1022,12 +1040,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       setIsCallConnecting(false);
       const greetingText = tutorObj.greeting(firstName);
       setSpokenSubtitle(greetingText);
-      speak(greetingText, `call-greet-${Date.now()}`, targetVoice, tutorSpeed);
+      speak(greetingText, `call-greet-${Date.now()}`, targetVoice, tutorSpeed, 'fr', 'audio');
     }, 650);
   };
 
   const startVideoCall = async (tutorId?: VoicePersona) => {
     speechService.unlockAudio();
+    recordActionRef.current = 'cancel';
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+    const callGeneration = ++captureGenerationRef.current;
+    if (!await checkCallServices(true) || !modalOpenRef.current || callGeneration !== captureGenerationRef.current) return;
     stopSpeaking();
     if (callGreetingTimerRef.current) {
       clearTimeout(callGreetingTimerRef.current);
@@ -1056,6 +1078,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false
         });
+        if (!modalOpenRef.current || callGeneration !== captureGenerationRef.current) { s.getTracks().forEach(track => track.stop()); return; }
         localStreamRef.current = s;
         setHasCameraStream(true);
         setIsCameraOff(false);
@@ -1065,6 +1088,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         }
       } catch {
         setHasCameraStream(false);
+        setIsCameraOff(true);
+        showNotice('Caméra inaccessible. Autorisez-la dans votre navigateur ; la conversation peut continuer sans votre image.');
       }
     } else if (existingActiveVideo) {
       setHasCameraStream(true);
@@ -1074,12 +1099,13 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       }
     }
 
+    if (!modalOpenRef.current || callGeneration !== captureGenerationRef.current) return;
     const firstName = currentProfile.name ? currentProfile.name.split(' ')[0] : 'cher collègue';
     callGreetingTimerRef.current = setTimeout(() => {
       setIsCallConnecting(false);
       const greetingText = tutorObj.greeting(firstName);
       setSpokenSubtitle(greetingText);
-      speak(greetingText, `visio-greet-${Date.now()}`, targetVoice, tutorSpeed);
+      speak(greetingText, `visio-greet-${Date.now()}`, targetVoice, tutorSpeed, 'fr', 'video');
     }, 650);
   };
 
@@ -1092,20 +1118,25 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       setIsCameraOff(nextOff);
       return;
     }
-    if (isCameraOff && navigator.mediaDevices?.getUserMedia) {
+    if (navigator.mediaDevices?.getUserMedia) {
+      const cameraGeneration = captureGenerationRef.current;
       try {
         const s = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false
         });
+        if (!modalOpenRef.current || cameraGeneration !== captureGenerationRef.current) { s.getTracks().forEach(track => track.stop()); return; }
         localStreamRef.current = s;
         setHasCameraStream(true);
         setIsCameraOff(false);
       } catch {
-        setIsCameraOff(false);
+        setHasCameraStream(false);
+        setIsCameraOff(true);
+        showNotice('Autorisez la caméra dans votre navigateur pour l’activer.');
       }
     } else {
-      setIsCameraOff((v) => !v);
+      setIsCameraOff(true);
+      showNotice('La caméra n’est pas disponible sur ce navigateur.');
     }
   };
 
@@ -1918,7 +1949,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
               <h4 className="font-black text-lg sm:text-xl mt-2">{activeTutor.name}</h4>
               <p className="text-xs text-cyan-300 font-semibold">{activeTutor.title}</p>
               <p className="text-xs text-white/70 font-mono mt-1">
-                {formatCallTime(callSeconds)} • {isMicMuted ? 'Micro muet' : 'Canal HD sécurisé'}
+                {formatCallTime(callSeconds)} • {isRecordingVoice || isListening ? 'Micro en écoute' : 'Appuyez sur Parler pour activer le micro'}
               </p>
 
               {/* Réponse vocale en direct ou dernière réponse */}
@@ -2192,7 +2223,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     </span>
                     <span className="text-[9px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      {isCameraOff ? 'Caméra coupée' : 'Micro HD actif'}
+                      {isCameraOff ? 'Caméra coupée' : 'Caméra indisponible'}
                     </span>
                   </div>
                 )}

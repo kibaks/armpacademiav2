@@ -1,3 +1,4 @@
+import { createTutorMediaRouter } from './tutorMediaHealth.js';
 import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './nationalLanguages.js';
 import { tutorLanguage } from '../shared/tutorLanguages.js';
 import { operationsRouter } from './operations.js';
@@ -62,6 +63,7 @@ app.disable('x-powered-by');
 app.use('/api', authRouter);
 app.use('/api/cgpmp', cgpmpRouter);
 app.use('/api/storage', storageRouter);
+app.use('/api/tutor/media', createTutorMediaRouter());
 app.use('/api/profile', profileMediaRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', learningRouter);

@@ -3,7 +3,8 @@ set -euo pipefail
 umask 077
 base=/workspace/academia
 export UV_NO_CACHE=1
-uv venv --python 3.12 "$base/stt-venv" > "$base/logs/stt-install.log" 2>&1
+mkdir -p "$base/logs" "$base/private"
+uv venv --allow-existing --python 3.12 "$base/stt-venv" > "$base/logs/stt-install.log" 2>&1
 uv pip install --python "$base/stt-venv/bin/python" -r "$base/app/deploy/transcription/requirements.txt" >> "$base/logs/stt-install.log" 2>&1
 python3 - <<'PY'
 from pathlib import Path
@@ -35,5 +36,5 @@ redirect_stderr=true
 stdout_logfile_maxbytes=10485760
 CFG
 supervisorctl reread
-supervisorctl update
+supervisorctl update academia-transcription
 printf 'TRANSCRIPTION_INSTALLED\n'
