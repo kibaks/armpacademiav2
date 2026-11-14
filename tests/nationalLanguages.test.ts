@@ -8,6 +8,7 @@ test('national gateway reuses server authentication only on the known deployment
   assert.equal(nationalLanguageConfig({ QWEN_API_KEY: 'key', QWEN_API_URL: 'https://other.example/chat' }), null);
   assert.equal(nationalLanguageConfig({ ...env, MUSETALK_API_URL: 'https://user:pass@engines.example/musetalk' }), null);
   assert.equal(nationalLanguageConfig({}), null);
+  assert.deepEqual(nationalLanguageConfig({ ...env, MUSETALK_API_URL: 'https://old.example/old-video', QWEN_API_URL: 'https://active.example/musetalk/chat', QWEN_API_KEY: 'dialogue-key' }), { url: 'https://active.example/national', key: 'dialogue-key' });
 });
 test('all four target languages and reverse translation preserve explicit language codes', async () => {
   for (const language of ['ln', 'sw', 'kg', 'lua'] as const) {

@@ -3,6 +3,16 @@ import { qwenTutorConfig } from './qwenTutor.js';
 import { tutorLanguage, type TutorLanguage } from '../shared/tutorLanguages.js';
 
 export function nationalLanguageConfig(env: NodeJS.ProcessEnv = process.env) {
+  // The new worker lives with the active dialogue gateway, which can differ from
+  // an older video endpoint still configured on the project.
+  const dialogue = qwenTutorConfig({ ...env, TUTOR_LLM_PROVIDER: undefined });
+  if (dialogue) {
+    const url = new URL(dialogue.url);
+    if (url.pathname.endsWith('/musetalk/chat')) {
+      url.pathname = url.pathname.replace(/\/musetalk\/chat$/, '/national');
+      return { url: url.href, key: dialogue.key };
+    }
+  }
   if (env.MUSETALK_API_URL && env.MUSETALK_API_KEY) {
     try {
       const url = new URL(env.MUSETALK_API_URL);
@@ -11,13 +21,9 @@ export function nationalLanguageConfig(env: NodeJS.ProcessEnv = process.env) {
       return { url: url.href, key: env.MUSETALK_API_KEY };
     } catch { return null; }
   }
-  const config = qwenTutorConfig({ ...env, TUTOR_LLM_PROVIDER: undefined });
-  if (!config) return null;
-  const url = new URL(config.url);
-  if (!url.pathname.endsWith('/musetalk/chat')) return null;
-  url.pathname = url.pathname.replace(/\/musetalk\/chat$/, '/national');
-  return { url: url.href, key: config.key };
+  return null;
 }
+
 export class NationalLanguageError extends Error {
   constructor(message: string, public status = 503) { super(message); }
 }
@@ -30,7 +36,7 @@ async function callNational(path: string, body?: unknown, options: { env?: NodeJ
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (response.status === 422) throw new NationalLanguageError('Cette voix ne peut pas lire ce passage avec tous ses caractères. La réponse reste disponible par écrit.', 422);
-  if (!response.ok) throw new NationalLanguageError('Le moteur de langue est momentanément indisponible. Réessayez.', response.status === 429 ? 429 : 503);
+  if (!response.ok) throw Object.assign(new NationalLanguageError('Le moteur de langue est momentanément indisponible. Réessayez.', response.status === 429 ? 429 : 503), { upstreamStatus: response.status });
   return response.json();
 }
 export async function translateTutorReply(text: string, language: TutorLanguage, options: { sourceLanguage?: TutorLanguage; env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
@@ -69,7 +75,14 @@ export async function getNationalCapabilities(_req: any, res: ExpressResponse) {
   try {
     const data = await callNational('/capabilities');
     return res.json({ translation: Array.isArray(data.translation) ? data.translation.filter((code: unknown) => tutorLanguage(code) === code) : [], speech: Array.isArray(data.speech) ? data.speech.filter((code: unknown) => code === 'ln' || code === 'sw') : [], reviewRequired: true });
-  } catch { return res.json({ translation: [], speech: [], reviewRequired: true }); }
+  } catch (error) {
+    console.warn('[National languages] capability connection failed', {
+      configured: Boolean(nationalLanguageConfig()),
+      errorType: error instanceof Error ? error.name : 'unknown',
+      upstreamStatus: error && typeof error === 'object' && 'upstreamStatus' in error ? error.upstreamStatus : undefined,
+    });
+    return res.json({ translation: [], speech: [], reviewRequired: true });
+  }
 }
 
 export function createTutorLanguageInput(): RequestHandler {
