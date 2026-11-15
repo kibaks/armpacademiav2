@@ -4,7 +4,7 @@ import { authenticatedFetch } from '../lib/adminApi';
 import { openTutorVideoStream, supportsTutorVideoStream } from './tutorVideoStream';
 import { speechService } from './speechService';
 
-export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean; manualPlayback?: boolean; durationSeconds?: number };
+export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean; manualPlayback?: boolean; durationSeconds?: number; audioUrl?: string };
 type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number; progressiveStreaming?: boolean };
 export function useTutorVideoReply(persona: string, active = true) {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
@@ -92,7 +92,7 @@ export function useTutorVideoReply(persona: string, active = true) {
               // Retry the same cached job with ordinary playback if MSE fails.
               if (current()) void start(text, voice, false, alongsideAudio, automaticPlayback, language);
             });
-            setState({ status: 'ready', url: objectUrl.current, progressive: true, durationSeconds: result.durationSeconds, manualPlayback: alongsideAudio && deferPlayback.current });
+            setState({ status: 'ready', url: objectUrl.current, progressive: true, audioUrl: result.audioUrl, durationSeconds: result.durationSeconds, manualPlayback: alongsideAudio && deferPlayback.current });
             return true;
           }
           if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {
@@ -103,7 +103,7 @@ export function useTutorVideoReply(persona: string, active = true) {
             objectUrl.current = URL.createObjectURL(blob);
             url = objectUrl.current;
           } else if (!url.startsWith('https://')) throw new Error('Vidéo indisponible.');
-          setState({ status: 'ready', url, manualPlayback: alongsideAudio && deferPlayback.current });
+          setState({ status: 'ready', url, audioUrl: result.audioUrl, manualPlayback: alongsideAudio && deferPlayback.current });
           return true;
         }
         // Check immediately after creation; only wait between pending status requests.
@@ -144,6 +144,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     setState(previous => previous.status === 'ready' ? {...previous,manualPlayback:true} : previous);
   };
   const handleAutoplayBlocked = () => {
+    backgroundAudio.current=true;
     deferAutomaticPlayback();
     const last=lastRequest.current;
     if (last && !speechService.getState().isPlaying) void speechService.play(last.text, `tutor-video-fallback-${Date.now()}`, {voice:last.voice,language:last.language});

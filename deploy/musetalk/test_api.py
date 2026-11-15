@@ -13,6 +13,26 @@ import academia_api as worker
 from fastapi.testclient import TestClient
 
 class PlaybackTests(unittest.TestCase):
+    def test_original_audio_is_ticket_protected_and_supports_ranges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original=worker.JOBS;worker.JOBS=Path(tmp)
+            job='e'*64;directory=worker.JOBS/job;directory.mkdir()
+            (directory/'input.audio').write_bytes(b'RIFF'+b'x'*100)
+            expires=int(time.time())+600
+            token=hmac.new(worker.KEY.encode(),f'{job}:{expires}'.encode(),hashlib.sha256).hexdigest()
+            client=TestClient(worker.app)
+            try:
+                path=f'/jobs/{job}/audio?expires={expires}&token={token}'
+                result=client.get(path,headers={'Range':'bytes=0-3'})
+                self.assertEqual(result.status_code,206);self.assertEqual(result.content,b'RIFF')
+                self.assertEqual(result.headers['content-type'],'audio/wav')
+                self.assertEqual(client.get(path.replace(token,'0'*64)).status_code,403)
+                self.assertEqual(client.get(path.replace(job,'f'*64)).status_code,403)
+                expired=int(time.time())-1
+                expired_token=hmac.new(worker.KEY.encode(),f'{job}:{expired}'.encode(),hashlib.sha256).hexdigest()
+                self.assertEqual(client.get(f'/jobs/{job}/audio?expires={expired}&token={expired_token}').status_code,403)
+            finally:worker.JOBS=original
+
     def test_fragmented_playback_follows_the_growing_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             original = worker.JOBS

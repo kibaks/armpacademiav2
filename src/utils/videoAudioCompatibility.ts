@@ -1,7 +1,7 @@
 /** Fallback for browsers whose native AAC output freezes an otherwise buffered video. */
 export async function connectVideoAudio(video: HTMLVideoElement, url: string, context: AudioContext, signal: AbortSignal) {
   const response=await fetch(url,{signal,credentials:'omit',redirect:'error'});
-  if (!response.ok || !response.headers.get('content-type')?.includes('video/mp4')) throw new Error('Vidéo inaccessible.');
+  if (!response.ok || !(response.headers.get('content-type')?.includes('video/mp4') || response.headers.get('content-type')?.startsWith('audio/'))) throw new Error('Vidéo inaccessible.');
   const bytes=await response.arrayBuffer();
   if (bytes.byteLength>32*1024*1024) throw new Error('Vidéo trop volumineuse pour ce mode de lecture.');
   const audio=await context.decodeAudioData(bytes);
@@ -26,15 +26,15 @@ export async function connectVideoAudio(video: HTMLVideoElement, url: string, co
   const volume=()=>{gain.gain.value=video.volume;};
   const dispose=()=>{
     if(disposed)return;disposed=true;stop();gain.disconnect();
-    video.removeEventListener('play',sync);video.removeEventListener('pause',stop);
+    video.removeEventListener('playing',sync);video.removeEventListener('pause',stop);
     video.removeEventListener('seeking',stop);video.removeEventListener('seeked',sync);
-    video.removeEventListener('ratechange',sync);video.removeEventListener('ended',stop);
+    video.removeEventListener('ratechange',sync);video.removeEventListener('ended',stop);video.removeEventListener('waiting',stop);
     video.removeEventListener('volumechange',volume);signal.removeEventListener('abort',dispose);
     video.muted=previousMute;
   };
-  video.addEventListener('play',sync);video.addEventListener('pause',stop);
+  video.addEventListener('playing',sync);video.addEventListener('pause',stop);
   video.addEventListener('seeking',stop);video.addEventListener('seeked',sync);
-  video.addEventListener('ratechange',sync);video.addEventListener('ended',stop);
+  video.addEventListener('ratechange',sync);video.addEventListener('ended',stop);video.addEventListener('waiting',stop);
   video.addEventListener('volumechange',volume);signal.addEventListener('abort',dispose,{once:true});
   video.muted=true;volume();
   try {await context.resume();if(context.state!=='running')throw new Error('Appuyez sur lecture pour activer le son.');await video.play();sync();} catch(error){dispose();throw error;}

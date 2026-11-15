@@ -24,6 +24,10 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
     const token = createHmac('sha256', env.MUSETALK_API_KEY!).update(`${id}:${expires}`).digest('hex');
     return `${endpoint!.href.replace(/\/$/, '')}/jobs/${id}/play?expires=${expires}&token=${token}`;
   };
+  const playbackMedia = (id: string) => {
+    const videoUrl=playbackUrl(id);
+    return {videoUrl,audioUrl:videoUrl.replace('/play?','/audio?')};
+  };
   const remote = (suffix: string, init: RequestInit = {}) => request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) });
   router.use(deps.authenticate || authenticate);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -51,7 +55,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         }
         tx.set(ref, { uid, status: 'SUBMITTING', createdAt: Date.now() }); return 'new';
       });
-      if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', videoUrl: playbackUrl(id) });
+      if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', ...playbackMedia(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
       reserved = true;
       const national = language==='fr' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request});
@@ -77,7 +81,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
     try {
       const entry = await owned(req); if (!entry) return res.sendStatus(404);
       // Completed jobs are immutable: issue a fresh playback ticket without another worker round trip.
-      if (entry.job.status === 'COMPLETED') return res.json({ status: 'COMPLETED', videoUrl: playbackUrl(req.params.id) });
+      if (entry.job.status === 'COMPLETED') return res.json({ status: 'COMPLETED', ...playbackMedia(req.params.id) });
       const response = await remote(`/jobs/${req.params.id}`);
       if (response.status === 404 && entry.job.status === 'FAILED') return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' });
       if (!response.ok) return res.sendStatus(503);
@@ -85,14 +89,14 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       // A growing MP4 has no stable length/range contract. Native players may
       // treat its current end as EOF. Only opted-in MSE clients consume fragments.
       if (result.status === 'STREAMING') {
-        if (env.MUSETALK_PROGRESSIVE === 'true' && req.query?.progressive === '1') return res.json({ status: 'STREAMING', videoUrl: playbackUrl(req.params.id), ...(Number.isFinite(result.durationSeconds) && result.durationSeconds > 0 ? {durationSeconds:result.durationSeconds} : {}) });
+        if (env.MUSETALK_PROGRESSIVE === 'true' && req.query?.progressive === '1') return res.json({ status: 'STREAMING', ...playbackMedia(req.params.id), ...(Number.isFinite(result.durationSeconds) && result.durationSeconds > 0 ? {durationSeconds:result.durationSeconds} : {}) });
         return res.json({ status: 'PENDING' });
       }
       if (result.status === 'COMPLETED') {
         await entry.ref.update({ status: 'COMPLETED' });
         // A short-lived read-only ticket enables native streaming and byte ranges.
         // The worker key stays private; the browser does not buffer an entire MP4.
-        return res.json({ status: 'COMPLETED', videoUrl: playbackUrl(req.params.id) });
+        return res.json({ status: 'COMPLETED', ...playbackMedia(req.params.id) });
       }
       if (result.status === 'FAILED') { await entry.ref.update({ status: 'FAILED' }); return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' }); }
       return res.json({ status: 'PENDING' });

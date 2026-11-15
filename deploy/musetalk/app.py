@@ -182,6 +182,20 @@ def media(job_id: str):
         raise HTTPException(404, 'Not found')
     return FileResponse(result, media_type='video/mp4', headers={'Cache-Control': 'no-store'})
 
+@app.get('/jobs/{job_id}/audio')
+def playback_audio(job_id: str, expires: int, token: str):
+    directory = folder(job_id)
+    now = int(time.time())
+    expected = hmac.new(KEY.encode(), f'{job_id}:{expires}'.encode(), hashlib.sha256).hexdigest()
+    if expires < now or expires > now + 930 or len(token) != 64 or not hmac.compare_digest(expected, token):
+        raise HTTPException(403, 'Expired or invalid playback ticket')
+    audio = directory / 'input.audio'
+    if not audio.exists():
+        raise HTTPException(404, 'Not found')
+    with audio.open('rb') as stream:
+        wav = stream.read(4) == b'RIFF'
+    return FileResponse(audio, media_type='audio/wav' if wav else 'audio/mpeg', headers={'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer'})
+
 @app.get('/jobs/{job_id}/play')
 def play(job_id: str, expires: int, token: str):
     directory = folder(job_id)

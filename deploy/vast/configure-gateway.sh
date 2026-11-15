@@ -9,7 +9,7 @@ cat > "$base/Gateway.Caddyfile" <<'CADDY'
 }
 http://:18090 {
  bind 127.0.0.1
- @play path /musetalk/jobs/*/play
+ @play path /musetalk/jobs/*/play /musetalk/jobs/*/audio
  header @play Access-Control-Allow-Origin https://armpacademiav2.vercel.app
  header @play Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
  handle_path /files-api/* {

@@ -128,6 +128,8 @@ test('only opted-in MSE clients receive a signed progressive stream, still bound
   assert.equal((await (await h.request(`${h.base}/${id}`, { headers: { authorization: 'owner' } })).json()).status, 'PENDING');
   const ready = await (await h.request(`${h.base}/${id}?progressive=1`, { headers: { authorization: 'owner' } })).json();
   assert.equal(ready.status, 'STREAMING');
+  assert.equal(ready.audioUrl.replace('/audio?','/play?'),ready.videoUrl);
+  assert.ok(!ready.audioUrl.includes('private-key'));
   assert.equal(ready.durationSeconds,12.5);
   assert.ok(ready.videoUrl.startsWith('https://worker.example/musetalk/jobs/'));
   assert.ok(!ready.videoUrl.includes('private-key'));
