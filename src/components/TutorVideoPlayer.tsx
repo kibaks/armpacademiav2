@@ -38,7 +38,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
     if (value.isPlaying) videoRef.current?.pause();
   }), []);
   const presentation = showPresentation && state.status === 'idle' && persona !== 'henri';
-  if (!active || (state.status === 'idle' && !presentation) || (audioPlaying && !state.manualPlayback)) return <>{children}</>;
+  if (!active || (state.status === 'idle' && !presentation) || (audioPlaying && state.status !== 'ready')) return <>{children}</>;
   return <div className="tutor-video-player relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl bg-slate-950 text-white">
     {(state.status === 'ready' && state.url) || presentation ? <>
       <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
@@ -49,16 +49,17 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
         onPlaying={() => { clearStall(); setStalled(false); setMediaError(false); }}
         onTimeUpdate={event => {
           const position = event.currentTarget.currentTime;
-          if (!presentation && !event.currentTarget.paused && Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration>0) onProgress?.(position/event.currentTarget.duration);
+          if (!presentation && Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration>0) onProgress?.(position/event.currentTarget.duration);
           if (Math.abs(position - resumeAt.current) > 0.01) { clearStall(); setStalled(false); }
           resumeAt.current = position;
         }}
         onPause={clearStall}
         onLoadedMetadata={event => {
+          if (!presentation) onProgress?.(0);
           if (retryPosition.current > 0) event.currentTarget.currentTime = Math.min(retryPosition.current, event.currentTarget.duration || retryPosition.current);
           retryPosition.current = 0;
         }}
-        onEnded={() => { clearStall(); if (!presentation) { onProgress?.(undefined); onStop(); } }}
+        onEnded={() => { clearStall(); if (!presentation) { onProgress?.(1); onStop(); } }}
         onError={() => { clearStall(); setMediaError(true); }} />
         <button type="button" onClick={() => setFillFrame(value => !value)} title={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} aria-label={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} className="absolute left-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/65 text-white">{fillFrame ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
         {!presentation && state.manualPlayback && <p className="pointer-events-none absolute bottom-14 left-3 right-3 z-10 rounded-lg bg-slate-950/75 p-2 text-center text-xs text-white">Vidéo prête · Appuyez sur lecture pour passer à la vidéo</p>}

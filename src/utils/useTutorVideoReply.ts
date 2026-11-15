@@ -11,6 +11,7 @@ export function useTutorVideoReply(persona: string, active = true) {
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const backgroundAudio = useRef(false);
+  const deferPlayback = useRef(false);
   const lastRequest = useRef<{ text: string; voice: string } | null>(null);
   const activeRef = useRef(active);
   const objectUrl = useRef<string | null>(null);
@@ -44,9 +45,10 @@ export function useTutorVideoReply(persona: string, active = true) {
     }
   }), []);
 
-  const start = async (text: string, voice: string, progressive = true, alongsideAudio = false): Promise<boolean> => {
+  const start = async (text: string, voice: string, progressive = true, alongsideAudio = false, automaticPlayback = false): Promise<boolean> => {
     if (!activeRef.current) return true;
     backgroundAudio.current = alongsideAudio;
+    deferPlayback.current = !automaticPlayback;
     if (!alongsideAudio) speechService.stop();
     releaseMedia();
     const run = ++generation.current;
@@ -89,7 +91,7 @@ export function useTutorVideoReply(persona: string, active = true) {
               // Retry the same cached job with ordinary playback if MSE fails.
               if (current()) void start(text, voice, false);
             });
-            setState({ status: 'ready', url: objectUrl.current, progressive: true, manualPlayback: alongsideAudio });
+            setState({ status: 'ready', url: objectUrl.current, progressive: true, manualPlayback: alongsideAudio && deferPlayback.current });
             return true;
           }
           if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {
@@ -100,7 +102,7 @@ export function useTutorVideoReply(persona: string, active = true) {
             objectUrl.current = URL.createObjectURL(blob);
             url = objectUrl.current;
           } else if (!url.startsWith('https://')) throw new Error('Vidéo indisponible.');
-          setState({ status: 'ready', url, manualPlayback: alongsideAudio });
+          setState({ status: 'ready', url, manualPlayback: alongsideAudio && deferPlayback.current });
           return true;
         }
         // Check immediately after creation; only wait between pending status requests.
@@ -128,7 +130,7 @@ export function useTutorVideoReply(persona: string, active = true) {
           : error instanceof Error ? error.message : 'La vidéo est indisponible.' });
       }
     }
-    return true;
+    return abort.signal.aborted;
   };
   const listenWithoutVideo = () => {
     const last = lastRequest.current;
@@ -136,5 +138,9 @@ export function useTutorVideoReply(persona: string, active = true) {
     if (last) void speechService.play(last.text, `video-audio-${Date.now()}`, { voice: last.voice });
   };
   const retry = () => { const last = lastRequest.current; if (last) void start(last.text, last.voice, false); };
-  return { state, start, stop, listenWithoutVideo, retry };
+  const deferAutomaticPlayback = () => {
+    deferPlayback.current = true;
+    setState(previous => previous.status === 'ready' ? {...previous,manualPlayback:true} : previous);
+  };
+  return { state, start, stop, listenWithoutVideo, retry, deferAutomaticPlayback };
 }

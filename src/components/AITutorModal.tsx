@@ -473,6 +473,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     return () => { active = false; controller.abort(); };
   }, [isOpen]);
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
+  const [explanationMessageId,setExplanationMessageId] = useState<string | undefined>(undefined);
+  const explanationRunRef = useRef(0);
   const [explanationVideoProgress,setExplanationVideoProgress] = useState<number | undefined>(undefined);
   const tutorVideo = useTutorVideoReply(selectedVoice, isOpen);
   const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
@@ -699,6 +701,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, customLanguage?: TutorLanguage, playbackMode?: 'audio' | 'video') => {
     if (!text) return;
+    const explanationRun = ++explanationRunRef.current;
+    setExplanationMessageId(msgId);
     const spokenLanguage = customLanguage || (msgId ? messages.find(message => message.id === msgId)?.language || 'fr' : 'fr');
     if (!nationalVoiceAvailable(spokenLanguage, text)) { showNotice('La voix installée ne peut pas lire ce passage avec tous ses caractères. Le texte reste disponible.'); return; }
     speechService.unlockAudio();
@@ -713,8 +717,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       // Keep the player visible when a reply starts, including after hiding the portrait.
       if (!isVideoCallActive) setShowStudioStage(true);
       setExplanationVideoProgress(undefined);
-      // Narration starts immediately; video preparation never blocks an explanation.
-      void tutorVideo.start(clean, voiceToUse, true, true);
+      // Prefer the synchronized video, but bound the wait for slow renderers.
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const ready = await Promise.race([
+        tutorVideo.start(clean, voiceToUse, true, true, true),
+        new Promise<false>(resolve=>{ timeout=setTimeout(()=>resolve(false),8000); }),
+      ]);
+      if (timeout) clearTimeout(timeout);
+      if (explanationRun !== explanationRunRef.current || !modalOpenRef.current) return;
+      if (ready) return;
+      tutorVideo.deferAutomaticPlayback();
     }
     if (playbackMode === 'audio' || spokenLanguage !== 'fr') tutorVideo.stop();
 
@@ -729,6 +741,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const stopSpeaking = () => {
+    explanationRunRef.current++;
     tutorVideo.stop();
     setExplanationVideoProgress(undefined);
     speechService.stop();
@@ -1492,7 +1505,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         )}
 
                         {/* Contenu formaté */}
-                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} autoPlay={isLastBotMsg && isOpen} progress={isLastBotMsg ? explanationVideoProgress : undefined} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
+                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} autoPlay={isLastBotMsg && isOpen} progress={msg.id === explanationMessageId ? explanationVideoProgress : undefined} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
                           {renderMarkdown(msg.text)}
                         </div>}
 
