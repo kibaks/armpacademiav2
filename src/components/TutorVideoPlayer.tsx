@@ -1,3 +1,4 @@
+import { connectVideoAudio } from '../utils/videoAudioCompatibility';
 import './TutorVideoPlayer.css';
 import { Maximize2, Minimize2, Volume2, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -19,6 +20,34 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
   }, [state.status]);
   const [mediaError, setMediaError] = useState(false);
   const [videoStarted,setVideoStarted]=useState(false);
+  const [compatibility,setCompatibility]=useState(false);
+  const [compatMuted,setCompatMuted]=useState(false);
+  const compatibilityAudio=useRef<Awaited<ReturnType<typeof connectVideoAudio>>|null>(null);
+  const compatibilityController=useRef<AbortController|null>(null);
+  const progressTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const clearProgressCheck=()=>{if(progressTimer.current)clearTimeout(progressTimer.current);progressTimer.current=null;};
+  useEffect(()=>{
+    setCompatibility(false);setCompatMuted(false);
+    return ()=>{clearProgressCheck();compatibilityController.current?.abort();compatibilityAudio.current?.dispose();compatibilityAudio.current=null;compatibilityController.current=null;};
+  },[state.url]);
+  const checkVideoProgress=()=>{
+    clearProgressCheck();
+    const video=videoRef.current;
+    if(!video || state.status!=='ready')return;
+    const position=video.currentTime;
+    progressTimer.current=setTimeout(()=>{
+      if(video.paused || video.ended || video.currentTime>position+0.1 || compatibilityController.current)return;
+      if(state.progressive){onRetry?.();return;}
+      const context=speechService.getAudioContext();
+      if(!context || !state.url){setStalled(true);return;}
+      const controller=new AbortController();compatibilityController.current=controller;
+      video.pause();
+      void connectVideoAudio(video,state.url,context,controller.signal).then(audio=>{
+        if(controller.signal.aborted){audio.dispose();return;}
+        compatibilityAudio.current=audio;setCompatibility(true);setMediaError(false);setStalled(false);
+      }).catch(()=>{if(!controller.signal.aborted){compatibilityController.current=null;setStalled(true);}});
+    },3000);
+  };
   const [audioPlaying, setAudioPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const blockedCallback = useRef(onAutoplayBlocked);
@@ -58,7 +87,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
       <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
         poster="/assets/tutrice-portrait-v1.jpg" controls playsInline preload="metadata"
         className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: fillFrame ? '50% 28%' : '50% 50%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
-        onPlay={() => { speechService.stop(); if (!presentation) onProgress?.(0); }}
+        onPlay={() => { speechService.stop(); if (!presentation) {onProgress?.(0);checkVideoProgress();} }}
         onWaiting={waitForPlayback} onStalled={waitForPlayback}
         onPlaying={() => { setVideoStarted(true); clearStall(); setStalled(false); setMediaError(false); }}
         onTimeUpdate={event => {
@@ -68,14 +97,15 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
           if (Math.abs(position - resumeAt.current) > 0.01) { clearStall(); setStalled(false); }
           resumeAt.current = position;
         }}
-        onPause={clearStall}
+        onPause={()=>{clearStall();clearProgressCheck();}}
         onLoadedMetadata={event => {
           if (!presentation) onProgress?.(0);
           if (retryPosition.current > 0) event.currentTarget.currentTime = Math.min(retryPosition.current, event.currentTarget.duration || retryPosition.current);
           retryPosition.current = 0;
         }}
-        onEnded={() => { clearStall(); if (!presentation) { onProgress?.(1); onStop(); } }}
+        onEnded={() => { clearProgressCheck(); clearStall(); if (!presentation) { onProgress?.(1); onStop(); } }}
         onError={() => { clearStall(); setMediaError(true); }} />
+        {compatibility && <button type="button" className="absolute bottom-14 right-3 z-30 rounded-lg bg-slate-950/80 px-3 py-2 text-xs text-white" onClick={()=>{const muted=!compatMuted;setCompatMuted(muted);compatibilityAudio.current?.setMuted(muted);}}>{compatMuted?'Activer le son':'Couper le son'}</button>}
         <button type="button" onClick={() => setFillFrame(value => !value)} title={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} aria-label={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} className="absolute left-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/65 text-white">{fillFrame ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
         {!presentation && state.manualPlayback && !videoStarted && !mediaError && <button type="button" className="absolute inset-x-4 top-1/2 z-30 -translate-y-1/2 rounded-xl bg-blue-700 px-4 py-4 text-sm font-bold text-white shadow-lg" onClick={()=>{void videoRef.current?.play().catch(()=>setMediaError(true));}}>Lancer la vidéo avec le son</button>}
         {!presentation && state.progressive && <p className="tutor-video-label pointer-events-none absolute left-14 right-14 top-3 z-10 rounded-lg bg-slate-950/65 px-2 py-1 text-center text-[10px] text-blue-100">Lecture progressive · voix et visage synchronisés</p>}
