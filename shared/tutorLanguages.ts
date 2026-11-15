@@ -3,7 +3,7 @@ export const TUTOR_LANGUAGES = [
   { code: 'fr', locale: 'fr-CD', label: 'Français', guidance: 'Français professionnel, simple et respectueux.' },
   { code: 'ln', locale: 'ln-CD', label: 'Lingala', guidance: 'Lingala de RDC. Préserve ɛ, ɔ et les marques tonales attestées ; ne remplace pas ces voyelles par e et o.' },
   { code: 'sw', locale: 'sw-CD', label: 'Swahili', guidance: 'Kiswahili de RDC. Respecte la variété demandée, les voyelles et la prosodie du kiswahili ; n’ajoute pas de marques tonales artificielles.' },
-  { code: 'kg', locale: 'kg-CD', label: 'Kikongo', guidance: 'Kikongo. Ne confonds pas automatiquement kikongo et kituba : si la variété change le sens, demande une précision. Préserve les tons et la graphie fournis.' },
+  { code: 'kg', locale: 'kg-CD', label: 'Kikongo (Bandundu)', guidance: 'Kikongo ya leta / kituba de RDC, variété demandée pour le Bandundu. Utilise la variété demandée du Bandundu ; ne la remplace pas par une variété angolaise. Préserve les tons et la graphie fournis.' },
   { code: 'lua', locale: 'lua-CD', label: 'Tshiluba', guidance: 'Tshiluba (ciluba) de RDC. Respecte les voyelles, la longueur vocalique et les tons attestés, sans franciser les mots.' },
 ] as const;
 export type TutorLanguage = typeof TUTOR_LANGUAGES[number]['code'];
@@ -25,9 +25,7 @@ export function normalizeNationalSpeech(text: string) {
   return text.normalize('NFC').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*#`_>]/g, '').replace(/\s+/g, ' ').trim();
 }
 export function nationalVoiceAvailable(language: TutorLanguage, text = '') {
-  if (language === 'fr' || language === 'sw') return true;
-  if (language !== 'ln') return false;
-  return !Array.from(text.normalize('NFC').toLowerCase()).some(char => /[\p{L}\p{M}\p{N}]/u.test(char) && !"abcdefghijklmnopqrstuvwyz012345678".includes(char));
+  return ['fr', 'ln', 'sw', 'kg', 'lua'].includes(language);
 }
 
 /** Bound national speech requests without stripping accents or losing words. */

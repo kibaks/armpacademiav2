@@ -51,6 +51,7 @@ export interface SpeechPlaybackState {
   source: 'gemini-tts' | 'web-speech' | 'none';
   voiceProvider?:
     | 'national-vits'
+    | 'national-omnivoice'
     | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'
@@ -1502,7 +1503,7 @@ class SpeechService {
     language: TutorLanguage = 'fr'
   ): Promise<DecodedNeuralEntry | null> {
     if ((language === 'fr' && (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable)) || !sentence.trim()) return null;
-    const cacheKey = `tutor_voice_v8::${language}::${voice}::${sentence}`;
+    const cacheKey = `tutor_voice_v9::${language}::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1522,7 +1523,7 @@ class SpeechService {
         for (let attempt = 0; attempt <= NEURAL_BACKOFF_MS.length; attempt++) {
           try {
             const controller = new AbortController();
-            const requestTimeout = this.piperAvailable ? Math.max(timeoutMs, Math.min(90000, 10000 + sentence.length * 40)) : timeoutMs;
+            const requestTimeout = ['kg', 'lua'].includes(language) ? 180000 : this.piperAvailable ? Math.max(timeoutMs, Math.min(90000, 10000 + sentence.length * 40)) : timeoutMs;
             const timeoutId = window.setTimeout(() => controller.abort(), requestTimeout);
 
             const response = await authenticatedFetch('/api/ai/tts', {
@@ -1806,7 +1807,7 @@ class SpeechService {
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if ((language !== 'fr' || this.neuralTtsAvailable) && (language !== 'fr' || this.getVoiceMode() !== 'device')) {
-      const cacheKey = `tutor_voice_v8::${language}::${voiceName}::${sentence}`;
+      const cacheKey = `tutor_voice_v9::${language}::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,

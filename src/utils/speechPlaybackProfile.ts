@@ -1,5 +1,5 @@
 // A mastered Piper voice must not receive the automatic speed/pitch boost.
 export function providerRate(provider: string, speed: number) {
   const safe = Number.isFinite(speed) && speed > 0 ? speed : 1;
-  return (provider === 'piper' || provider === 'national-vits') ? safe : safe * 1.02;
+  return (provider === 'piper' || provider === 'national-vits' || provider === 'national-omnivoice') ? safe : safe * 1.02;
 }

@@ -24,6 +24,17 @@ class ApiTests(unittest.TestCase):
         response = self.client.get('/capabilities', headers=self.headers)
         self.assertEqual(response.json()['translation'], ['ln', 'sw', 'kg', 'lua'])
         self.assertEqual(response.json()['speech'], ['ln', 'sw'])
+    def test_extra_local_voice_keeps_language_and_authentication(self):
+        class Reply:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self): return {'language': 'lua', 'provider': 'national-omnivoice', 'mimeType': 'audio/mpeg', 'audioData': 'SUQz'}
+        with patch.dict(os.environ, {'NATIONAL_EXTRA_VOICES': 'lua'}), patch('httpx.post', return_value=Reply()) as request:
+            response = self.client.post('/speech', headers=self.headers, json={'text': 'Moyo ɛ́', 'language': 'lua'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(request.call_args.kwargs['json']['text'], 'Moyo ɛ́')
+            self.assertEqual(request.call_args.kwargs['headers']['Authorization'], 'Bearer ' + service.KEY)
+            self.assertEqual(self.client.get('/capabilities', headers=self.headers).json()['speech'], ['ln', 'sw', 'lua'])
     def test_directions_and_complete_paragraphs(self):
         tokenizer = Tokenizer()
         with patch.object(service, 'translation_engine', return_value=(tokenizer, Model())):

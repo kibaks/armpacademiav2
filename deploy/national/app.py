@@ -65,7 +65,7 @@ def unsupported_letters(text, vocabulary):
 
 @app.get('/capabilities', dependencies=[Depends(authorize)])
 def capabilities():
-    return {'provider': 'national-local', 'translation': list(LANGUAGES), 'speech': list(VOICES), 'limitations': {'ln': 'Les lettres ɛ, ɔ et les tons ne sont pas pris en charge par la voix installée.', 'sw': 'Accent congolais non validé.', 'kg': 'Lecture audio indisponible.', 'lua': 'Lecture audio indisponible.'}, 'translationModel': 'facebook/nllb-200-distilled-600M', 'reviewRequired': True, 'license': 'non-commercial'}
+    return {'provider': 'national-local', 'translation': list(LANGUAGES), 'speech': list(VOICES) + [code for code in ('kg', 'lua') if code in os.environ.get('NATIONAL_EXTRA_VOICES', '').split(',')], 'limitations': {'ln': 'Voix locale lingala avec références natives : prononciation à vérifier.', 'sw': 'Accent congolais non validé.', 'kg': 'Kituba de RDC : voix locale expérimentale, prononciation à valider.', 'lua': 'OmniVoice local : prononciation à valider.'}, 'translationModel': 'facebook/nllb-200-distilled-600M', 'reviewRequired': True, 'license': 'non-commercial'}
 
 @app.post('/translate', dependencies=[Depends(authorize)])
 def translate(body: Translation):
@@ -105,6 +105,15 @@ def translate(body: Translation):
 
 @app.post('/speech', dependencies=[Depends(authorize)])
 def speech(body: Speech):
+    if body.language in {'ln', 'kg', 'lua'} and body.language in os.environ.get('NATIONAL_EXTRA_VOICES', '').split(','):
+        import httpx
+        try:
+            response = httpx.post('http://127.0.0.1:8065/speech', json=body.model_dump(), headers={'Authorization': 'Bearer ' + KEY}, timeout=175, follow_redirects=False)
+            if response.status_code in (422, 429): raise HTTPException(response.status_code, 'Speech engine unavailable')
+            response.raise_for_status()
+            return response.json()
+        except HTTPException: raise
+        except Exception: raise HTTPException(503, 'Speech engine unavailable') from None
     if body.language not in VOICES or not body.text.strip():
         raise HTTPException(422, 'No voice for this language')
     if not gate.acquire(blocking=False):

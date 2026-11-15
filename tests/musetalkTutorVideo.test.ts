@@ -27,7 +27,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
         const body=JSON.parse(options.body);
         records.set('national-request',body);
         const audio=Buffer.alloc(100);audio.write('ID3');
-        return Response.json({language:body.language,provider:'national-vits',mimeType:'audio/mpeg',audioData:audio.toString('base64')});
+        return Response.json({language:body.language,provider:body.language === 'sw' ? 'national-vits' : 'national-omnivoice',mimeType:'audio/mpeg',audioData:audio.toString('base64')});
       }
       if (options.method === 'POST') { submissions++; return Response.json({ id: JSON.parse(options.body).id }); }
       if (String(url).endsWith('/media')) {
@@ -146,6 +146,6 @@ test('national video uses its own voice and distinct language cache without Fren
  assert.notEqual((await sw.json()).id,lnId);
  assert.equal(h.records.get('national-request').language,'sw');
  const calls=h.counts().submissions;
- for(const [text,language] of [['Mbɔ́tɛ.','ln'],['Texte','kg'],['Texte','lua']]) assert.equal((await h.post(text,language)).status,422);
- assert.equal(h.counts().submissions,calls);
+ assert.equal((await h.post('Mbɔ́tɛ.','ln')).status,202);
+ assert.equal(h.counts().submissions,calls+1);
 });

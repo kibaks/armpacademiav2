@@ -32,18 +32,24 @@ test('wrong-language and failed translations never become a verified answer', as
   await assert.rejects(translateTutorReply('Texte', 'ln', { env, fetcher: async () => new Response('', { status: 503 }) }));
 });
 test('national speech is not sent to French voices and invalid audio is refused', async () => {
-  let calls = 0;
-  for (const language of ['kg', 'lua'] as const) await assert.rejects(nationalSpeechPayload('Texte', language, { env, fetcher: async () => { calls++; return Response.json({}); } }));
-  assert.equal(calls, 0);
+  for (const language of ['ln', 'kg', 'lua'] as const) {
+    const audio = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(100)]).toString('base64');
+    const result = await nationalSpeechPayload('Texte ɛ́', language, { env, fetcher: async (_url, options) => {
+      assert.equal(JSON.parse(options!.body as string).text, 'Texte ɛ́');
+      return Response.json({ language, provider: 'national-omnivoice', mimeType: 'audio/mpeg', audioData: audio });
+    } });
+    assert.equal(result.provider, 'national-omnivoice');
+  }
+  await assert.rejects(nationalSpeechPayload('Texte', 'kg', { env, fetcher: async () => Response.json({ language: 'kg', provider: 'national-vits', mimeType: 'audio/mpeg', audioData: Buffer.concat([Buffer.from('ID3'), Buffer.alloc(100)]).toString('base64') }) }));
   await assert.rejects(nationalSpeechPayload('Habari', 'sw', { env, fetcher: async () => Response.json({ language: 'sw', provider: 'national-vits', mimeType: 'audio/mpeg', audioData: Buffer.alloc(100).toString('base64') }) }));
 });
 test('diacritics and national spelling are never rewritten as French phonetics', () => {
   assert.equal(normalizeNationalSpeech('**Mbɔ́tɛ**, Mbuyi. Tshiluba.'), 'Mbɔ́tɛ, Mbuyi. Tshiluba.');
   assert.equal(nationalVoiceAvailable('ln', 'Mbote.'), true);
-  assert.equal(nationalVoiceAvailable('ln', 'Mbɔ́tɛ.'), false);
-  assert.equal(nationalVoiceAvailable('ln', 'e\u0301'), false);
-  assert.equal(nationalVoiceAvailable('kg'), false);
-  assert.equal(nationalVoiceAvailable('lua'), false);
+  assert.equal(nationalVoiceAvailable('ln', 'Mbɔ́tɛ.'), true);
+  assert.equal(nationalVoiceAvailable('ln', 'e\u0301'), true);
+  assert.equal(nationalVoiceAvailable('kg'), true);
+  assert.equal(nationalVoiceAvailable('lua'), true);
 });
 
 test('long national narration is split without losing words or diacritics',()=>{

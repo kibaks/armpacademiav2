@@ -31,7 +31,7 @@ async function callNational(path: string, body?: unknown, options: { env?: NodeJ
   const config = nationalLanguageConfig(options.env);
   if (!config) throw new NationalLanguageError('Les moteurs des langues nationales ne sont pas disponibles.');
   const response = await (options.fetcher || fetch)(config.url + path, {
-    method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(65000),
+    method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(path === '/speech' ? 180000 : 65000),
     headers: { 'content-type': 'application/json', authorization: `Bearer ${config.key}` },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -55,12 +55,12 @@ export async function sendTutorReply(res: ExpressResponse, payload: { reply: str
   }
 }
 export async function nationalSpeechPayload(text: string, language: TutorLanguage, options: { env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
-  if (!['ln', 'sw'].includes(language)) throw new NationalLanguageError('Aucune voix n’est installée pour cette langue.', 422);
+  if (!['ln', 'sw', 'kg', 'lua'].includes(language)) throw new NationalLanguageError('Aucune voix n’est installée pour cette langue.', 422);
   const data = await callNational('/speech', { text: text.normalize('NFC'), language }, options);
-  if (data.language !== language || data.provider !== 'national-vits' || data.mimeType !== 'audio/mpeg' || typeof data.audioData !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(data.audioData) || data.audioData.length > 5_333_336) throw new NationalLanguageError('La voix reçue est invalide.');
+  if (data.language !== language || data.provider !== (language !== 'sw' ? 'national-omnivoice' : 'national-vits') || data.mimeType !== 'audio/mpeg' || typeof data.audioData !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(data.audioData) || data.audioData.length > 5_333_336) throw new NationalLanguageError('La voix reçue est invalide.');
   const audio = Buffer.from(data.audioData, 'base64');
   if (audio.length < 44 || !(audio.toString('ascii', 0, 3) === 'ID3' || (audio[0] === 0xff && (audio[1] & 0xe0) === 0xe0))) throw new NationalLanguageError('La voix reçue est invalide.');
-  return { audioData: data.audioData, audioBase64: data.audioData, mimeType: data.mimeType, provider: 'national-vits' as const, language, wordBoundaries: [] };
+  return { audioData: data.audioData, audioBase64: data.audioData, mimeType: data.mimeType, provider: data.provider as 'national-vits' | 'national-omnivoice', language, wordBoundaries: [] };
 }
 export async function handleNationalSpeech(req: any, res: ExpressResponse) {
   try {
@@ -74,7 +74,7 @@ export async function getNationalCapabilities(_req: any, res: ExpressResponse) {
   res.set('Cache-Control', 'no-store');
   try {
     const data = await callNational('/capabilities');
-    return res.json({ translation: Array.isArray(data.translation) ? data.translation.filter((code: unknown) => tutorLanguage(code) === code) : [], speech: Array.isArray(data.speech) ? data.speech.filter((code: unknown) => code === 'ln' || code === 'sw') : [], reviewRequired: true });
+    return res.json({ translation: Array.isArray(data.translation) ? data.translation.filter((code: unknown) => tutorLanguage(code) === code) : [], speech: Array.isArray(data.speech) ? data.speech.filter((code: unknown) => ['ln', 'sw', 'kg', 'lua'].includes(code as string)) : [], reviewRequired: true });
   } catch (error) {
     console.warn('[National languages] capability connection failed', {
       configured: Boolean(nationalLanguageConfig()),
