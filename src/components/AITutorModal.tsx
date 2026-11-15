@@ -726,7 +726,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       if (timeout) clearTimeout(timeout);
       if (explanationRun !== explanationRunRef.current || !modalOpenRef.current) return;
       if (ready) return;
-      tutorVideo.deferAutomaticPlayback();
+      // Keep trying automatic video when it arrives after the audio fallback.
     }
     if (playbackMode === 'audio') tutorVideo.stop();
 
