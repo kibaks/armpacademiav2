@@ -4,8 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { speechService } from '../utils/speechService';
 import type { TutorVideoState } from '../utils/useTutorVideoReply';
 
-export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona, active = true, showPresentation = true, onProgress, children }: {
-  state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode; onProgress?: (progress: number | undefined) => void;
+export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona, active = true, showPresentation = true, onProgress, onAutoplayBlocked, children }: {
+  state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode; onProgress?: (progress: number | undefined) => void; onAutoplayBlocked?: () => void;
 }) {
   // Calls show the complete portrait; the framing button remains available.
   const [fillFrame, setFillFrame] = useState(showPresentation);
@@ -20,6 +20,19 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
   const [mediaError, setMediaError] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const blockedCallback = useRef(onAutoplayBlocked);
+  blockedCallback.current = onAutoplayBlocked;
+  useEffect(()=>{
+    const video=videoRef.current;
+    if (!active || state.status!=='ready' || state.manualPlayback || !video) return;
+    let cancelled=false;
+    void video.play().catch(()=>{
+      if (cancelled) return;
+      setMediaError(true);
+      blockedCallback.current?.();
+    });
+    return ()=>{cancelled=true;};
+  },[active,state.status,state.url,state.manualPlayback]);
   const [stalled, setStalled] = useState(false);
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeAt = useRef(0);
@@ -42,7 +55,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
   return <div className="tutor-video-player relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl bg-slate-950 text-white">
     {(state.status === 'ready' && state.url) || presentation ? <>
       <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
-        poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay={!presentation && !state.manualPlayback} playsInline preload="metadata"
+        poster="/assets/tutrice-portrait-v1.jpg" controls playsInline preload="metadata"
         className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: fillFrame ? '50% 28%' : '50% 50%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
         onPlay={() => { speechService.stop(); if (!presentation) onProgress?.(0); }}
         onWaiting={waitForPlayback} onStalled={waitForPlayback}

@@ -143,5 +143,10 @@ export function useTutorVideoReply(persona: string, active = true) {
     deferPlayback.current = true;
     setState(previous => previous.status === 'ready' ? {...previous,manualPlayback:true} : previous);
   };
-  return { state, start, stop, listenWithoutVideo, retry, deferAutomaticPlayback };
+  const handleAutoplayBlocked = () => {
+    deferAutomaticPlayback();
+    const last=lastRequest.current;
+    if (last) void speechService.play(last.text, `tutor-video-fallback-${Date.now()}`, {voice:last.voice,language:last.language});
+  };
+  return { state, start, stop, listenWithoutVideo, retry, deferAutomaticPlayback, handleAutoplayBlocked };
 }
