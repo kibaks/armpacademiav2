@@ -78,7 +78,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       // A growing MP4 has no stable length/range contract. Native players may
       // treat its current end as EOF. Only opted-in MSE clients consume fragments.
       if (result.status === 'STREAMING') {
-        if (env.MUSETALK_PROGRESSIVE === 'true' && req.query?.progressive === '1') return res.json({ status: 'STREAMING', videoUrl: playbackUrl(req.params.id) });
+        if (env.MUSETALK_PROGRESSIVE === 'true' && req.query?.progressive === '1') return res.json({ status: 'STREAMING', videoUrl: playbackUrl(req.params.id), ...(Number.isFinite(result.durationSeconds) && result.durationSeconds > 0 ? {durationSeconds:result.durationSeconds} : {}) });
         return res.json({ status: 'PENDING' });
       }
       if (result.status === 'COMPLETED') {

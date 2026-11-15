@@ -28,7 +28,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
         if (options.headers.range === 'bytes=0-2') return new Response('mp4', { status: 206, headers: { 'content-range': 'bytes 0-2/8', 'content-length': '3', 'accept-ranges': 'bytes' } });
         return new Response('mp4-data');
       }
-      polls++; return Response.json({ status: workerStatus });
+      polls++; return Response.json({ status: workerStatus, durationSeconds: 12.5 });
     }) as typeof fetch,
   });
   // Drive Express middleware directly; these tests need no listening socket.
@@ -122,6 +122,7 @@ test('only opted-in MSE clients receive a signed progressive stream, still bound
   assert.equal((await (await h.request(`${h.base}/${id}`, { headers: { authorization: 'owner' } })).json()).status, 'PENDING');
   const ready = await (await h.request(`${h.base}/${id}?progressive=1`, { headers: { authorization: 'owner' } })).json();
   assert.equal(ready.status, 'STREAMING');
+  assert.equal(ready.durationSeconds,12.5);
   assert.ok(ready.videoUrl.startsWith('https://worker.example/musetalk/jobs/'));
   assert.ok(!ready.videoUrl.includes('private-key'));
   assert.notEqual(h.records.get(`musetalkTutorJobs/${id}`).status, 'COMPLETED');

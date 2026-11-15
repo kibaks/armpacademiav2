@@ -3,7 +3,7 @@ import { authenticatedFetch } from '../lib/adminApi';
 import { openTutorVideoStream, supportsTutorVideoStream } from './tutorVideoStream';
 import { speechService } from './speechService';
 
-export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean; manualPlayback?: boolean };
+export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean; manualPlayback?: boolean; durationSeconds?: number };
 type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number; progressiveStreaming?: boolean };
 export function useTutorVideoReply(persona: string, active = true) {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
@@ -91,7 +91,7 @@ export function useTutorVideoReply(persona: string, active = true) {
               // Retry the same cached job with ordinary playback if MSE fails.
               if (current()) void start(text, voice, false);
             });
-            setState({ status: 'ready', url: objectUrl.current, progressive: true, manualPlayback: alongsideAudio && deferPlayback.current });
+            setState({ status: 'ready', url: objectUrl.current, progressive: true, durationSeconds: result.durationSeconds, manualPlayback: alongsideAudio && deferPlayback.current });
             return true;
           }
           if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {

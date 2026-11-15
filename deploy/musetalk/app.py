@@ -98,7 +98,7 @@ def run_job(job_id):
             if engine is None:
                 raise RuntimeError('Realtime engine unavailable')
             started = time.monotonic()
-            timing = {}
+            timing = {'durationSeconds': duration}
             def playable(milliseconds):
                 timing['firstFragmentMs'] = milliseconds
                 status(directory, {'status': 'STREAMING', **timing})

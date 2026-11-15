@@ -49,7 +49,8 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
         onPlaying={() => { clearStall(); setStalled(false); setMediaError(false); }}
         onTimeUpdate={event => {
           const position = event.currentTarget.currentTime;
-          if (!presentation && Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration>0) onProgress?.(position/event.currentTarget.duration);
+          const duration = state.durationSeconds || event.currentTarget.duration;
+          if (!presentation && Number.isFinite(duration) && duration>0) onProgress?.(Math.min(1,position/duration));
           if (Math.abs(position - resumeAt.current) > 0.01) { clearStall(); setStalled(false); }
           resumeAt.current = position;
         }}
