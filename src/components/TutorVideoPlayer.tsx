@@ -7,7 +7,8 @@ import type { TutorVideoState } from '../utils/useTutorVideoReply';
 export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona, active = true, showPresentation = true, onProgress, children }: {
   state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode; onProgress?: (progress: number | undefined) => void;
 }) {
-  const [fillFrame, setFillFrame] = useState(true);
+  // Calls show the complete portrait; the framing button remains available.
+  const [fillFrame, setFillFrame] = useState(showPresentation);
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   useEffect(() => {
     setWaitingSeconds(0);
@@ -42,7 +43,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
     {(state.status === 'ready' && state.url) || presentation ? <>
       <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
         poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay={!presentation && !state.manualPlayback} playsInline preload="metadata"
-        className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: '50% 28%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
+        className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: fillFrame ? '50% 28%' : '50% 50%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
         onPlay={() => { speechService.stop(); if (!presentation) onProgress?.(0); }}
         onWaiting={waitForPlayback} onStalled={waitForPlayback}
         onPlaying={() => { clearStall(); setStalled(false); setMediaError(false); }}
