@@ -1,3 +1,5 @@
+import { nationalSpeechPayload, NationalLanguageError } from './nationalLanguages.js';
+import { tutorLanguage, nationalVoiceAvailable, normalizeNationalSpeech } from '../shared/tutorLanguages.js';
 import { readSpeechPronunciation } from './speechPronunciation.js';
 import { normalizeSpeechPronunciation } from '../shared/speechPronunciation.js';
 import { createHash, createHmac } from 'node:crypto';
@@ -32,10 +34,13 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (!configured()) return res.status(503).json({ error: 'La vidéo MuseTalk n’est pas encore activée.' });
       const { text: raw, persona } = req.body || {};
       if (typeof raw !== 'string' || raw.length > 6000 || !personas.includes(persona)) return res.status(400).json({ error: 'Réponse ou tutrice invalide.' });
-      const text = normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.()));
+      const language=tutorLanguage(req.body?.language);
+      if (req.body?.language && req.body.language!==language) return res.status(400).json({error:'Langue invalide.'});
+      if (!nationalVoiceAvailable(language,raw)) return res.status(422).json({error:'Aucune voix installée ne peut lire ce passage dans la langue demandée.'});
+      const text = language==='fr' ? normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.())) : normalizeNationalSpeech(raw);
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency'])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency'])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {
@@ -49,15 +54,17 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', videoUrl: playbackUrl(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
       reserved = true;
-      const audio = await (deps.synthesize ? deps.synthesize(text, persona) : synthesizePiperTutor(text, persona).then(async value => value || await synthesizeCartesiaTutor(text, persona) || await synthesizeElevenTutor(text, persona)));
+      const national = language==='fr' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request});
+      const audio = national ? {audioBuffer:Buffer.from(national.audioData,'base64'),mimeType:national.mimeType} : await (deps.synthesize ? deps.synthesize(text, persona) : synthesizePiperTutor(text, persona).then(async value => value || await synthesizeCartesiaTutor(text, persona) || await synthesizeElevenTutor(text, persona)));
       if (!audio || audio.audioBuffer.length > 4_000_000 || audio.audioBuffer.length <= 44) throw new Error('NO_AUDIO');
       const submitted = await remote('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: audio.audioBuffer.toString('base64') }) });
       if (!submitted.ok || (await submitted.json()).id !== id) throw new Error('SUBMISSION_FAILED');
       await ref.update({ status: 'PENDING' });
       return res.status(202).json({ id });
-    } catch {
+    } catch (error) {
       // Keep the reservation after an uncertain submission, avoiding duplicate GPU work.
       if (reserved) await ref.update({ status: 'FAILED' }).catch(() => undefined);
+      if (error instanceof NationalLanguageError) return res.status(error.status).json({error:error.message});
       return res.status(503).json({ error: 'La vidéo n’a pas pu être préparée. Vous pouvez écouter la réponse en audio.' });
     }
   });

@@ -29,3 +29,16 @@ export function nationalVoiceAvailable(language: TutorLanguage, text = '') {
   if (language !== 'ln') return false;
   return !Array.from(text.normalize('NFC').toLowerCase()).some(char => /[\p{L}\p{M}\p{N}]/u.test(char) && !"abcdefghijklmnopqrstuvwyz012345678".includes(char));
 }
+
+/** Bound national speech requests without stripping accents or losing words. */
+export function nationalSpeechChunks(text: string, limit = 500): string[] {
+  const words=normalizeNationalSpeech(text).split(/\s+/).filter(Boolean);
+  const chunks:string[]=[];
+  let current='';
+  for (const word of words) {
+    if (current && current.length+1+word.length>limit) {chunks.push(current);current='';}
+    current=current ? current+' '+word : word;
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}

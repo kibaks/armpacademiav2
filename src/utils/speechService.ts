@@ -1,3 +1,4 @@
+import { nationalSpeechChunks } from '../../shared/tutorLanguages';
 import { tutorLanguage, type TutorLanguage, normalizeNationalSpeech } from '../../shared/tutorLanguages';
 import { normalizeSpeechPronunciation, parsePronunciationEntries, type PronunciationEntry } from '../../shared/speechPronunciation';
 import { providerRate } from './speechPlaybackProfile';
@@ -1211,6 +1212,7 @@ class SpeechService {
   public splitIntoSentences(raw: string, language: TutorLanguage = 'fr'): string[] {
     const clean = this.normalizeForSpeech(raw, language);
     if (!clean) return [];
+    if (language!=='fr') return nationalSpeechChunks(clean);
 
     // Do not split on ellipsis '...' so short greetings or transitions stay connected to their French sentence
     const rawChunks = clean.split(/(?<!\.\.)(?<=[.!?:\n])\s+/);

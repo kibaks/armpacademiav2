@@ -31,7 +31,7 @@ class Translation(BaseModel):
     language: str = Field(min_length=2, max_length=3)
 
 class Speech(BaseModel):
-    text: str = Field(min_length=1, max_length=600)
+    text: str = Field(min_length=1, max_length=3000)
     language: str = Field(min_length=2, max_length=3)
 
 @lru_cache(maxsize=1)
@@ -119,7 +119,15 @@ def speech(body: Speech):
         if missing:
             raise HTTPException(422, detail={'code': 'UNSUPPORTED_CHARACTERS', 'characters': missing})
         with torch.inference_mode():
-            audio = model(**tokenizer(text, return_tensors='pt')).waveform.squeeze().float().numpy()
+            import textwrap
+            chunks = textwrap.wrap(text, width=500, break_long_words=False, break_on_hyphens=False)
+            if any(len(chunk)>600 for chunk in chunks):
+                raise HTTPException(422, 'Word exceeds voice input limit')
+            pieces = []
+            for chunk in chunks:
+                if pieces: pieces.append(np.zeros(int(model.config.sampling_rate * 0.12), dtype=np.float32))
+                pieces.append(model(**tokenizer(chunk, return_tensors='pt')).waveform.squeeze().float().numpy())
+            audio = np.concatenate(pieces)
         if not np.isfinite(audio).all() or len(audio) < 100 or np.max(np.abs(audio)) < 0.001:
             raise HTTPException(503, 'Invalid voice output')
         wav = io.BytesIO()

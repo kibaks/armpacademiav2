@@ -713,14 +713,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const voiceToUse = customVoice || selectedVoice;
     const speedToUse = customSpeed || tutorSpeed;
 
-    if (spokenLanguage === 'fr' && playbackMode !== 'audio' && (playbackMode === 'video' || !isCallActive || isVideoCallActive)) {
+    if (playbackMode !== 'audio' && (playbackMode === 'video' || !isCallActive || isVideoCallActive)) {
       // Keep the player visible when a reply starts, including after hiding the portrait.
       if (!isVideoCallActive) setShowStudioStage(true);
       setExplanationVideoProgress(undefined);
       // Prefer the synchronized video, but bound the wait for slow renderers.
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const ready = await Promise.race([
-        tutorVideo.start(clean, voiceToUse, true, true, true),
+        tutorVideo.start(clean, voiceToUse, true, true, true, spokenLanguage),
         new Promise<false>(resolve=>{ timeout=setTimeout(()=>resolve(false),8000); }),
       ]);
       if (timeout) clearTimeout(timeout);
@@ -728,7 +728,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       if (ready) return;
       tutorVideo.deferAutomaticPlayback();
     }
-    if (playbackMode === 'audio' || spokenLanguage !== 'fr') tutorVideo.stop();
+    if (playbackMode === 'audio') tutorVideo.stop();
 
     if (msgId) setActiveSpeakingMsgId(msgId);
     setSpokenSubtitle(clean.split(/(?<=[.!?…])\s+/)[0] || clean.slice(0, 140));
@@ -1028,6 +1028,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   };
 
   const startCall = async (tutorId?: VoicePersona) => {
+    if (language!=='fr' && !nationalCapabilities.speech.includes(language)) { showNotice('Aucune voix n’est installée pour un appel dans cette langue.'); return; }
     speechService.unlockAudio();
     recordActionRef.current = 'cancel';
     if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
@@ -1055,13 +1056,14 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const firstName = currentProfile.name ? currentProfile.name.split(' ')[0] : 'cher collègue';
     callGreetingTimerRef.current = setTimeout(() => {
       setIsCallConnecting(false);
-      const greetingText = tutorObj.greeting(firstName);
+      const greetingText = language==='ln' ? 'Mbote. Tokoyekola elongo.' : language==='sw' ? 'Habari. Tutajifunza pamoja.' : tutorObj.greeting(firstName);
       setSpokenSubtitle(greetingText);
-      speak(greetingText, `call-greet-${Date.now()}`, targetVoice, tutorSpeed, 'fr', 'audio');
+      speak(greetingText, `call-greet-${Date.now()}`, targetVoice, tutorSpeed, language, 'audio');
     }, 650);
   };
 
   const startVideoCall = async (tutorId?: VoicePersona) => {
+    if (language!=='fr' && !nationalCapabilities.speech.includes(language)) { showNotice('Aucune voix n’est installée pour une vidéo dans cette langue.'); return; }
     speechService.unlockAudio();
     recordActionRef.current = 'cancel';
     if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
@@ -1120,9 +1122,9 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     const firstName = currentProfile.name ? currentProfile.name.split(' ')[0] : 'cher collègue';
     callGreetingTimerRef.current = setTimeout(() => {
       setIsCallConnecting(false);
-      const greetingText = tutorObj.greeting(firstName);
+      const greetingText = language==='ln' ? 'Mbote. Tokoyekola elongo.' : language==='sw' ? 'Habari. Tutajifunza pamoja.' : tutorObj.greeting(firstName);
       setSpokenSubtitle(greetingText);
-      speak(greetingText, `visio-greet-${Date.now()}`, targetVoice, tutorSpeed, 'fr', 'video');
+      speak(greetingText, `visio-greet-${Date.now()}`, targetVoice, tutorSpeed, language, 'video');
     }, 650);
   };
 

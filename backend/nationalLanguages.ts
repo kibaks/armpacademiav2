@@ -64,7 +64,7 @@ export async function nationalSpeechPayload(text: string, language: TutorLanguag
 }
 export async function handleNationalSpeech(req: any, res: ExpressResponse) {
   try {
-    if (typeof req.body?.text !== 'string' || !req.body.text.trim() || req.body.text.length > 600) return res.status(400).json({ error: 'Choisissez un passage de 600 caractères maximum.' });
+    if (typeof req.body?.text !== 'string' || !req.body.text.trim() || req.body.text.length > 3000) return res.status(400).json({ error: 'Choisissez un passage de 3000 caractères maximum.' });
     return res.json(await nationalSpeechPayload(req.body.text, tutorLanguage(req.body.language)));
   } catch (error) {
     return res.status(error instanceof NationalLanguageError ? error.status : 503).json({ error: error instanceof NationalLanguageError ? error.message : 'La voix est momentanément indisponible.' });

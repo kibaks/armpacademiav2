@@ -23,6 +23,12 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
     synthesize: async () => ({ audioBuffer: Buffer.alloc(100, 1), mimeType: 'audio/wav' }),
     fetcher: (async (url: any, options: any) => {
       assert.equal(options.headers.authorization, 'Bearer private-key');
+      if (String(url).endsWith('/national/speech')) {
+        const body=JSON.parse(options.body);
+        records.set('national-request',body);
+        const audio=Buffer.alloc(100);audio.write('ID3');
+        return Response.json({language:body.language,provider:'national-vits',mimeType:'audio/mpeg',audioData:audio.toString('base64')});
+      }
       if (options.method === 'POST') { submissions++; return Response.json({ id: JSON.parse(options.body).id }); }
       if (String(url).endsWith('/media')) {
         if (options.headers.range === 'bytes=0-2') return new Response('mp4', { status: 206, headers: { 'content-range': 'bytes 0-2/8', 'content-length': '3', 'accept-ranges': 'bytes' } });
@@ -51,7 +57,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
     (router as any).handle(req, res, (error?: unknown) => reject(error || new Error('Unhandled route')));
   });
   const base = 'https://local.test/video';
-  const post = (text = 'Bonjour. Comparons les offres.') => request(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne' }) });
+  const post = (text = 'Bonjour. Comparons les offres.', language = 'fr') => request(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne', language }) });
   return { base, post, request, records, counts: () => ({ submissions, polls }), close: async () => undefined };
 
 }
@@ -127,4 +133,17 @@ test('only opted-in MSE clients receive a signed progressive stream, still bound
   assert.ok(!ready.videoUrl.includes('private-key'));
   assert.notEqual(h.records.get(`musetalkTutorJobs/${id}`).status, 'COMPLETED');
   assert.equal((await h.request(`${h.base}/${id}?progressive=1`, { headers: { authorization: 'other' } })).status, 404);
+});
+
+test('national video uses its own voice and distinct language cache without French pronunciation',async()=>{
+ const h=await harness();
+ const ln=await h.post('Mbote.','ln'); assert.equal(ln.status,202);
+ assert.deepEqual(h.records.get('national-request'),{text:'Mbote.',language:'ln'});
+ const lnId=(await ln.json()).id;
+ const sw=await h.post('Mbote.','sw'); assert.equal(sw.status,202);
+ assert.notEqual((await sw.json()).id,lnId);
+ assert.equal(h.records.get('national-request').language,'sw');
+ const calls=h.counts().submissions;
+ for(const [text,language] of [['Mbɔ́tɛ.','ln'],['Texte','kg'],['Texte','lua']]) assert.equal((await h.post(text,language)).status,422);
+ assert.equal(h.counts().submissions,calls);
 });

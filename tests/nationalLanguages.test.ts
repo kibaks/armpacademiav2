@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nationalLanguageConfig, translateTutorReply, nationalSpeechPayload, sendTutorReply } from '../backend/nationalLanguages';
-import { normalizeNationalSpeech, nationalVoiceAvailable } from '../shared/tutorLanguages';
+import { normalizeNationalSpeech, nationalVoiceAvailable, nationalSpeechChunks } from '../shared/tutorLanguages';
 const env = { MUSETALK_API_URL: 'https://engines.example/musetalk', MUSETALK_API_KEY: 'server-key' };
 test('national gateway reuses server authentication only on the known deployment path', () => {
   assert.deepEqual(nationalLanguageConfig(env), { url: 'https://engines.example/national', key: 'server-key' });
@@ -44,4 +44,12 @@ test('diacritics and national spelling are never rewritten as French phonetics',
   assert.equal(nationalVoiceAvailable('ln', 'e\u0301'), false);
   assert.equal(nationalVoiceAvailable('kg'), false);
   assert.equal(nationalVoiceAvailable('lua'), false);
+});
+
+test('long national narration is split without losing words or diacritics',()=>{
+ const text=('Habari, elimu na haki. Mbɔ́tɛ na bino. ').repeat(50).trim();
+ const chunks=nationalSpeechChunks(text);
+ assert.ok(chunks.length>1);
+ assert.ok(chunks.every(chunk=>chunk.length<=500));
+ assert.equal(chunks.join(' '),normalizeNationalSpeech(text));
 });
