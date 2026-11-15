@@ -3,13 +3,14 @@ import { authenticatedFetch } from '../lib/adminApi';
 import { openTutorVideoStream, supportsTutorVideoStream } from './tutorVideoStream';
 import { speechService } from './speechService';
 
-export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean };
+export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean; manualPlayback?: boolean };
 type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number; progressiveStreaming?: boolean };
 export function useTutorVideoReply(persona: string, active = true) {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
   const config = useRef<Promise<Config> | null>(null);
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
+  const backgroundAudio = useRef(false);
   const lastRequest = useRef<{ text: string; voice: string } | null>(null);
   const activeRef = useRef(active);
   const objectUrl = useRef<string | null>(null);
@@ -17,6 +18,7 @@ export function useTutorVideoReply(persona: string, active = true) {
   activeRef.current = active;
   const stop = useCallback(() => {
     releaseMedia();
+    backgroundAudio.current = false;
     generation.current++;
     controller.current?.abort();
     controller.current = null;
@@ -35,16 +37,17 @@ export function useTutorVideoReply(persona: string, active = true) {
     return () => { generation.current++; controller.current?.abort(); request.abort(); releaseMedia(); };
   }, [persona, active, stop]);
   useEffect(() => speechService.subscribe(value => {
-    if (value.isPlaying) {
+    if (value.isPlaying && !backgroundAudio.current) {
       generation.current++;
       controller.current?.abort();
       setState(previous => previous.status === 'idle' ? previous : { status: 'idle' });
     }
   }), []);
 
-  const start = async (text: string, voice: string, progressive = true): Promise<boolean> => {
+  const start = async (text: string, voice: string, progressive = true, alongsideAudio = false): Promise<boolean> => {
     if (!activeRef.current) return true;
-    speechService.stop();
+    backgroundAudio.current = alongsideAudio;
+    if (!alongsideAudio) speechService.stop();
     releaseMedia();
     const run = ++generation.current;
     controller.current?.abort();
@@ -60,7 +63,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     const deadline = AbortSignal.timeout(10 * 60 * 1000);
     const signal = AbortSignal.any([abort.signal, deadline]);
     const current = () => !signal.aborted && run === generation.current;
-    speechService.stop();
+    if (!alongsideAudio) speechService.stop();
     setState({ status: 'loading', stage: 'voice' });
     const stream = progressive && settings.progressiveStreaming && supportsTutorVideoStream();
     try {
@@ -86,7 +89,7 @@ export function useTutorVideoReply(persona: string, active = true) {
               // Retry the same cached job with ordinary playback if MSE fails.
               if (current()) void start(text, voice, false);
             });
-            setState({ status: 'ready', url: objectUrl.current, progressive: true });
+            setState({ status: 'ready', url: objectUrl.current, progressive: true, manualPlayback: alongsideAudio });
             return true;
           }
           if (/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)) {
@@ -97,7 +100,7 @@ export function useTutorVideoReply(persona: string, active = true) {
             objectUrl.current = URL.createObjectURL(blob);
             url = objectUrl.current;
           } else if (!url.startsWith('https://')) throw new Error('Vidéo indisponible.');
-          setState({ status: 'ready', url });
+          setState({ status: 'ready', url, manualPlayback: alongsideAudio });
           return true;
         }
         // Check immediately after creation; only wait between pending status requests.

@@ -473,6 +473,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     return () => { active = false; controller.abort(); };
   }, [isOpen]);
   const activeTutor = VIRTUAL_TUTORS.find((t) => t.id === selectedVoice) || VIRTUAL_TUTORS[0];
+  const [explanationVideoProgress,setExplanationVideoProgress] = useState<number | undefined>(undefined);
   const tutorVideo = useTutorVideoReply(selectedVoice, isOpen);
   const [tutorSpeed, setTutorSpeed] = useState<number>(0.95);
   const [showStudioStage, setShowStudioStage] = useState<boolean>(true);
@@ -711,9 +712,11 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     if (spokenLanguage === 'fr' && playbackMode !== 'audio' && (playbackMode === 'video' || !isCallActive || isVideoCallActive)) {
       // Keep the player visible when a reply starts, including after hiding the portrait.
       if (!isVideoCallActive) setShowStudioStage(true);
-      if (await tutorVideo.start(text, voiceToUse)) return;
+      setExplanationVideoProgress(undefined);
+      // Narration starts immediately; video preparation never blocks an explanation.
+      void tutorVideo.start(clean, voiceToUse, true, true);
     }
-    tutorVideo.stop();
+    if (playbackMode === 'audio' || spokenLanguage !== 'fr') tutorVideo.stop();
 
     if (msgId) setActiveSpeakingMsgId(msgId);
     setSpokenSubtitle(clean.split(/(?<=[.!?…])\s+/)[0] || clean.slice(0, 140));
@@ -727,6 +730,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
 
   const stopSpeaking = () => {
     tutorVideo.stop();
+    setExplanationVideoProgress(undefined);
     speechService.stop();
     setIsSpeaking(false);
     setActiveSpeakingMsgId(null);
@@ -1405,7 +1409,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           {showStudioStage && (
             <aside className="tutor-portrait-panel">
               <div className="tutor-portrait">
-                <TutorVideoPlayer persona={selectedVoice} active={!isVideoCallActive && !isCallActive} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
+                <TutorVideoPlayer onProgress={setExplanationVideoProgress} persona={selectedVoice} active={!isVideoCallActive && !isCallActive} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
                   <AishaAvatar isSpeaking={isSpeaking} isListening={isListening || isRecordingVoice} isLoading={isLoading} emotion={effectiveTutorEmotion} tutorPersona={selectedVoice} variant="studio" motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} showBadge={false} />
                 </TutorVideoPlayer>
 
@@ -1488,7 +1492,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                         )}
 
                         {/* Contenu formaté */}
-                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
+                        {illustratedReply ? <ReferenceExplanationStage key={msg.id} title={question} text={msg.text} autoPlay={isLastBotMsg && isOpen} progress={isLastBotMsg ? explanationVideoProgress : undefined} spokenText={isThisMsgSpeaking ? spokenSubtitle : undefined} onListen={() => speak(msg.text, msg.id)} /> : <div className="prose prose-sm dark:prose-invert max-w-none">
                           {renderMarkdown(msg.text)}
                         </div>}
 
@@ -2080,7 +2084,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           <div className="absolute inset-0 z-40 bg-slate-950 flex flex-col min-h-0 overflow-hidden">
             {/* Scène principale Visio HD */}
             <div className="flex-1 min-h-0 relative bg-slate-950 overflow-hidden flex items-center justify-center">
-              <TutorVideoPlayer persona={selectedVoice} showPresentation={false} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
+              <TutorVideoPlayer onProgress={setExplanationVideoProgress} persona={selectedVoice} showPresentation={false} state={tutorVideo.state} onStop={tutorVideo.stop} onAudioOnly={tutorVideo.listenWithoutVideo} onRetry={tutorVideo.retry}>
               <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures}
                 isSpeaking={isSpeaking}
                 isListening={isListening || isRecordingVoice}

@@ -48,6 +48,7 @@ class RealtimeEngine:
         with torch.inference_mode():
             features, length = rt.audio_processor.get_audio_feature('data/academia/reply.wav', weight_dtype=rt.weight_dtype)
             chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=25)
+            self._decode(chunks[:12], 0)
             self._decode(chunks[:20], 0)
         torch.cuda.synchronize()
 
@@ -70,20 +71,29 @@ class RealtimeEngine:
             features, length = rt.audio_processor.get_audio_feature(str(audio), weight_dtype=rt.weight_dtype)
             chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=25)
             height, width = avatar.frame_list_cycle[0].shape[:2]
-            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{width}x{height}', '-r', '25', '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '4', '-preset', 'veryfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '25', '-keyint_min', '25', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
+            # The portal displays a small portrait. Encode 480p rather than
+            # transporting 720p raw frames through the CPU encoder.
+            output_height = min(height, 480)
+            output_width = max(2, round(width * output_height / height / 2) * 2)
+            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{output_width}x{output_height}', '-r', '25', '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '4', '-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '12', '-keyint_min', '12', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
             announced = False
             # stderr goes to a file: never risk a full pipe blocking the encoder.
             with output.with_suffix('.encode.log').open('wb') as log:
                 process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=log)
                 try:
-                    for offset in range(0, len(chunks), 20):
-                        frames = self._decode(chunks[offset:offset+20], offset)
+                    offset = 0
+                    while offset < len(chunks):
+                        # Emit the first GOP sooner, then retain efficient GPU batches.
+                        batch = 12 if offset == 0 else 20
+                        frames = self._decode(chunks[offset:offset+batch], offset)
                         for index, face in enumerate(frames, offset):
                             pos = index % len(avatar.frame_list_cycle)
                             bbox = avatar.coord_list_cycle[pos]
                             x1,y1,x2,y2 = bbox
                             face = cv2.resize(face.astype(np.uint8), (x2-x1,y2-y1))
                             combined = get_image_blending(avatar.frame_list_cycle[pos], face, bbox, avatar.mask_list_cycle[pos], avatar.mask_coords_list_cycle[pos])
+                            if (width, height) != (output_width, output_height):
+                                combined = cv2.resize(combined, (output_width, output_height), interpolation=cv2.INTER_AREA)
                             process.stdin.write(combined.tobytes())
                         if not announced and output.exists():
                             with output.open('rb') as media:
@@ -91,6 +101,7 @@ class RealtimeEngine:
                                 announced = b'moof' in media.read(262144)
                             if announced:
                                 on_playable(round((time.monotonic()-started)*1000))
+                        offset += batch
                     process.stdin.close()
                     if process.wait(timeout=30) != 0:
                         raise RuntimeError('Fragment encoder failed')

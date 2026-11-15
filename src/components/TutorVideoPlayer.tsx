@@ -4,8 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { speechService } from '../utils/speechService';
 import type { TutorVideoState } from '../utils/useTutorVideoReply';
 
-export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona, active = true, showPresentation = true, children }: {
-  state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode;
+export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona, active = true, showPresentation = true, onProgress, children }: {
+  state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode; onProgress?: (progress: number | undefined) => void;
 }) {
   const [fillFrame, setFillFrame] = useState(true);
   const [waitingSeconds, setWaitingSeconds] = useState(0);
@@ -37,17 +37,18 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
     if (value.isPlaying) videoRef.current?.pause();
   }), []);
   const presentation = showPresentation && state.status === 'idle' && persona !== 'henri';
-  if (!active || (state.status === 'idle' && !presentation) || audioPlaying) return <>{children}</>;
+  if (!active || (state.status === 'idle' && !presentation) || (audioPlaying && !state.manualPlayback)) return <>{children}</>;
   return <div className="tutor-video-player relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl bg-slate-950 text-white">
     {(state.status === 'ready' && state.url) || presentation ? <>
       <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
-        poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay={!presentation} playsInline preload="metadata"
+        poster="/assets/tutrice-portrait-v1.jpg" controls autoPlay={!presentation && !state.manualPlayback} playsInline preload="metadata"
         className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: '50% 28%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
-        onPlay={() => speechService.stop()}
+        onPlay={() => { speechService.stop(); if (!presentation) onProgress?.(0); }}
         onWaiting={waitForPlayback} onStalled={waitForPlayback}
         onPlaying={() => { clearStall(); setStalled(false); setMediaError(false); }}
         onTimeUpdate={event => {
           const position = event.currentTarget.currentTime;
+          if (!presentation && !event.currentTarget.paused && Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration>0) onProgress?.(position/event.currentTarget.duration);
           if (Math.abs(position - resumeAt.current) > 0.01) { clearStall(); setStalled(false); }
           resumeAt.current = position;
         }}
@@ -56,9 +57,10 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
           if (retryPosition.current > 0) event.currentTarget.currentTime = Math.min(retryPosition.current, event.currentTarget.duration || retryPosition.current);
           retryPosition.current = 0;
         }}
-        onEnded={() => { clearStall(); if (!presentation) onStop(); }}
+        onEnded={() => { clearStall(); if (!presentation) { onProgress?.(undefined); onStop(); } }}
         onError={() => { clearStall(); setMediaError(true); }} />
         <button type="button" onClick={() => setFillFrame(value => !value)} title={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} aria-label={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} className="absolute left-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/65 text-white">{fillFrame ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+        {!presentation && state.manualPlayback && <p className="pointer-events-none absolute bottom-14 left-3 right-3 z-10 rounded-lg bg-slate-950/75 p-2 text-center text-xs text-white">Vidéo prête · Appuyez sur lecture pour passer à la vidéo</p>}
         {!presentation && state.progressive && <p className="tutor-video-label pointer-events-none absolute left-14 right-14 top-3 z-10 rounded-lg bg-slate-950/65 px-2 py-1 text-center text-[10px] text-blue-100">Lecture progressive · voix et visage synchronisés</p>}
         {presentation ? <p className="tutor-video-label pointer-events-none absolute left-14 right-3 top-3 z-10 rounded-lg bg-slate-950/65 p-1 text-center text-[10px] text-slate-100">Extrait de présentation · Comparer les offres</p> : <>
           {(mediaError || stalled) && <div role="status" className="absolute inset-2 z-30 flex flex-col items-center justify-center rounded-xl bg-slate-950/90 p-2 text-center text-sm">
@@ -74,7 +76,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
             }}>Reprendre la vidéo</button>
             <button type="button" onClick={onAudioOnly} className="min-h-11 px-3 underline">Écouter en audio</button>
           </div>}
-          <button type="button" onClick={onStop} title="Fermer la vidéo" aria-label="Fermer la vidéo" className="absolute right-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/65 text-white"><X size={16} /></button>
+          <button type="button" onClick={()=>{onProgress?.(undefined);onStop();}} title="Fermer la vidéo" aria-label="Fermer la vidéo" className="absolute right-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/65 text-white"><X size={16} /></button>
         </>}
     </> : <>
       <div className="absolute inset-0 opacity-60">{children}</div>
