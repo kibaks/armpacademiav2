@@ -19,3 +19,15 @@ test('malformed history cannot inject system roles and unavailable replies inven
   assert.deepEqual(tutorUnavailableReply().sources, []);
   assert.match(tutorUnavailableReply().reply, /ne peux pas/);
 });
+
+test('stable course context precedes changing questions and the current question is not duplicated', () => {
+ const question = 'Et pour le besoin ?';
+ const history = [{ sender: 'tuteur', text: 'Définissez le résultat attendu.' }, { sender: 'user', text: question }];
+ const first = tutorConversationData(question, history, 'Profil', 'Leçon', 'Extrait complet');
+ const second = tutorConversationData('Une autre question ?', history.slice(0, -1), 'Profil', 'Leçon', 'Extrait complet');
+ const data = JSON.parse(first.slice(first.indexOf('{')));
+ assert.equal(data.historique.length, 1);
+ assert.equal(data.question, question);
+ assert.ok(first.indexOf('extraitsDuCours') < first.indexOf('historique'));
+ assert.equal(first.slice(0, first.indexOf('"question"')), second.slice(0, second.indexOf('"question"')));
+});

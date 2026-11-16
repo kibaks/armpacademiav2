@@ -8,13 +8,15 @@ import app as service
 
 class Tokenizer:
     eos_token_id = 2
+    pad_token_id = 1
     src_lang = None
-    def __call__(self, text, **kwargs): return {'input_ids': torch.ones(1, 3, dtype=torch.long)}
+    def __call__(self, text, **kwargs): return {'input_ids': torch.ones(len(text) if isinstance(text, list) else 1, 3, dtype=torch.long)}
     def convert_tokens_to_ids(self, code): return {'fra_Latn': 10, 'lin_Latn': 11, 'swh_Latn': 12, 'kon_Latn': 13, 'lua_Latn': 14}[code]
-    def batch_decode(self, output, **kwargs): return ['Réponse entière.']
+    def batch_decode(self, output, **kwargs): return ['Réponse entière.'] * len(output)
     def get_vocab(self): return {char: index for index, char in enumerate('abcdefghijklmnopqrstuvwxyz')}
 class Model:
-    def generate(self, **kwargs): return torch.tensor([[0, kwargs['forced_bos_token_id'], 2]])
+    device = 'cpu'
+    def generate(self, **kwargs): return torch.tensor([[0, kwargs['forced_bos_token_id'], 2]] * len(kwargs['input_ids']))
 class ApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(service.app)
@@ -42,6 +44,16 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(tokenizer.src_lang, 'lin_Latn')
             self.assertEqual(response.json()['language'], 'fr')
+    def test_batched_translation_preserves_blank_paragraphs(self):
+        with patch.object(service, 'translation_engine', return_value=(Tokenizer(), Model())):
+            response = self.client.post('/translate', headers=self.headers, json={'text': 'Premier paragraphe.\n\nDeuxième paragraphe.\n', 'language': 'sw'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['text'], 'Réponse entière.\n\nRéponse entière.\n')
+    def test_incomplete_batch_never_returns_partial_translation(self):
+        model = Model()
+        with patch.object(service, 'translation_engine', return_value=(Tokenizer(), model)), patch.object(model, 'generate', return_value=torch.tensor([[0, 12, 2], [0, 12, 99]])):
+            response = self.client.post('/translate', headers=self.headers, json={'text': 'Premier.\nSecond.', 'language': 'sw'})
+            self.assertEqual(response.status_code, 503)
     def test_unsupported_characters_are_rejected_before_synthesis(self):
         with patch.object(service, 'voice_engine', return_value=(Tokenizer(), None)):
             response = self.client.post('/speech', headers=self.headers, json={'text': 'Mbɔ́tɛ', 'language': 'ln'})

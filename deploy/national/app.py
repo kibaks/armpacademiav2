@@ -47,6 +47,10 @@ def translation_engine():
     state = torch.load(folder / 'pytorch_model.bin', map_location='cpu', weights_only=True)
     config = AutoConfig.from_pretrained(folder, local_files_only=True, trust_remote_code=False)
     model = AutoModelForSeq2SeqLM.from_pretrained(None, config=config, state_dict=state).eval()
+    device = os.environ.get('NATIONAL_TRANSLATION_DEVICE', 'cpu')
+    if device not in {'cpu', 'cuda:0'} or (device == 'cuda:0' and not torch.cuda.is_available()):
+        raise RuntimeError('Translation device unavailable')
+    model = model.to(device=device, dtype=torch.float16 if device == 'cuda:0' else torch.float32)
     return tokenizer, model
 
 @lru_cache(maxsize=2)
@@ -66,6 +70,15 @@ def voice_engine(language):
 def unsupported_letters(text, vocabulary):
     return sorted({char for char in unicodedata.normalize('NFC', text.lower()) if unicodedata.category(char)[0] in 'LMN' and char not in vocabulary})
 
+@app.on_event('startup')
+def warm_translation():
+    if os.environ.get('NATIONAL_TRANSLATION_DEVICE') == 'cuda:0':
+        translation_engine()
+
+@app.get('/health', dependencies=[Depends(authorize)])
+def health():
+    return {'translationDevice': os.environ.get('NATIONAL_TRANSLATION_DEVICE', 'cpu'), 'translationReady': translation_engine.cache_info().currsize > 0}
+
 @app.get('/capabilities', dependencies=[Depends(authorize)])
 def capabilities():
     return {'provider': 'national-local', 'translation': list(LANGUAGES), 'speech': list(VOICES) + [code for code in ('kg', 'lua') if code in os.environ.get('NATIONAL_EXTRA_VOICES', '').split(',')], 'limitations': {'ln': 'Voix locale lingala avec références natives : prononciation à vérifier.', 'sw': 'Accent congolais non validé.', 'kg': 'Kituba de RDC : voix locale expérimentale, prononciation à valider.', 'lua': 'OmniVoice local : prononciation à valider.'}, 'translationModel': 'facebook/nllb-200-distilled-600M', 'reviewRequired': True, 'license': 'non-commercial'}
@@ -81,23 +94,29 @@ def translate(body: Translation):
         tokenizer, model = translation_engine()
         tokenizer.src_lang = 'fra_Latn' if body.sourceLanguage == 'fr' else LANGUAGES[body.sourceLanguage]
         # Keep paragraph boundaries; never silently truncate a legal condition.
-        parts = unicodedata.normalize('NFC', body.text)
-        translated = []
-        for paragraph in parts.split('\n'):
-            if not paragraph.strip():
-                translated.append(paragraph)
-                continue
-            inputs = tokenizer(paragraph, return_tensors='pt', truncation=False)
+        parts = unicodedata.normalize('NFC', body.text).split('\n')
+        translated = list(parts)
+        active = [(index, paragraph) for index, paragraph in enumerate(parts) if paragraph.strip()]
+        # Small batches share decoder work without an unbounded GPU allocation.
+        for start in range(0, len(active), 4):
+            batch = active[start:start + 4]
+            inputs = tokenizer([paragraph for _, paragraph in batch], return_tensors='pt', padding=True, truncation=False)
             if inputs['input_ids'].shape[1] > 480:
                 raise HTTPException(422, 'Paragraph too long for a complete translation')
+            inputs = {key: value.to(model.device) for key, value in inputs.items()}
             with torch.inference_mode():
                 output = model.generate(**inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids('fra_Latn' if body.language == 'fr' else LANGUAGES[body.language]), max_new_tokens=768, num_beams=3)
-            if int(output[0, -1]) != tokenizer.eos_token_id:
-                raise HTTPException(503, 'Incomplete translation')
-            text = tokenizer.batch_decode(output, skip_special_tokens=True)[0].strip()
-            if not text:
+            for tokens in output.tolist():
+                # Batched outputs are padded after their EOS token.
+                while tokens and tokens[-1] == tokenizer.pad_token_id:
+                    tokens.pop()
+                if not tokens or tokens[-1] != tokenizer.eos_token_id:
+                    raise HTTPException(503, 'Incomplete translation')
+            texts = tokenizer.batch_decode(output, skip_special_tokens=True)
+            if len(texts) != len(batch) or any(not text.strip() for text in texts):
                 raise HTTPException(503, 'Empty translation')
-            translated.append(unicodedata.normalize('NFC', text))
+            for (index, _), text in zip(batch, texts):
+                translated[index] = unicodedata.normalize('NFC', text.strip())
         return {'text': '\n'.join(translated), 'language': body.language, 'provider': 'nllb-200', 'reviewRequired': True}
     except HTTPException:
         raise
