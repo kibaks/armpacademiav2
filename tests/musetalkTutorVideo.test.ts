@@ -18,10 +18,12 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
       tail = task.then(() => undefined, () => undefined); return task;
     },
   };
-  const router = createMuseTalkTutorVideoRouter({ db: () => db, env: { MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' },
+  const env = { MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' };
+  const router = createMuseTalkTutorVideoRouter({ db: () => db, env,
     authenticate: (req: any, res, next) => { if (!req.headers.authorization) return void res.sendStatus(401); req.identity = { uid: req.headers.authorization }; next(); },
     synthesize: async () => ({ audioBuffer: Buffer.alloc(100, 1), mimeType: 'audio/wav' }),
     fetcher: (async (url: any, options: any) => {
+      records.set('last-worker-url', String(url));
       assert.equal(options.headers.authorization, 'Bearer private-key');
       if (String(url).endsWith('/national/speech')) {
         const body=JSON.parse(options.body);
@@ -58,7 +60,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
   });
   const base = 'https://local.test/video';
   const post = (text = 'Bonjour. Comparons les offres.', language = 'fr') => request(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne', language }) });
-  return { base, post, request, records, counts: () => ({ submissions, polls }), close: async () => undefined };
+  return { base, post, request, records, env, counts: () => ({ submissions, polls }), close: async () => undefined };
 
 }
 test('MuseTalk submits once, protects generated media and never exposes the worker credential', async () => {
@@ -148,4 +150,14 @@ test('national video uses its own voice and distinct language cache without Fren
  const calls=h.counts().submissions;
  assert.equal((await h.post('Mbɔ́tɛ.','ln')).status,202);
  assert.equal(h.counts().submissions,calls+1);
+});
+
+test('a warm video router uses the rotated gateway for submission and signed playback', async()=>{
+ const h=await harness(); h.env.MUSETALK_API_URL='https://replacement.trycloudflare.com/musetalk';
+ const response=await h.post(); assert.equal(response.status,202);
+ assert.equal(h.records.get('last-worker-url'),'https://replacement.trycloudflare.com/musetalk/jobs');
+ const {id}=await response.json();
+ const result=await (await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}})).json();
+ assert.equal(new URL(result.videoUrl).origin,'https://replacement.trycloudflare.com');
+ assert.equal(new URL(result.audioUrl).origin,'https://replacement.trycloudflare.com');
 });

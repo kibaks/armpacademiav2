@@ -1,3 +1,4 @@
+import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './backend/engineGateway.js';
 import { createTutorMediaRouter } from './backend/tutorMediaHealth.js';
 import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './backend/nationalLanguages.js';
 import { tutorLanguage } from './shared/tutorLanguages.js';
@@ -67,6 +68,8 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '25mb' }));
 app.disable('x-powered-by');
+app.use('/api/engine-gateway', createEngineGatewayRouter());
+app.use(createEngineGatewayMiddleware());
 app.use('/api', authRouter);
 app.use('/api/cgpmp', cgpmpRouter);
 app.use('/api/storage', storageRouter);

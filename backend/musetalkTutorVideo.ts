@@ -17,9 +17,11 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   const router = Router(), env = deps.env || process.env, request = deps.fetcher || fetch;
   const db = () => deps.db?.() || services().db;
   let endpoint: URL | null = null;
-  try { const url = new URL(env.MUSETALK_API_URL || ''); if (url.protocol === 'https:' && !url.username && !url.password) endpoint = url; } catch { /* not configured */ }
-  const configured = () => env.TUTOR_VIDEO_ENABLED === 'true' && !!endpoint && !!env.MUSETALK_API_KEY;
+  const refreshEndpoint = () => { endpoint = null; try { const url = new URL(env.MUSETALK_API_URL || ''); if (url.protocol === 'https:' && !url.username && !url.password) endpoint = url; } catch { /* not configured */ } };
+  refreshEndpoint();
+  const configured = () => (refreshEndpoint(), env.TUTOR_VIDEO_ENABLED === 'true' && !!endpoint && !!env.MUSETALK_API_KEY);
   const playbackUrl = (id: string) => {
+    refreshEndpoint();
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;
     const token = createHmac('sha256', env.MUSETALK_API_KEY!).update(`${id}:${expires}`).digest('hex');
     return `${endpoint!.href.replace(/\/$/, '')}/jobs/${id}/play?expires=${expires}&token=${token}`;
@@ -28,7 +30,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
     const videoUrl=playbackUrl(id);
     return {videoUrl,audioUrl:videoUrl.replace('/play?','/audio?')};
   };
-  const remote = (suffix: string, init: RequestInit = {}) => request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) });
+  const remote = (suffix: string, init: RequestInit = {}) => { refreshEndpoint(); return request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) }); };
   router.use(deps.authenticate || authenticate);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: 'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: null, progressiveStreaming: env.MUSETALK_PROGRESSIVE === 'true' }));
