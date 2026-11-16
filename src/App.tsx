@@ -260,6 +260,7 @@ export default function App() {
     const timeout = window.setTimeout(() => setIsAppLoading(false), 12000);
     const reset = () => {
       setIsAuthenticated(false);
+      setInitiationDeadline(null);
       setProfiles(DEMO_PROFILES);
       setFirestoreProfiles([]);
       setRequests([]);
@@ -346,7 +347,7 @@ export default function App() {
   const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
   const [initiationDeadline, setInitiationDeadline] = useState<{ uid: string; expiresAt: number; enforced: boolean } | null>(null);
   useEffect(() => {
-    if (!isAuthenticated) { setVerifiedStage(null); return; }
+    if (!isAuthenticated) { setVerifiedStage(null); setInitiationDeadline(null); return; }
     const abort = new AbortController();
     void authenticatedFetch('/api/learning-level', { signal: abort.signal }).then(async response => {
       if (!response.ok) throw new Error('level-unavailable');
@@ -463,16 +464,21 @@ export default function App() {
   const handleLoginSuccess = async (profile: UserProfile) => {
     if (!auth.currentUser || auth.currentUser.uid !== profile.id) {
       showToast('Connectez-vous avec un compte Firebase réel.');
-      setIsAuthModalOpen(true); return;
+      setIsAuthModalOpen(true); return false;
     }
     const user = auth.currentUser;
     const generation = sessionGeneration.current;
     try {
     const response = await authenticatedFetch('/api/auth/session');
-    if (!response.ok) return;
+    if (!response.ok) {
+      const failure = await response.json();
+      throw new Error(failure.error || 'La réactivation de votre session doit être vérifiée.');
+    }
+    const session = await response.json();
+    setInitiationDeadline(session.initiation?.required && typeof session.initiation.expiresAt === 'number' ? { uid: user.uid, expiresAt: session.initiation.expiresAt, enforced: session.initiation.enforced === true } : null);
     try { profile = await getOrInitUserProfile(user); }
-    catch (error) { showToast(error instanceof Error ? error.message : 'Profil Firebase indisponible.'); return; }
-    if (auth.currentUser !== user || generation !== sessionGeneration.current) return;
+    catch (error) { showToast(error instanceof Error ? error.message : 'Profil Firebase indisponible.'); return false; }
+    if (auth.currentUser !== user || generation !== sessionGeneration.current) return false;
     window.dispatchEvent(new Event('academia-session-verified'));
     setIsAuthModalOpen(false);
 
@@ -491,7 +497,8 @@ export default function App() {
       setTimeout(() => setIsPlacementOpen(true), 400);
       showToast('✅ Test de niveau débloqué — bienvenue !');
     }
-    } catch (error) { showToast(error instanceof Error ? error.message : 'Connexion indisponible.'); setIsAuthModalOpen(true); }
+    return true;
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Connexion indisponible.'); setIsAuthModalOpen(true); return false; }
   };
 
   // Fast institutional demo login

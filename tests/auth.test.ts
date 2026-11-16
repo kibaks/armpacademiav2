@@ -243,3 +243,25 @@ test('Gmail configuration enforces the deadline without Resend', async () => {
   try { assert.equal((await request('/private', 'gmail-expired')).status, 403); }
   finally { delete process.env.GMAIL_SMTP_USER; delete process.env.GMAIL_APP_PASSWORD; process.env.RESEND_API_KEY = 'test-key-never-sent'; }
 });
+
+test('a second expiry renews from verification time and cannot restore the previous deadline', async () => {
+  const uid = 'repeat-renewal';
+  const oldDeadline = Date.now() - 1000;
+  records.set('users/' + uid, { role: 'particulier', completedLessonsByCourse: { 'INIT-01': [0] } });
+  records.set('authAccounts/' + uid, { registeredAt: oldDeadline - 2 * INITIATION_WINDOW_MS,
+    initiationRenewedAt: oldDeadline - INITIATION_WINDOW_MS, initiationRenewalExpiresAt: oldDeadline, initiationExpiresAt: oldDeadline });
+  assert.equal((await request('/private', uid)).status, 403);
+  assert.equal((await request('/2fa/send', uid, { enroll: false })).status, 200);
+  const code = sentCode;
+  assert.equal((await request('/2fa/send', uid, { enroll: false })).status, 429);
+  assert.equal((await request('/2fa/verify', uid, { code })).status, 200);
+  for (let i = 0; i < 3; i++) {
+    const response = await request('/auth/session', uid);
+    assert.equal(response.status, 200);
+    const access = (await response.json()).initiation;
+    assert.equal(access.expired, false);
+    const account = records.get('authAccounts/' + uid);
+    assert.equal(access.expiresAt, account.initiationRenewalExpiresAt);
+    assert.equal(access.expiresAt, account.initiationRenewedAt + INITIATION_WINDOW_MS);
+  }
+});

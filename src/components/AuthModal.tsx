@@ -724,7 +724,7 @@ interface AuthModalProps {
   onClose: () => void;
   canClose?: boolean;
   allProfiles?: Record<string, UserProfile>;
-  onLoginSuccess?: (profile: UserProfile) => void;
+  onLoginSuccess?: (profile: UserProfile) => void | boolean | Promise<void | boolean>;
   onDemoLogin?: (role: UserRole) => void;
   initialRole?: UserRole;
   initialMode?: 'login' | 'register' | 'forgot_password';
@@ -973,7 +973,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   // ---------- 2FA : envoi / vérification du code ----------
+  const otpSendInFlight = useRef(false);
   const beginTwoFA = async (profile: UserProfile, enroll = !profile.twoFactorEnabled && !profile.initiationOtpRequired) => {
+    if (otpSendInFlight.current) return;
+    otpSendInFlight.current = true;
     setMode('login');
     setTwoFAProfile(profile);
     setOtp2FA('');
@@ -997,6 +1000,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setOtp2FAError('Serveur injoignable — réessayez.');
     } finally {
       setIsSending2FA(false);
+      otpSendInFlight.current = false;
     }
   };
 
@@ -1015,14 +1019,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setOtp2FAError(data.error || 'Code incorrect.');
         return;
       }
+      // Confirm the renewed server session before announcing success or reading Firestore.
+      const sessionResponse = await authenticatedFetch('/api/auth/session');
+      const session = await sessionResponse.json();
+      if (!sessionResponse.ok) throw new Error(session.error || 'La session reste indisponible. Réessayez.');
       onShowToast?.(twoFAProfile.initiationOtpRequired ? 'Accès réactivé pour cinq jours. Votre progression est conservée.' : `Double authentification validée — Bienvenue ${twoFAProfile.name}.`);
       const prof = auth.currentUser ? await getOrInitUserProfile(auth.currentUser) : twoFAProfile;
+      const accepted = await onLoginSuccess?.(prof);
+      if (accepted === false) throw new Error('Votre accès est réactivé, mais la session n’a pas pu être chargée. Reconnectez-vous.');
       setTwoFAProfile(null);
       setOtp2FA('');
-      onLoginSuccess?.(prof);
       onClose();
-    } catch {
-      setOtp2FAError('Serveur injoignable — réessayez.');
+    } catch (error) {
+      setOtp2FAError(error instanceof Error ? error.message : 'Serveur injoignable — réessayez.');
     } finally {
       setIsVerifying2FA(false);
     }
