@@ -1,7 +1,7 @@
 import { initiationNotificationsRouter } from './initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './engineGateway.js';
 import { createTutorMediaRouter } from './tutorMediaHealth.js';
-import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './nationalLanguages.js';
+import { nationalSpeechPayload, sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './nationalLanguages.js';
 import { tutorLanguage } from '../shared/tutorLanguages.js';
 import { operationsRouter } from './operations.js';
 import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './tutorVoiceInput.js';
@@ -863,6 +863,7 @@ async function synthesizeWithGoogleTranslateTTS(text: string): Promise<TtsSynthe
 async function synthesizeSpeech(text: string, voiceChoice: string = 'denise'): Promise<CachedTtsPayload> {
   const cleanSentence = text.trim().slice(0, piperConfigured() ? 3000 : 950);
   const voiceKey = voiceChoice.toLowerCase();
+  if (process.env.TUTOR_CONSISTENT_VOICE === 'true') return nationalSpeechPayload(cleanSentence, 'fr', { voice: voiceKey });
 
   const piper = await synthesizePiperTutor(cleanSentence, voiceKey);
   if (piper) {
@@ -938,6 +939,7 @@ const DEFAULT_TTS_SETTINGS = {
 app.get(['/api/tts/settings', '/tts/settings'], (_req, res) => {
   res.json({
     ...DEFAULT_TTS_SETTINGS,
+    consistentVoice: process.env.TUTOR_CONSISTENT_VOICE === 'true',
     defaultVoiceMode: piperConfigured() || process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: {
       piper: piperConfigured(),
@@ -963,7 +965,7 @@ app.post(['/api/tts/settings', '/tts/settings'], (_req, res) => {
 // Main TTS Endpoint
 // ------------------------------------------------------------------
 app.post(['/api/ai/tts', '/ai/tts'], async (req, res) => {
-  if (tutorLanguage(req.body?.language) !== 'fr') return handleNationalSpeech(req, res);
+  if (process.env.TUTOR_CONSISTENT_VOICE === 'true' || tutorLanguage(req.body?.language) !== 'fr') return handleNationalSpeech(req, res);
   try {
     const rawText = (req.body?.text || '').toString().trim();
     const voiceChoice = (req.body?.voice || 'denise').toString().toLowerCase();

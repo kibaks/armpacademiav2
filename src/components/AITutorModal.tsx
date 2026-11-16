@@ -453,7 +453,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [language, setLanguage] = useState<TutorLanguage>('fr');
   const [inputLanguage, setInputLanguage] = useState<TutorLanguage>('fr');
-  const [nationalCapabilities, setNationalCapabilities] = useState<{ translation: string[]; speech: string[] }>({ translation: [], speech: [] });
+  const [nationalCapabilities, setNationalCapabilities] = useState<{ translation: string[]; speech: string[]; consistentVoice: boolean }>({ translation: [], speech: [], consistentVoice: false });
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
   const [voiceMode, setVoiceMode] = useState(() => speechService.getVoiceMode());
   const [isVoiceLoading, setIsVoiceLoading] = useState(false);
@@ -462,7 +462,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     if (!isOpen) return;
     let active = true;
     const controller = new AbortController();
-    fetch('/api/tutor/languages', { signal: controller.signal }).then(response => response.ok ? response.json() : null).then(data => { if (active && data) setNationalCapabilities({ translation: Array.isArray(data.translation) ? data.translation : [], speech: Array.isArray(data.speech) ? data.speech : [] }); }).catch(() => {});
+    fetch('/api/tutor/languages', { signal: controller.signal }).then(response => response.ok ? response.json() : null).then(data => { if (active && data) setNationalCapabilities({ consistentVoice: data.consistentVoice === true, translation: Array.isArray(data.translation) ? data.translation : [], speech: Array.isArray(data.speech) ? data.speech : [] }); }).catch(() => {});
     speechService.loadVoiceModeDefault().then(mode => { if (active) setVoiceMode(mode); });
     fetch('/api/tutor/presentation', { signal: controller.signal }).then(r => r.ok ? r.json() : null).then(data => {
       if (!active || !data) return;
@@ -1402,7 +1402,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                 <label>Langue de réponse<select value={language} onChange={event => { stopSpeaking(); setLanguage(tutorLanguage(event.target.value)); }}>{TUTOR_LANGUAGES.map(item => <option key={item.code} value={item.code} disabled={item.code !== 'fr' && !nationalCapabilities.translation.includes(item.code)}>{item.label}</option>)}</select></label>
                 <label>Langue de ma question<select value={inputLanguage} onChange={event => setInputLanguage(tutorLanguage(event.target.value))}>{TUTOR_LANGUAGES.map(item => <option key={item.code} value={item.code} disabled={item.code !== 'fr' && !nationalCapabilities.translation.includes(item.code)}>{item.label}</option>)}</select></label>
                 {(language !== 'fr' || inputLanguage !== 'fr') && <p role="status">Traduction automatique à vérifier. {language === 'fr' ? '' : language === 'ln' ? 'Voix locale lingala : prononciation à vérifier.' : language === 'sw' ? 'L’accent congolais reste à valider.' : nationalCapabilities.speech.includes(language) ? (language === 'kg' ? 'Voix locale expérimentale en kituba de RDC : vérifiez la prononciation.' : 'Voix locale tshiluba : prononciation à vérifier.') : 'Lecture audio indisponible dans cette langue.'} Les notes vocales sont transcrites en français.</p>}
-                <label>Voix<select value={language === 'fr' ? voiceMode : 'studio'} disabled={language !== 'fr'} onChange={event => { const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode); }}><option value="studio">Voix naturelle</option><option value="device">Voix de cet appareil</option></select></label>
+                <label>Voix<select value={nationalCapabilities.consistentVoice || language !== 'fr' ? 'studio' : voiceMode} disabled={nationalCapabilities.consistentVoice || language !== 'fr'} onChange={event => { const mode = event.target.value as 'studio' | 'device'; speechService.setVoiceMode(mode); setVoiceMode(mode); }}><option value="studio">{nationalCapabilities.consistentVoice ? 'Même voix dans toutes les langues' : 'Voix naturelle'}</option><option value="device">Voix de cet appareil</option></select></label>
                 <label>Vitesse<select value={tutorSpeed} onChange={e => setTutorSpeed(Number(e.target.value))}><option value={0.88}>Posée</option><option value={0.95}>Équilibrée</option><option value={1.1}>Rapide</option></select></label>
                 <label className="tutor-option-check"><input type="checkbox" checked={autoSpeak && (language === 'fr' || nationalCapabilities.speech.includes(language))} disabled={language !== 'fr' && !nationalCapabilities.speech.includes(language)} onChange={e => { userChangedAutoSpeak.current = true; if (!e.target.checked) stopSpeaking(); setAutoSpeak(e.target.checked); }} />Lire les réponses à voix haute</label>
                 <label className="tutor-option-check"><input type="checkbox" checked={showStudioStage} onChange={e => setShowStudioStage(e.target.checked)} />Afficher le portrait</label>

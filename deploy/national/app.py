@@ -10,6 +10,7 @@ import threading
 import unicodedata
 
 from fastapi import FastAPI, Header, HTTPException, Depends
+from typing import Literal
 from pydantic import BaseModel, Field
 
 ROOT = Path(os.environ.get('NATIONAL_MODEL_DIR', '/workspace/academia/models/national-language-evaluation'))
@@ -31,6 +32,8 @@ class Translation(BaseModel):
     language: str = Field(min_length=2, max_length=3)
 
 class Speech(BaseModel):
+    voice: Literal['female', 'male'] = 'female'
+    voiceMode: Literal['native', 'consistent'] = 'native'
     text: str = Field(min_length=1, max_length=3000)
     language: str = Field(min_length=2, max_length=3)
 
@@ -105,7 +108,7 @@ def translate(body: Translation):
 
 @app.post('/speech', dependencies=[Depends(authorize)])
 def speech(body: Speech):
-    if body.language in {'ln', 'kg', 'lua'} and body.language in os.environ.get('NATIONAL_EXTRA_VOICES', '').split(','):
+    if (body.voiceMode == 'consistent' and body.language in {'fr', *LANGUAGES}) or (body.language in {'ln', 'kg', 'lua'} and body.language in os.environ.get('NATIONAL_EXTRA_VOICES', '').split(',')):
         import httpx
         try:
             response = httpx.post('http://127.0.0.1:8065/speech', json=body.model_dump(), headers={'Authorization': 'Bearer ' + KEY}, timeout=175, follow_redirects=False)

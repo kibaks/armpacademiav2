@@ -46,7 +46,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const text = language==='fr' ? normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.())) : normalizeNationalSpeech(raw);
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : [])])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : [])])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {
@@ -60,7 +60,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', ...playbackMedia(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
       reserved = true;
-      const national = language==='fr' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request});
+      const national = language==='fr' && env.TUTOR_CONSISTENT_VOICE !== 'true' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request,voice:persona});
       const audio = national ? {audioBuffer:Buffer.from(national.audioData,'base64'),mimeType:national.mimeType} : await (deps.synthesize ? deps.synthesize(text, persona) : synthesizePiperTutor(text, persona).then(async value => value || await synthesizeCartesiaTutor(text, persona) || await synthesizeElevenTutor(text, persona)));
       if (!audio || audio.audioBuffer.length > 4_000_000 || audio.audioBuffer.length <= 44) throw new Error('NO_AUDIO');
       const submitted = await remote('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: audio.audioBuffer.toString('base64') }) });

@@ -1,7 +1,7 @@
 import { initiationNotificationsRouter } from './backend/initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './backend/engineGateway.js';
 import { createTutorMediaRouter } from './backend/tutorMediaHealth.js';
-import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './backend/nationalLanguages.js';
+import { nationalSpeechPayload, sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './backend/nationalLanguages.js';
 import { tutorLanguage } from './shared/tutorLanguages.js';
 import { operationsRouter } from './backend/operations.js';
 import { createTutorVoiceInput, createTutorVoiceMediaRouter } from './backend/tutorVoiceInput.js';
@@ -948,6 +948,8 @@ interface CachedTtsPayload {
   audioData: string;
   mimeType: string;
   provider:
+    | 'national-omnivoice'
+    | 'national-vits'
     | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'
@@ -1478,6 +1480,7 @@ function ttsAvailability() {
 app.get('/api/tts/settings', (_req, res) => {
   res.json({
     ...loadTtsSettings(),
+    consistentVoice: process.env.TUTOR_CONSISTENT_VOICE === 'true',
     browserFallback: true,
     defaultVoiceMode: piperConfigured() || process.env.CARTESIA_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.GEMINI_API_KEY ? 'studio' : 'device',
     availability: ttsAvailability(),
@@ -1529,6 +1532,7 @@ async function getOrSynthesizeTtsPayload(
   )
     ? requestedVoiceKey
     : 'vivienne';
+  if (process.env.TUTOR_CONSISTENT_VOICE === 'true') return nationalSpeechPayload(cleanText, 'fr', { voice: voiceKey });
   const emoKey = (emotion || detectServerSentenceEmotion(cleanText)).toLowerCase();
   const cacheKey = `tutor_authority_v33_piper_passages::${voiceKey}::${emoKey}::${cleanText}`;
   const cached = ttsMemoryCache.get(cacheKey) || loadTtsFromDisk(cacheKey);
@@ -1658,7 +1662,7 @@ app.post('/api/ai/tts/prewarm', async (req, res) => {
 
 // Expressive Neural Human Voice TTS Endpoint for Aïsha (ElevenLabs v2 + Vivienne HD / Denise / Eloise / Charline + Word Boundaries)
 app.post('/api/ai/tts', async (req, res) => {
-  if (tutorLanguage(req.body?.language) !== 'fr') return handleNationalSpeech(req, res);
+  if (process.env.TUTOR_CONSISTENT_VOICE === 'true' || tutorLanguage(req.body?.language) !== 'fr') return handleNationalSpeech(req, res);
   try {
     const { text, voice, emotion } = req.body || {};
     if (!text || typeof text !== 'string' || !text.trim()) {

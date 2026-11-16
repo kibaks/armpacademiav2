@@ -59,3 +59,22 @@ test('long national narration is split without losing words or diacritics',()=>{
  assert.ok(chunks.every(chunk=>chunk.length<=500));
  assert.equal(chunks.join(' '),normalizeNationalSpeech(text));
 });
+
+test('consistent identity is preserved across all languages and mismatched speakers are refused', async () => {
+ const consistentEnv = { ...env, TUTOR_CONSISTENT_VOICE: 'true' };
+ const audio = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(100)]).toString('base64');
+ for (const language of ['fr', 'ln', 'sw', 'kg', 'lua'] as const) {
+  for (const voice of ['vivienne', 'henri']) {
+   const voiceId = voice === 'henri' ? 'academia-male-v1' : 'academia-female-v1';
+   const result = await nationalSpeechPayload('Texte ɛ́', language, { env: consistentEnv, voice, fetcher: async (_url, options) => {
+    const body = JSON.parse(options!.body as string);
+    assert.equal(body.voiceMode, 'consistent');
+    assert.equal(body.voice, voice === 'henri' ? 'male' : 'female');
+    assert.equal(body.language, language);
+    return Response.json({ language, voiceId, provider: 'national-omnivoice', mimeType: 'audio/mpeg', audioData: audio });
+   } });
+   assert.equal(result.voiceId, voiceId);
+  }
+ }
+ await assert.rejects(nationalSpeechPayload('Habari', 'sw', { env: consistentEnv, fetcher: async () => Response.json({ language: 'sw', voiceId: 'different', provider: 'national-omnivoice', mimeType: 'audio/mpeg', audioData: audio }) }));
+});

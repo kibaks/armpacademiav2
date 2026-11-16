@@ -52,6 +52,8 @@ export interface SpeechPlaybackState {
   voiceProvider?:
     | 'national-vits'
     | 'national-omnivoice'
+    | 'national-omnivoice'
+    | 'national-vits'
     | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'
@@ -642,16 +644,18 @@ class SpeechService {
   private lastModeReadAt = 0;
   private cartesiaAvailable = false;
   private piperAvailable = false;
+  private consistentVoice = false;
   public loadVoiceModeDefault(): Promise<'studio' | 'device'> {
     if (this.lastModeReadAt && Date.now() - this.lastModeReadAt < 60000) return Promise.resolve(this.getVoiceMode());
     if (this.modeLoading) return this.modeLoading;
     this.modeLoading = (async () => {
-      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.piperAvailable = !!data.availability?.piper; this.cartesiaAvailable = !!data.availability?.cartesia && !this.piperAvailable; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
+      try { const response = await fetch('/api/tts/settings', { signal: AbortSignal.timeout(2500) }); if (response.ok) { const data = await response.json(); this.consistentVoice = data.consistentVoice === true; this.defaultVoiceMode = data.defaultVoiceMode === 'studio' ? 'studio' : 'device'; this.piperAvailable = !!data.availability?.piper; this.cartesiaAvailable = !!data.availability?.cartesia && !this.piperAvailable; this.lastModeReadAt = Date.now(); } } catch { /* Keep device playback when configuration cannot be loaded. */ }
       return this.getVoiceMode();
     })().finally(() => { this.modeLoading = null; });
     return this.modeLoading;
   }
   public getVoiceMode(): 'studio' | 'device' {
+    if (this.consistentVoice) return 'studio';
     if (this.explicitVoiceMode) return this.explicitVoiceMode;
     try { return readTutorVoiceMode(localStorage, this.defaultVoiceMode); } catch { return this.defaultVoiceMode; }
   }
@@ -1503,7 +1507,7 @@ class SpeechService {
     language: TutorLanguage = 'fr'
   ): Promise<DecodedNeuralEntry | null> {
     if ((language === 'fr' && (this.getVoiceMode() === 'device' || !this.neuralTtsAvailable)) || !sentence.trim()) return null;
-    const cacheKey = `tutor_voice_v9::${language}::${voice}::${sentence}`;
+    const cacheKey = `tutor_voice_v10::${language}::${voice}::${sentence}`;
     const cached = this.audioBufferCache.get(cacheKey);
     if (cached) return cached;
 
@@ -1523,7 +1527,7 @@ class SpeechService {
         for (let attempt = 0; attempt <= NEURAL_BACKOFF_MS.length; attempt++) {
           try {
             const controller = new AbortController();
-            const requestTimeout = ['kg', 'lua'].includes(language) ? 180000 : this.piperAvailable ? Math.max(timeoutMs, Math.min(90000, 10000 + sentence.length * 40)) : timeoutMs;
+            const requestTimeout = this.consistentVoice || ['kg', 'lua'].includes(language) ? 180000 : this.piperAvailable ? Math.max(timeoutMs, Math.min(90000, 10000 + sentence.length * 40)) : timeoutMs;
             const timeoutId = window.setTimeout(() => controller.abort(), requestTimeout);
 
             const response = await authenticatedFetch('/api/ai/tts', {
@@ -1807,7 +1811,7 @@ class SpeechService {
 
     // 1. Primary: Human French Neural Voice (fr-FR-DeniseNeural / Prof. Aïsha)
     if ((language !== 'fr' || this.neuralTtsAvailable) && (language !== 'fr' || this.getVoiceMode() !== 'device')) {
-      const cacheKey = `tutor_voice_v9::${language}::${voiceName}::${sentence}`;
+      const cacheKey = `tutor_voice_v10::${language}::${voiceName}::${sentence}`;
       if (!this.audioBufferCache.has(cacheKey)) {
         this.state = {
           ...this.state,

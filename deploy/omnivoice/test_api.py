@@ -34,4 +34,21 @@ class NativeSpeechTests(unittest.TestCase):
             self.assertEqual(model.calls[0]['voice_clone_prompt'],'native-reference')
             self.assertEqual(model.calls[0]['language'],language if language!='kg' else None)
             prompt.assert_called_once_with(language)
+
+class ConsistentSpeechTests(unittest.TestCase):
+    def test_every_language_reuses_the_same_reference(self):
+        client = TestClient(service.app)
+        headers = {'Authorization': 'Bearer ' + service.KEY}
+        for voice in ('female', 'male'):
+            for language in ('fr', 'ln', 'sw', 'kg', 'lua'):
+                model = Engine()
+                with patch.object(service, 'engine', return_value=model), patch.object(service, 'consistent_prompt', return_value='shared-speaker') as prompt, patch.object(service, 'native_prompt') as native:
+                    response = client.post('/speech', headers=headers, json={'text': 'Bonjour Mbote Moyo', 'language': language, 'voice': voice, 'voiceMode': 'consistent'})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()['voiceId'], 'academia-' + voice + '-v1')
+                prompt.assert_called_once_with(voice)
+                native.assert_not_called()
+                self.assertEqual(model.calls[0]['voice_clone_prompt'], 'shared-speaker')
+                self.assertEqual(model.calls[0]['language'], None if language == 'kg' else language)
+
 if __name__ == '__main__': unittest.main()

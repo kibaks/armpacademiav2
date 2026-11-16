@@ -16,3 +16,11 @@ Aucun appel à Gemini ou autre API vocale payante. Les caractères et diacritiqu
 Le worker national active ces profils avec `NATIONAL_EXTRA_VOICES=ln,kg,lua` seulement après les essais réels. Il conserve NLLB pour la traduction, dont la variété kituba de RDC n'est pas garantie et reste à vérifier. Les notes vocales restent transcrites en français.
 
 Le wrapper utilise les bibliothèques CUDA 13 déjà présentes et ajoute au seul venv vocal cuDNN 9.13.0.50, NCCL 2.27.7, cuSPARSELt 0.8.0 et NVSHMEM 3.3.24. Il ne modifie pas les environnements MuseTalk/Piper/NLLB ni le pilote. Les références sont chargées en mémoire avec SoundFile et leur conditionnement est mis en cache.
+
+## Identité vocale commune (16 novembre 2026)
+
+`voiceMode=consistent` utilise une référence synthétique fixe, indépendante de la langue : `academia-female-v1` pour la tutrice, `academia-male-v1` pour Henri. Le script `prepare_identity.py` crée ces références une seule fois à partir des voix Piper déjà installées, dans `/workspace/academia/models/tutor-identity`. Il conserve leur transcription et leur empreinte ; il ne remplace jamais une référence existante.
+
+Le français et le swahili utilisent alors aussi OmniVoice. Le code de langue règle la prononciation ; le conditionnement de locuteur et la graine restent fixes. Le kituba reste expérimental, sans code entraîné dédié. La constance du timbre ne garantit pas l’exactitude de la prononciation : une référence française peut transmettre un accent français aux autres langues. Une écoute humaine est encore nécessaire.
+
+Activer `TUTOR_CONSISTENT_VOICE=true` sur Vercel après installation des références et du worker. Audio et vidéo transmettent le même profil et refusent un identifiant différent. Aucun moteur de remplacement ne change silencieusement la voix. Les caches audio/vidéo sont versionnés pour exclure les anciens locuteurs. Le mode studio est imposé afin d’éviter le changement de voix du navigateur.

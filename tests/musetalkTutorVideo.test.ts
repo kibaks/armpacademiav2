@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
 import { createHmac } from 'node:crypto';
 import { createMuseTalkTutorVideoRouter } from '../backend/musetalkTutorVideo';
-async function harness(workerStatus = 'COMPLETED', progressive = false) {
+async function harness(workerStatus = 'COMPLETED', progressive = false, consistent = false) {
   const records = new Map<string, any>();
   let submissions = 0, polls = 0;
   let tail = Promise.resolve();
@@ -18,7 +18,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
       tail = task.then(() => undefined, () => undefined); return task;
     },
   };
-  const env = { MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' };
+  const env = { TUTOR_CONSISTENT_VOICE: consistent ? 'true' : 'false', MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' };
   const router = createMuseTalkTutorVideoRouter({ db: () => db, env,
     authenticate: (req: any, res, next) => { if (!req.headers.authorization) return void res.sendStatus(401); req.identity = { uid: req.headers.authorization }; next(); },
     synthesize: async () => ({ audioBuffer: Buffer.alloc(100, 1), mimeType: 'audio/wav' }),
@@ -29,7 +29,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false) {
         const body=JSON.parse(options.body);
         records.set('national-request',body);
         const audio=Buffer.alloc(100);audio.write('ID3');
-        return Response.json({language:body.language,provider:body.language === 'sw' ? 'national-vits' : 'national-omnivoice',mimeType:'audio/mpeg',audioData:audio.toString('base64')});
+        return Response.json({language:body.language,voiceId: body.voiceMode === 'consistent' ? `academia-${body.voice}-v1` : undefined, provider:!consistent && body.language === 'sw' ? 'national-vits' : 'national-omnivoice',mimeType:'audio/mpeg',audioData:audio.toString('base64')});
       }
       if (options.method === 'POST') { submissions++; return Response.json({ id: JSON.parse(options.body).id }); }
       if (String(url).endsWith('/media')) {
@@ -160,4 +160,15 @@ test('a warm video router uses the rotated gateway for submission and signed pla
  const result=await (await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}})).json();
  assert.equal(new URL(result.videoUrl).origin,'https://replacement.trycloudflare.com');
  assert.equal(new URL(result.audioUrl).origin,'https://replacement.trycloudflare.com');
+});
+
+test('video uses the same speaker conditioning as audio in every language', async () => {
+ const h = await harness('COMPLETED', false, true);
+ for (const language of ['fr', 'ln', 'sw', 'kg', 'lua']) {
+  assert.equal((await h.post('Formation Mbote Moyo', language)).status, 202);
+  const body = h.records.get('national-request');
+  assert.equal(body.voice, 'female');
+  assert.equal(body.voiceMode, 'consistent');
+  assert.equal(body.language, language);
+ }
 });
