@@ -24,3 +24,9 @@ Le wrapper utilise les bibliothèques CUDA 13 déjà présentes et ajoute au seu
 Le français et le swahili utilisent alors aussi OmniVoice. Le code de langue règle la prononciation ; le conditionnement de locuteur et la graine restent fixes. Le kituba reste expérimental, sans code entraîné dédié. La constance du timbre ne garantit pas l’exactitude de la prononciation : une référence française peut transmettre un accent français aux autres langues. Une écoute humaine est encore nécessaire.
 
 Activer `TUTOR_CONSISTENT_VOICE=true` sur Vercel après installation des références et du worker. Audio et vidéo transmettent le même profil et refusent un identifiant différent. Aucun moteur de remplacement ne change silencieusement la voix. Les caches audio/vidéo sont versionnés pour exclure les anciens locuteurs. Le mode studio est imposé afin d’éviter le changement de voix du navigateur.
+
+## Réécoute rapide
+
+Le worker conserve les derniers sons en mémoire pendant cinq minutes, avec une limite de 64 entrées et 32 Mo. La clé inclut le texte NFC, ses accents, la langue, le profil vocal, le mode et la révision. Une autre langue, un autre ton écrit ou une autre voix ne peut pas réutiliser le son précédent. Les contrôles d’authentification s’appliquent aussi aux réponses du cache. Aucun texte ni son supplémentaire n’est enregistré sur disque. Les échecs ne sont pas mis en cache. Les en-têtes privés X-Speech-Cache indiquent HIT/MISS pour les mesures.
+
+Les routes de session, de niveau et de conversation réutilisent aussi le niveau déjà vérifié dans la même requête HTTP. Ce résultat n’est pas conservé entre requêtes ou entre comptes ; la suspension et la réactivation restent vérifiées par le serveur.

@@ -50,6 +50,8 @@ export const authenticate: RequestHandler = (req: AuthRequest, res, next) => {
     try {
       const access = await readInitiationAccess(req.identity!);
       if (access.expired) { res.status(403).json({ code: 'MFA_REQUIRED', reason: 'INITIATION_EXPIRED', error: 'Votre période d’initiation de cinq jours est terminée. Validez le code reçu par email pour vous reconnecter.', mfaProfile: { id: req.identity!.uid, email: req.identity!.email || '', name: req.identity!.name || 'Apprenant', role: req.identity!.role || 'particulier', roleTitle: 'Parcours Initiation', initiationOtpRequired: true } }); return; }
+      res.locals.verifiedLearningStage = access.stage;
+      res.locals.initiationAccess = access;
       if (await needsSecondFactor(req.identity!)) { res.status(403).json({ code: 'MFA_REQUIRED', error: 'Validez le code de double authentification.', mfaProfile: { id: req.identity!.uid, email: req.identity!.email || '', name: req.identity!.name || 'Utilisateur', role: req.identity!.role || 'particulier', roleTitle: 'Compte personnel', twoFactorEnabled: true } }); return; }
     } catch { res.status(503).json({ code: 'AUTH_UNAVAILABLE', error: 'Vérification de session indisponible.' }); return; }
     next();

@@ -14,6 +14,7 @@ class Engine:
 
 class NativeSpeechTests(unittest.TestCase):
     def setUp(self):
+        service.cache = service.SpeechCache()
         self.client = TestClient(service.app)
         self.headers = {'Authorization': 'Bearer ' + service.KEY}
     def test_private_endpoint_and_busy_guard(self):
@@ -37,6 +38,7 @@ class NativeSpeechTests(unittest.TestCase):
 
 class ConsistentSpeechTests(unittest.TestCase):
     def test_every_language_reuses_the_same_reference(self):
+        service.cache = service.SpeechCache()
         client = TestClient(service.app)
         headers = {'Authorization': 'Bearer ' + service.KEY}
         for voice in ('female', 'male'):
@@ -50,5 +52,21 @@ class ConsistentSpeechTests(unittest.TestCase):
                 native.assert_not_called()
                 self.assertEqual(model.calls[0]['voice_clone_prompt'], 'shared-speaker')
                 self.assertEqual(model.calls[0]['language'], None if language == 'kg' else language)
+
+class CachedSpeechTests(unittest.TestCase):
+    def test_repeated_audio_reuses_synthesis_but_still_requires_authentication(self):
+        service.cache = service.SpeechCache()
+        client = TestClient(service.app)
+        headers = {'Authorization': 'Bearer ' + service.KEY}
+        body = {'text': 'Mbóte.', 'language': 'ln', 'voiceMode': 'consistent'}
+        model = Engine()
+        with patch.object(service, 'engine', return_value=model), patch.object(service, 'consistent_prompt', return_value='same-speaker'):
+            first = client.post('/speech', headers=headers, json=body)
+            second = client.post('/speech', headers=headers, json=body)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.headers['X-Speech-Cache'], 'HIT')
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(len(model.calls), 1)
+        self.assertEqual(client.post('/speech', json=body).status_code, 401)
 
 if __name__ == '__main__': unittest.main()

@@ -1810,7 +1810,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
 
   const adaptReplyToPersona = (reply: string) => reply;
 
-  const stage = await readLearningStage((req as any).identity.uid).catch(() => null);
+  const stage = res.locals.verifiedLearningStage || await readLearningStage((req as any).identity.uid).catch(() => null);
   if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
   if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });

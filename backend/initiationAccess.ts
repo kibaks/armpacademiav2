@@ -4,12 +4,13 @@ import { validatedStage } from '../shared/learnerProgression.js';
 import { INITIATION_WINDOW_MS, initiationWindowExpired } from '../shared/initiationAccess.js';
 type LearnerIdentity = { uid: string; role?: string };
 export async function readInitiationAccess(identity: LearnerIdentity) {
-  if (['super_admin', 'dfat_admin', 'formateur'].includes(identity.role || '')) return { required: false, expired: false, expiresAt: null };
+  if (['super_admin', 'dfat_admin', 'formateur'].includes(identity.role || '')) return { required: false, expired: false, expiresAt: null, stage: undefined };
   const db = services().db;
   const profile = await db.collection('users').doc(identity.uid).get();
-  if (!profile.exists) return { required: false, expired: false, expiresAt: null };
+  if (!profile.exists) return { required: false, expired: false, expiresAt: null, stage: undefined };
   const attempts = await db.collection('levelTestAttempts').where('profileId', '==', identity.uid).get();
-  const completed = validatedStage(attempts.docs.map(d => d.data())) !== 'Initiation';
+  const stage = validatedStage(attempts.docs.map(d => d.data()));
+  const completed = stage !== 'Initiation';
   const ref = db.collection('authAccounts').doc(identity.uid);
   const existing = (await ref.get()).data();
   // Legacy accounts use the identity provider’s server-owned creation date.
@@ -20,7 +21,7 @@ export async function readInitiationAccess(identity: LearnerIdentity) {
     const current = (await tx.get(ref)).data();
     if (completed) {
       if (!current?.initiationComplete) tx.set(ref, { initiationComplete: true, version: current?.version || 0 }, { merge: true });
-      return { required: false, expired: false, expiresAt: null };
+      return { required: false, expired: false, expiresAt: null, stage };
     }
     const now = Date.now();
     const enforced = process.env.INITIATION_ENFORCE_DEADLINE === 'true' && authEmailConfigured();
@@ -36,6 +37,6 @@ export async function readInitiationAccess(identity: LearnerIdentity) {
       // deadline in countdown-only mode. Firestore then follows the same policy.
       tx.set(ref, next);
     }
-    return { required: true, expired: enforced && initiationWindowExpired(expiresAt, now), expiresAt, enforced };
+    return { required: true, expired: enforced && initiationWindowExpired(expiresAt, now), expiresAt, enforced, stage };
   });
 }

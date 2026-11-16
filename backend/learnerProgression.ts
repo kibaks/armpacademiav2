@@ -22,7 +22,7 @@ export async function requireInitiationReading(uid: string) {
 export const learnerProgressionRouter = Router();
 learnerProgressionRouter.use(['/learning-level', '/ai/placement-quiz'], authenticate);
 learnerProgressionRouter.get('/learning-level', async (req: any, res) => {
-  try { res.set('Cache-Control', 'no-store').json({ stage: await readLearningStage(req.identity.uid), initiation: await readInitiationAccess(req.identity) }); }
+  try { res.set('Cache-Control', 'no-store').json({ stage: res.locals.verifiedLearningStage || await readLearningStage(req.identity.uid), initiation: res.locals.initiationAccess || await readInitiationAccess(req.identity) }); }
   catch { res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' }); }
 });
 learnerProgressionRouter.post('/ai/placement-quiz', async (req: any, res) => {

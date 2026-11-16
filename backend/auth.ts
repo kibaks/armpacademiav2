@@ -14,7 +14,7 @@ const wrap = (fn: (req: any, res: any) => Promise<any>) => (req: any, res: any, 
 authRouter.get('/auth/session', authenticate, wrap(async (req, res) => {
   const profile = await services().db.collection('users').doc(req.identity.uid).get();
   if (!profile.exists) return res.status(409).json({ code: 'PROFILE_REQUIRED', error: 'Complétez votre inscription.' });
-  const initiation = await readInitiationAccess(req.identity);
+  const initiation = res.locals.initiationAccess || await readInitiationAccess(req.identity);
   return res.json({ uid: req.identity.uid, role: req.identity.role || null, initiation });
 }));
 authRouter.post('/2fa/send', authenticateIdentity, wrap(async (req, res) => {

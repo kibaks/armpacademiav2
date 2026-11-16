@@ -2,9 +2,11 @@
 import base64, hmac, io, json, os, subprocess, threading, unicodedata
 from functools import lru_cache
 from pathlib import Path
-from fastapi import FastAPI, Depends, Header, HTTPException
+from fastapi import Response, FastAPI, Depends, Header, HTTPException
 from typing import Literal
 from pydantic import BaseModel, Field
+from speech_cache import SpeechCache, speech_key
+cache = SpeechCache()
 
 KEY = os.environ['MUSETALK_API_KEY']
 if len(KEY) < 32: raise RuntimeError('Private key required')
@@ -69,14 +71,22 @@ def synthesize(body):
         return wav.getvalue(), 'national-omnivoice'
     raise HTTPException(422, 'Unsupported language')
 @app.post('/speech', dependencies=[Depends(authorize)])
-def speech(body: Speech):
+def speech(body: Speech, response: Response):
     if body.language not in {'fr', 'sw', 'ln', 'lua', 'kg'} or (body.language in {'fr', 'sw'} and body.voiceMode != 'consistent'): raise HTTPException(422, 'Unsupported language')
+    key = speech_key(body)
+    cached = cache.get(key)
+    if cached is not None:
+        response.headers['X-Speech-Cache'] = 'HIT'
+        return cached
+    response.headers['X-Speech-Cache'] = 'MISS'
     if not gate.acquire(blocking=False): raise HTTPException(429, 'Speech engine busy', headers={'Retry-After':'2'})
     try:
         wav, provider=synthesize(body)
         result=subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-i','pipe:0','-codec:a','libmp3lame','-b:a','96k','-f','mp3','pipe:1'],input=wav,capture_output=True,timeout=30,check=True)
         if not 44<len(result.stdout)<4_000_000: raise RuntimeError('Invalid output size')
-        return {'audioData':base64.b64encode(result.stdout).decode(),'mimeType':'audio/mpeg','provider':provider,'language':body.language,'wordBoundaries':[], **({'voiceId': 'academia-' + body.voice + '-v1'} if body.voiceMode == 'consistent' else {})}
+        payload = {'audioData':base64.b64encode(result.stdout).decode(),'mimeType':'audio/mpeg','provider':provider,'language':body.language,'wordBoundaries':[], **({'voiceId': 'academia-' + body.voice + '-v1'} if body.voiceMode == 'consistent' else {})}
+        cache.put(key, payload)
+        return payload
     except HTTPException: raise
     except Exception as e:
         print('National speech failed:',type(e).__name__,flush=True)

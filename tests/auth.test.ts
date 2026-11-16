@@ -9,13 +9,14 @@ import { INITIATION_WINDOW_MS } from '../shared/initiationAccess';
 
 const { auth, db } = services();
 const records = new Map<string, any>();
+let progressionReads = 0;
 const ref = (key: string): any => ({ key,
   get: async () => ({ exists: records.has(key), data: () => structuredClone(records.get(key)) }),
   set: async (value: any, options?: any) => { records.set(key, structuredClone(options?.merge ? { ...records.get(key), ...value } : value)); },
   update: async (value: any) => { records.set(key, { ...records.get(key), ...value }); },
   delete: async () => { records.delete(key); },
 });
-mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`), where: (field: string, _operator: string, value: any) => ({ get: async () => ({ docs: [...records.entries()].filter(([key, record]) => key.startsWith(name + '/') && record[field] === value).map(([,record]) => ({ data: () => structuredClone(record) })) }) }) }));
+mock.method(db, 'collection', (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`), where: (field: string, _operator: string, value: any) => ({ get: async () => { if (name === 'levelTestAttempts') progressionReads++; return ({ docs: [...records.entries()].filter(([key, record]) => key.startsWith(name + '/') && record[field] === value).map(([,record]) => ({ data: () => structuredClone(record) })) }); } }) }));
 mock.method(db, 'runTransaction', async (callback: any) => {
   const writes: any[] = [];
   const result = await callback({ get: (r: any) => r.get(), set: (r: any, value: any, options?: any) => writes.push(() => r.set(value, options)), update: (r: any, value: any) => writes.push(() => r.update(value)), delete: (r: any) => writes.push(() => r.delete()) });
@@ -264,4 +265,19 @@ test('a second expiry renews from verification time and cannot restore the previ
     assert.equal(access.expiresAt, account.initiationRenewalExpiresAt);
     assert.equal(access.expiresAt, account.initiationRenewedAt + INITIATION_WINDOW_MS);
   }
+});
+
+test('session reuses only its own authenticated progression check without a second database query', async () => {
+  for (const uid of ['stage-cache-a', 'stage-cache-b']) {
+    records.set('users/' + uid, { role: 'particulier' });
+    records.set('authAccounts/' + uid, { registeredAt: Date.now() });
+  }
+  records.set('levelTestAttempts/stage-cache-b-pass', { profileId: 'stage-cache-b', level: 'Initiation', passed: true });
+  progressionReads = 0;
+  const first = await request('/auth/session', 'stage-cache-a');
+  assert.equal((await first.json()).initiation.stage, 'Initiation');
+  assert.equal(progressionReads, 1);
+  const second = await request('/auth/session', 'stage-cache-b');
+  assert.equal((await second.json()).initiation.stage, 'Approfondi');
+  assert.equal(progressionReads, 2);
 });
