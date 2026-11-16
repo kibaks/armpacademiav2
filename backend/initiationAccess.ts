@@ -1,3 +1,4 @@
+import { authEmailConfigured } from './authEmail.js';
 import { services } from './services.js';
 import { validatedStage } from '../shared/learnerProgression.js';
 import { INITIATION_WINDOW_MS, initiationWindowExpired } from '../shared/initiationAccess.js';
@@ -22,7 +23,7 @@ export async function readInitiationAccess(identity: LearnerIdentity) {
       return { required: false, expired: false, expiresAt: null };
     }
     const now = Date.now();
-    const enforced = process.env.INITIATION_ENFORCE_DEADLINE === 'true' && Boolean(process.env.RESEND_API_KEY && process.env.AUTH_EMAIL_FROM);
+    const enforced = process.env.INITIATION_ENFORCE_DEADLINE === 'true' && authEmailConfigured();
     const renewalEnd = current?.initiationRenewalExpiresAt || current?.initiationExpiresAt;
     const renewed = enforced && Number.isFinite(current?.initiationRenewedAt) && Number.isFinite(renewalEnd);
     const expiresAt = renewed ? renewalEnd as number : registeredAt + INITIATION_WINDOW_MS;

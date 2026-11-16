@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { otpEmail, passwordEmail } from '../backend/emailTemplates';
+import { otpEmail, passwordEmail, initiationExpiredEmail } from '../backend/emailTemplates';
 test('OTP is accessible as text and HTML, with escaped personalization and no secret in preheader',()=>{
  const message=otpEmail('123456','<img onerror="alert(1)">');
  assert.match(message.html,/&lt;img onerror=&quot;alert\(1\)&quot;&gt;/);
@@ -21,4 +21,12 @@ test('password and activation templates preserve personal links and distinct act
  assert.ok(reset.text.includes(link));
  assert.match(reset.text,/30 minutes/);
  assert.throws(()=>passwordEmail('javascript:alert(1)'));
+});
+
+test('expiry email explains secure renewal and preserves progression', () => {
+ const message = initiationExpiredEmail('<Learner>');
+ assert.match(message.html, /&lt;Learner&gt;/);
+ assert.match(message.text, /reactivate=1/);
+ assert.match(message.text, /cinq nouveaux jours/);
+ assert.match(message.text, /progression sont conservés/);
 });

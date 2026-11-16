@@ -137,7 +137,7 @@ export default function App() {
   const pendingMedia = useRef<{ uid: string; patch: Partial<UserProfile> } | null>(null);
   const sessionGeneration = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => new URLSearchParams(window.location.search).get('reactivate') === '1');
   const [pendingCourseForAuth, setPendingCourseForAuth] = useState<CourseModule | null>(null);
 
   // App Features State

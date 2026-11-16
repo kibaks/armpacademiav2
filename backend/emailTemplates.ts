@@ -50,3 +50,16 @@ export function passwordEmail(link: string, name?: string, activation = false) {
     paragraphs:[activation?'Votre compte ACADEMIA a été créé. Vous pouvez désormais préparer votre accès à la plateforme de formation de l’ARMP.':'Nous avons reçu une demande pour définir le mot de passe de votre compte ACADEMIA.','Utilisez ce lien personnel, valable 30 minutes et utilisable une seule fois, pour choisir votre mot de passe.'],
     action:{label:activation?'Activer mon compte':'Définir mon mot de passe',url:link},notice:'Ce lien est personnel : ne le transmettez à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez ce message.'});
 }
+
+export function initiationExpiredEmail(name?: string) {
+  return brandedEmail({
+    subject: 'Réactivez votre accès ACADEMIA pour cinq jours',
+    preheader: 'Votre période de cinq jours est terminée. Votre progression est conservée.',
+    label: 'RÉACTIVATION DU COMPTE', title: 'Reprenez votre formation', name,
+    paragraphs: ['Votre délai de cinq jours est arrivé à échéance. Votre accès au parcours Initiation est temporairement désactivé.',
+      'Cliquez sur le bouton, connectez-vous à votre compte et validez le code de vérification envoyé à cette adresse email. Votre accès sera réactivé pour cinq nouveaux jours à compter de cette validation.',
+      'Vos cours, vos résultats et votre progression sont conservés.'],
+    action: { label: 'Réactiver mon accès', url: APP_URL + '/?reactivate=1' },
+    notice: 'L’ouverture de ce message ou du lien ne renouvelle pas votre délai. La réactivation nécessite la vérification de votre identité dans l’application.'
+  });
+}

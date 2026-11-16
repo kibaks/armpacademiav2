@@ -67,7 +67,10 @@ authRouter.post('/2fa/verify', authenticateIdentity, wrap(async (req, res) => {
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) { tx.update(ref, { attempts: challenge.attempts + 1 }); return false; }
     // Native proofs are scoped to the application session ID and sign-in timestamp.
     tx.set(db.collection('mfaSessions').doc(String(identity.appSessionId || identity.uid)), { authTime: identity.auth_time, expiresAt: Date.now() + 12 * 3600000 });
-    if (challenge.purpose === 'initiation') tx.set(accountRef, { initiationExpiresAt: Date.now() + INITIATION_WINDOW_MS, initiationRenewedAt: Date.now() }, { merge: true });
+    if (challenge.purpose === 'initiation') {
+      const renewedAt = Date.now();
+      tx.set(accountRef, { initiationExpiresAt: renewedAt + INITIATION_WINDOW_MS, initiationRenewalExpiresAt: renewedAt + INITIATION_WINDOW_MS, initiationScheduledExpiresAt: renewedAt + INITIATION_WINDOW_MS, initiationRenewedAt: renewedAt }, { merge: true });
+    }
     if (challenge.enroll) tx.update(db.collection('users').doc(identity.uid), { twoFactorEnabled: true });
     tx.delete(ref);
     return true;

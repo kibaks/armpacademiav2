@@ -4,6 +4,7 @@ import { after, mock, test } from 'node:test';
 import express from 'express';
 import { services, authenticate } from '../backend/admin';
 import { authRouter } from '../backend/auth';
+import { notifyInitiationExpiry, initiationNotificationsRouter } from '../backend/initiationNotifications';
 import { INITIATION_WINDOW_MS } from '../shared/initiationAccess';
 
 const { auth, db } = services();
@@ -46,7 +47,7 @@ mock.method(globalThis, 'fetch', async (url: any, options: any) => {
 process.env.RESEND_API_KEY = 'test-key-never-sent';
 process.env.INITIATION_ENFORCE_DEADLINE = 'true';
 process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>';
-const app = express(); app.use(express.json()); app.use('/api', authRouter);
+const app = express(); app.use(express.json()); app.use('/api', initiationNotificationsRouter); app.use('/api', authRouter);
 app.get('/api/private', authenticate, (_req, res) => res.json({ ok: true }));
 const server = app.listen(0, '127.0.0.1');
 await new Promise<void>(resolve => server.once('listening', resolve));
@@ -62,13 +63,14 @@ test('the countdown uses registration even without email configuration and never
   records.set('users/pending', { id: 'pending', role: 'particulier', joinDate: new Date().toISOString() });
   records.set('authAccounts/pending', { registeredAt, initiationExpiresAt: Date.now() + INITIATION_WINDOW_MS });
   delete process.env.AUTH_EMAIL_FROM;
+  delete process.env.RESEND_API_KEY;
   try {
     const response = await request('/auth/session', 'pending');
     assert.equal(response.status, 200);
     assert.equal((await response.json()).initiation.expiresAt, registeredAt + INITIATION_WINDOW_MS);
     assert.equal(records.get('authAccounts/pending').initiationStartedAt, registeredAt);
     assert.equal(records.get('authAccounts/pending').initiationExpiresAt, undefined);
-  } finally { process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>'; }
+  } finally { process.env.AUTH_EMAIL_FROM = 'Academia <otp@example.com>'; process.env.RESEND_API_KEY = 'test-key-never-sent'; }
 });
 test('countdown-only mode keeps expired learners connected and preserves credentials', async () => {
   process.env.INITIATION_ENFORCE_DEADLINE = 'false';
@@ -207,4 +209,37 @@ test('enrollment requires recent sign-in; MFA proof expires independently of the
   records.set('users/frank', { twoFactorEnabled: true });
   records.set('mfaSessions/frank', { authTime: signInTime, expiresAt: Date.now() - 1 });
   assert.equal((await request('/private', 'frank')).status, 403);
+});
+
+test('expiry email is sent once per deadline, retries failures and skips disabled identities', async () => {
+  const userMock = mock.method(auth, 'getUser', async (uid: string) => ({ email: uid + '@example.com', disabled: uid === 'disabled-expiry', metadata: { creationTime: new Date().toISOString() } }));
+  try {
+    for (const uid of ['expiry-email', 'disabled-expiry', 'retry-expiry']) {
+      records.set('users/' + uid, { role: 'particulier', name: '<Learner>' });
+      records.set('authAccounts/' + uid, { registeredAt: Date.now() - INITIATION_WINDOW_MS - 1000 });
+    }
+    assert.equal(await notifyInitiationExpiry('expiry-email', 'particulier'), true);
+    const account = records.get('authAccounts/expiry-email');
+    assert.equal(account.initiationNotifiedExpiresAt, account.initiationExpiresAt);
+    assert.equal(await notifyInitiationExpiry('expiry-email', 'particulier'), false);
+    assert.equal(await notifyInitiationExpiry('disabled-expiry', 'particulier'), false);
+    assert.equal(await notifyInitiationExpiry('expiry-email', 'super_admin'), false);
+    deliveryOk = false;
+    await assert.rejects(notifyInitiationExpiry('retry-expiry', 'particulier'));
+    assert.equal(records.get('authAccounts/retry-expiry').initiationNotifiedExpiresAt, undefined);
+    deliveryOk = true;
+    records.get('authAccounts/retry-expiry').initiationNotificationLeaseUntil = 0;
+    assert.equal(await notifyInitiationExpiry('retry-expiry', 'particulier'), true);
+  } finally { userMock.mock.restore(); deliveryOk = true; }
+});
+test('expiry scan requires its dedicated scheduler credential', async () => {
+  assert.equal((await request('/internal/initiation-expiry', undefined, {})).status, 401);
+});
+test('Gmail configuration enforces the deadline without Resend', async () => {
+  delete process.env.RESEND_API_KEY;
+  process.env.GMAIL_SMTP_USER = 'test@example.com'; process.env.GMAIL_APP_PASSWORD = 'test-only';
+  records.set('users/gmail-expired', { role: 'particulier' });
+  records.set('authAccounts/gmail-expired', { registeredAt: Date.now() - INITIATION_WINDOW_MS - 1000 });
+  try { assert.equal((await request('/private', 'gmail-expired')).status, 403); }
+  finally { delete process.env.GMAIL_SMTP_USER; delete process.env.GMAIL_APP_PASSWORD; process.env.RESEND_API_KEY = 'test-key-never-sent'; }
 });

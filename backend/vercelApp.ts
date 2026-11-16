@@ -1,3 +1,4 @@
+import { initiationNotificationsRouter } from './initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './engineGateway.js';
 import { createTutorMediaRouter } from './tutorMediaHealth.js';
 import { sendTutorReply, handleNationalSpeech, getNationalCapabilities, createTutorLanguageInput } from './nationalLanguages.js';
@@ -63,6 +64,7 @@ app.use((req, _res, next) => {
 app.disable('x-powered-by');
 app.use('/api/engine-gateway', createEngineGatewayRouter());
 app.use(createEngineGatewayMiddleware());
+app.use('/api', initiationNotificationsRouter);
 app.use('/api', authRouter);
 app.use('/api/cgpmp', cgpmpRouter);
 app.use('/api/storage', storageRouter);
