@@ -73,3 +73,31 @@ test('untrusted language choices cannot inject a tutor instruction', () => {
   assert.equal(tutorLanguageInstruction({ code: 'ln' }), '');
   assert.equal(tutorLanguage(null), 'fr');
 });
+
+test('Lingala and Bandundu Kituba get a simple spoken source without bypassing legal safeguards', async () => {
+ for (const language of ['ln', 'kg'] as const) {
+  await generateQwenTutor('Question de cours', { env, language, fetcher: async (_url, init) => {
+   const body = JSON.parse(init!.body as string);
+   assert.match(body.system, /phrases courtes/);
+   assert.match(body.system, /Conserve toutes les conditions, exceptions/);
+   assert.match(body.system, /reste en français ici/);
+   assert.match(body.system, language === 'ln' ? /Kinshasa/ : /Bandundu/);
+   assert.ok(body.system.length <= 8000);
+   return Response.json({ reply: 'Un besoin décrit ce qui est nécessaire et pourquoi.', model: 'academia-tuteur' });
+  } });
+ }
+});
+
+test('simple-language retries stay within the installed gateway system limit', async () => {
+ const prompt = tutorConversationData('Donne un exemple fictif du besoin.', [], '', '', '');
+ for (const language of ['ln', 'kg'] as const) {
+  let calls = 0;
+  await generateQwenTutor(prompt, { env, language, stage: 'Avancé', fetcher: async (_url, init) => {
+   const body = JSON.parse(init!.body as string);
+   assert.ok(body.system.length <= 8000, `system length ${body.system.length}`);
+   calls++;
+   return Response.json({ model: 'academia-tuteur', reply: calls === 1 ? 'Exemple fictif : une école achète 30 tables.' : 'Exemple fictif : une école décrit le mobilier utile à ses élèves. Vérifiez les caractéristiques nécessaires.' });
+  } });
+  assert.equal(calls, 2);
+ }
+});

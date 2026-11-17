@@ -1,4 +1,5 @@
 import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
+import { CartoonLessonStage } from './CartoonLessonStage';
 import { InitiationMotionStage } from './InitiationMotionStage';
 import './CartoonLesson.css';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -558,6 +559,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   const playerRef = useRef<HTMLDivElement>(null);
   const [fullScreen, setFullScreen] = useState(false);
+  const [detailedDiagram, setDetailedDiagram] = useState(false);
   const [motionEnabled, setMotionEnabled] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   useEffect(() => {
     const changed = () => setFullScreen(document.fullscreenElement === playerRef.current);
@@ -585,7 +587,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
         </div>
       </header>
       {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
-        <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled} />}
+        <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && !isCoursePreloading} speaking={isSpeaking && isPlaying} mouthOpenness={playbackState?.mouthOpenness || 0} viseme={playbackState?.viseme || 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || ''} sceneCount={calibratedLesson.sceneData.screens.length} reducedMotion={!motionEnabled} />}
+      {!showRawVideo && <details className="cartoon-film__transcript" onToggle={event => setDetailedDiagram(event.currentTarget.open)}><summary>Voir le schéma détaillé du cours</summary>{detailedDiagram && <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled || !isPlaying} />}</details>}
       <div className="cartoon-player__transport">
         <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
         <div className="cartoon-player__tools">

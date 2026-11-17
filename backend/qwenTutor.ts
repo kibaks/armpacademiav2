@@ -1,3 +1,4 @@
+import { tutorPlainLanguagePolicy } from '../shared/tutorPlainLanguage.js';
 import { explanationReview, EXPLANATION_REVISION_POLICY } from '../shared/tutorExplanationContract.js';
 import { learnerLevelGuidance, type LearningStage } from '../shared/learnerProgression.js';
 import { type TutorLanguage } from '../shared/tutorLanguages.js';
@@ -22,7 +23,7 @@ export async function generateQwenTutor(prompt: string, options: { stage?: Learn
   const response = await (options.fetcher || fetch)(config.url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${config.key}` },
-    body: JSON.stringify({ system: options.authoring ? 'Vous êtes un assistant de conception pédagogique pour les formateurs d’ARMP Academia. Respectez exactement le format demandé. Utilisez uniquement le contenu fourni : ne créez aucune loi, aucun seuil, article ou fait absent du contenu. Les sorties sont des brouillons à relire. Restez concis : moins de 450 mots, complétez toujours la structure demandée.' : TUTOR_RESPONSE_POLICY + '\n' + learnerLevelGuidance(options.stage || 'Initiation') + (attempt ? '\n' + EXPLANATION_REVISION_POLICY : ''), prompt: attempt ? prompt + '\n\nRévision de forme demandée : écris une nouvelle réponse avec un exemple entièrement qualitatif. Écris les mots « Exemple fictif : ». Dans cet exemple, décris seulement les usages et les caractéristiques à définir ; aucune quantité, dimension, capacité, somme ou durée ne t’a été donnée. Ne complète pas ces informations. Termine par le point à vérifier.' : prompt }),
+    body: JSON.stringify({ system: options.authoring ? 'Vous êtes un assistant de conception pédagogique pour les formateurs d’ARMP Academia. Respectez exactement le format demandé. Utilisez uniquement le contenu fourni : ne créez aucune loi, aucun seuil, article ou fait absent du contenu. Les sorties sont des brouillons à relire. Restez concis : moins de 450 mots, complétez toujours la structure demandée.' : TUTOR_RESPONSE_POLICY + '\n' + learnerLevelGuidance(options.stage || 'Initiation') + (tutorPlainLanguagePolicy(options.language) ? '\n' + tutorPlainLanguagePolicy(options.language) : '') + (attempt ? '\n' + EXPLANATION_REVISION_POLICY : ''), prompt: attempt ? prompt + '\n\nRévision de forme demandée : écris une nouvelle réponse avec un exemple entièrement qualitatif. Écris les mots « Exemple fictif : ». Dans cet exemple, décris seulement les usages et les caractéristiques à définir ; aucune quantité, dimension, capacité, somme ou durée ne t’a été donnée. Ne complète pas ces informations. Termine par le point à vérifier.' : prompt }),
     signal: deadline, redirect: 'error',
   });
   if (!response.ok) throw new Error(`QWEN_HTTP_${response.status}`);

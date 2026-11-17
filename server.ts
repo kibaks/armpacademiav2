@@ -1831,7 +1831,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
 
   if (qwenTutorConfig()) {
     try {
-      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage });
+      const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage, language });
       return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen2.5-7b-instruct', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
     } catch {
       return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen2.5-7b-instruct' });
