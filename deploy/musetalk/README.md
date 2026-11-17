@@ -142,3 +142,31 @@ after audio submission, with full rendering in 4.73 seconds. These measurements
 exclude language-model response time, speech synthesis, queues and client
 network/buffering. Five seconds from the user's question is an objective, not a
 guaranteed SLA. Validate these stages in a real session before claiming it.
+
+## Chapter motion films (November 2026)
+
+The current local MuseTalk worker also accepts validated `lesson` metadata on
+`POST /jobs`. `course_motion.py` uses the installed Pillow and FFmpeg to compose
+its talking tutor with source captions, animated concept cards, chapter progress
+and optional quiet original music, at 1280×720 / 25 fps (H.264/AAC, faststart).
+The avatar retains its aspect ratio. No external video provider is called.
+Copy both `app.py` (as `academia_api.py`) and `course_motion.py` into `/opt/MuseTalk`.
+The current supervisor service is `academia-video`; private credentials remain
+in `/workspace/academia/private/engines.env`.
+
+The application generates the complete source narration scene by scene, then
+`POST /api/ai/tutor-video/film` assembles its completed clips through private
+`POST /films`. Only authenticated owners can assemble their own motion scenes.
+Signed playback and authenticated MP4 download reuse the existing media routes.
+Films expire after 24 hours; the learner can download the MP4 to keep it.
+Generation can take several minutes and completed scenes are reused on retry.
+Stopping browser follow-up does not cancel an already queued GPU job.
+
+ARMP vocabulary remains that of the source course. Motion captions are extracted
+from the lesson, not generated legal summaries. The tutor policy requires exact
+technical terms followed by a plain explanation, including in national-language
+source answers. This is not a legal review of the underlying course catalog.
+
+Validation: `npx tsx --test tests/courseMotionVideo.test.ts tests/musetalkTutorVideo.test.ts tests/qwenTutor.test.ts`.
+Worker: `PYTHONPATH=/opt/MuseTalk /workspace/academia/national-venv/bin/python -m unittest -v test_course_motion test_api`
+from the staged worker directory (the national venv includes the API test client).

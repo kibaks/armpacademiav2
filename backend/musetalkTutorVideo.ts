@@ -1,3 +1,4 @@
+import { readCourseMotionStoryboard } from '../shared/courseMotionVideo.js';
 import { nationalSpeechPayload, NationalLanguageError } from './nationalLanguages.js';
 import { tutorLanguage, nationalVoiceAvailable, normalizeNationalSpeech } from '../shared/tutorLanguages.js';
 import { readSpeechPronunciation } from './speechPronunciation.js';
@@ -40,30 +41,39 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (!configured()) return res.status(503).json({ error: 'La vidéo MuseTalk n’est pas encore activée.' });
       const { text: raw, persona } = req.body || {};
       if (typeof raw !== 'string' || raw.length > 6000 || !personas.includes(persona)) return res.status(400).json({ error: 'Réponse ou tutrice invalide.' });
+      const lesson = req.body?.lesson === undefined ? null : readCourseMotionStoryboard(req.body.lesson);
+      if (req.body?.lesson !== undefined && !lesson) return res.status(400).json({error:'Scénario de cours invalide.'});
       const language=tutorLanguage(req.body?.language);
       if (req.body?.language && req.body.language!==language) return res.status(400).json({error:'Langue invalide.'});
       if (!nationalVoiceAvailable(language,raw)) return res.status(422).json({error:'Aucune voix installée ne peut lire ce passage dans la langue demandée.'});
       const text = language==='fr' ? normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.())) : normalizeNationalSpeech(raw);
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : [])])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : []), ...(lesson ? ['course-motion-v1',lesson] : [])])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {
         const existing = await tx.get(ref);
         if (existing.exists) {
           const job = existing.data();
-          return job?.status === 'COMPLETED' && Date.now() - job.createdAt < 86400000 ? 'completed' : 'existing';
+          if (job?.status === 'COMPLETED' && Date.now() - job.createdAt < 86400000) return 'completed';
+          if (lesson && job?.status === 'FAILED' && req.body?.retry === true) return 'retry';
+          if (!lesson || Date.now()-job.createdAt<86400000) return 'existing';
         }
-        tx.set(ref, { uid, status: 'SUBMITTING', createdAt: Date.now() }); return 'new';
+        tx.set(ref, { uid, status: 'SUBMITTING', createdAt: Date.now(), ...(lesson ? {kind:'motion-scene'} : {}) }); return 'new';
       });
       if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', ...playbackMedia(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
+      if (reservation === 'retry') {
+        const retried = await remote(`/jobs/${id}/retry`, {method:'POST'});
+        if (retried.ok) { await ref.update({status:'PENDING'}); return res.status(202).json({id}); }
+        if (retried.status!==404) throw new Error('RETRY_FAILED');
+      }
       reserved = true;
       const national = language==='fr' && env.TUTOR_CONSISTENT_VOICE !== 'true' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request,voice:persona});
       const audio = national ? {audioBuffer:Buffer.from(national.audioData,'base64'),mimeType:national.mimeType} : await (deps.synthesize ? deps.synthesize(text, persona) : synthesizePiperTutor(text, persona).then(async value => value || await synthesizeCartesiaTutor(text, persona) || await synthesizeElevenTutor(text, persona)));
       if (!audio || audio.audioBuffer.length > 4_000_000 || audio.audioBuffer.length <= 44) throw new Error('NO_AUDIO');
-      const submitted = await remote('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: audio.audioBuffer.toString('base64') }) });
+      const submitted = await remote('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: audio.audioBuffer.toString('base64'), ...(lesson ? {lesson} : {}) }) });
       if (!submitted.ok || (await submitted.json()).id !== id) throw new Error('SUBMISSION_FAILED');
       await ref.update({ status: 'PENDING' });
       return res.status(202).json({ id });
@@ -72,6 +82,32 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (reserved) await ref.update({ status: 'FAILED' }).catch(() => undefined);
       if (error instanceof NationalLanguageError) return res.status(error.status).json({error:error.message});
       return res.status(503).json({ error: 'La vidéo n’a pas pu être préparée. Vous pouvez écouter la réponse en audio.' });
+    }
+  });
+  router.post('/film', async (req: any, res) => {
+    let ref: any;
+    try {
+      if (!configured()) return res.status(503).json({error:'Le moteur vidéo est indisponible.'});
+      const parts=req.body?.parts;
+      if (!Array.isArray(parts) || parts.length<1 || parts.length>12 || new Set(parts).size!==parts.length || !parts.every((id:unknown)=>typeof id==='string' && /^[a-f0-9]{64}$/.test(id))) return res.status(400).json({error:'Séquences invalides.'});
+      const children=await Promise.all(parts.map((id:string)=>db().collection('musetalkTutorJobs').doc(id).get()));
+      if (children.some((snapshot:any)=>{const job=snapshot.data();return !job || job.uid!==req.identity.uid || job.kind!=='motion-scene' || job.status!=='COMPLETED' || Date.now()-job.createdAt>=86400000;})) return res.status(404).json({error:'Une séquence du film est indisponible.'});
+      const id=createHash('sha256').update(JSON.stringify([req.identity.uid,'course-film-v1',parts])).digest('hex');
+      ref=db().collection('musetalkTutorJobs').doc(id);
+      const reservation=await db().runTransaction(async(tx:any)=>{
+        const existing=await tx.get(ref),job=existing.data();
+        if (job?.status==='COMPLETED' && Date.now()-job.createdAt<86400000) return 'completed';
+        if (existing.exists && job?.status!=='FAILED' && Date.now()-job.createdAt<86400000) return 'pending';
+        tx.set(ref,{uid:req.identity.uid,kind:'motion-film',status:'SUBMITTING',createdAt:Date.now()});return 'new';
+      });
+      if (reservation==='completed') return res.json({id,status:'COMPLETED',videoUrl:playbackUrl(id)});
+      if (reservation==='pending') return res.status(202).json({id});
+      const response=await remote('/films',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,parts})});
+      if (!response.ok || (await response.json()).id!==id) throw new Error('ASSEMBLY_FAILED');
+      await ref.update({status:'PENDING'});return res.status(202).json({id});
+    } catch {
+      if(ref) await ref.update({status:'FAILED'}).catch(()=>undefined);
+      return res.status(503).json({error:'Le film n’a pas pu être assemblé. Réessayez.'});
     }
   });
   const owned = async (req: any) => {

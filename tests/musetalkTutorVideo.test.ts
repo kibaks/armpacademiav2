@@ -24,6 +24,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false, consiste
     synthesize: async () => ({ audioBuffer: Buffer.alloc(100, 1), mimeType: 'audio/wav' }),
     fetcher: (async (url: any, options: any) => {
       records.set('last-worker-url', String(url));
+      if(options.body && String(url).endsWith('/jobs'))records.set('last-worker-submission',JSON.parse(options.body));
       assert.equal(options.headers.authorization, 'Bearer private-key');
       if (String(url).endsWith('/national/speech')) {
         const body=JSON.parse(options.body);
@@ -59,7 +60,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false, consiste
     (router as any).handle(req, res, (error?: unknown) => reject(error || new Error('Unhandled route')));
   });
   const base = 'https://local.test/video';
-  const post = (text = 'Bonjour. Comparons les offres.', language = 'fr') => request(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne', language }) });
+  const post = (text = 'Bonjour. Comparons les offres.', language = 'fr', lesson?: unknown) => request(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne', language, ...(lesson ? {lesson} : {}) }) });
   return { base, post, request, records, env, counts: () => ({ submissions, polls }), close: async () => undefined };
 
 }
@@ -171,4 +172,25 @@ test('video uses the same speaker conditioning as audio in every language', asyn
   assert.equal(body.voiceMode, 'consistent');
   assert.equal(body.language, language);
  }
+});
+
+const motionStory={title:'Le besoin',chapter:'Préparer un achat utile',sceneIndex:0,sceneCount:2,terms:['Besoin','Usage'],cues:[{text:'Définir le besoin avant de chercher un fournisseur.',start:0,phase:'explanation'}],legalRef:'Extrait du cours',music:false};
+test('lesson scenes use the deployed worker and have a content-sensitive private cache',async()=>{
+ const h=await harness();
+ const a=await h.post('Définir le besoin.','fr',motionStory);assert.equal(a.status,202);const {id}=await a.json();
+ assert.deepEqual(h.records.get('last-worker-submission').lesson,motionStory);
+ assert.equal(h.records.get(`musetalkTutorJobs/${id}`).kind,'motion-scene');
+ const b=await h.post('Définir le besoin.','fr',{...motionStory,music:true});assert.notEqual((await b.json()).id,id);
+ assert.equal((await h.post('Texte.','fr',{...motionStory,cues:[{text:'Texte',start:2,phase:'rule'}]})).status,400);
+});
+test('a chapter film can assemble only completed motion scenes owned by its learner',async()=>{
+ const h=await harness();
+ const first=(await(await h.post('Premier.','fr',motionStory)).json()).id;
+ const second=(await(await h.post('Second.','fr',{...motionStory,sceneIndex:1})).json()).id;
+ for(const id of [first,second])await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}});
+ const film=()=>h.request(h.base+'/film',{method:'POST',headers:{authorization:'owner','content-type':'application/json'},body:JSON.stringify({parts:[first,second]})});
+ const created=await film();assert.equal(created.status,202);const {id}=await created.json();
+ const ready=await(await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}})).json();assert.equal(ready.status,'COMPLETED');assert.ok(ready.videoUrl.startsWith('https://worker.example/'));
+ assert.equal((await h.request(`${h.base}/${id}`,{headers:{authorization:'other'}})).status,404);
+ h.records.get(`musetalkTutorJobs/${first}`).uid='other';assert.equal((await film()).status,404);
 });

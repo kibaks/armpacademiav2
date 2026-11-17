@@ -1,3 +1,4 @@
+import { CourseMotionVideo } from './CourseMotionVideo';
 import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
 import { CartoonLessonStage } from './CartoonLessonStage';
 import { InitiationMotionStage } from './InitiationMotionStage';
@@ -589,6 +590,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
         <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && !isCoursePreloading} speaking={isSpeaking && isPlaying} mouthOpenness={playbackState?.mouthOpenness || 0} viseme={playbackState?.viseme || 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || ''} sceneCount={calibratedLesson.sceneData.screens.length} reducedMotion={!motionEnabled} />}
       {!showRawVideo && <details className="cartoon-film__transcript" onToggle={event => setDetailedDiagram(event.currentTarget.open)}><summary>Voir le schéma détaillé du cours</summary>{detailedDiagram && <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled || !isPlaying} />}</details>}
+      <CourseMotionVideo courseId={course.id} lessonIndex={lessonIndex} chapter={safeTitle} screens={calibratedLesson.sceneData.screens} sentences={calibratedLesson.sentences} userId={effectiveUserProfile?.id} onPrepare={()=>{speechService.stop();setIsPlaying(false);setVoiceMuted(true);}}/>
       <div className="cartoon-player__transport">
         <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
         <div className="cartoon-player__tools">

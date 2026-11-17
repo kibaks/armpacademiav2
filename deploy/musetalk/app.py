@@ -16,6 +16,7 @@ import time
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+from course_motion import read_story, compose, assemble
 
 ROOT = Path('/opt/MuseTalk')
 JOBS = ROOT / 'data/academia/jobs'
@@ -90,6 +91,7 @@ def run_job(job_id):
     directory = folder(job_id)
     try:
         status(directory, {'status': 'PROCESSING'})
+        story = read_story(json.loads((directory / 'lesson.json').read_text())) if (directory / 'lesson.json').exists() else None
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(directory / 'input.audio'), '-vn', '-ac', '1', '-ar', '16000', str(directory / 'reply.wav')], check=True, timeout=30, capture_output=True)
         duration = float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(directory / 'reply.wav')], timeout=10))
         if not math.isfinite(duration) or duration <= 0:
@@ -101,8 +103,10 @@ def run_job(job_id):
             timing = {'durationSeconds': duration}
             def playable(milliseconds):
                 timing['firstFragmentMs'] = milliseconds
-                status(directory, {'status': 'STREAMING', **timing})
-            engine.render(directory / 'reply.wav', directory / 'result.mp4', playable)
+                if story is None: status(directory, {'status': 'STREAMING', **timing})
+            avatar = directory / ('avatar.mp4' if story else 'result.mp4')
+            engine.render(directory / 'reply.wav', avatar, playable)
+            if story: compose(avatar, directory / 'result.mp4', story, duration)
             status(directory, {'status': 'COMPLETED', **timing, 'renderMs': round((time.monotonic()-started)*1000)})
             return
         # At 24 fps Whisper context padding rounds up to three features, while
@@ -120,7 +124,10 @@ def run_job(job_id):
         if final is None:
             raise ValueError('Final output missing')
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-vf', 'scale=-2:720,setpts=PTS-STARTPTS', '-c:v', 'libx264', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-movflags', '+faststart', str(directory / 'result.mp4')], check=True, timeout=90, capture_output=True)
-        status(directory, {'status': 'COMPLETED'})
+        if story:
+            (directory / 'result.mp4').replace(directory / 'avatar.mp4')
+            compose(directory / 'avatar.mp4', directory / 'result.mp4', story, duration)
+        status(directory, {'status': 'COMPLETED', 'durationSeconds': duration})
     except Exception as error:
         # Retain an internal reason without logging narration text or credentials.
         (directory / 'failure.json').write_text(json.dumps({'type': type(error).__name__, 'duration': locals().get('duration')}))
@@ -128,12 +135,14 @@ def run_job(job_id):
     finally:
         # Intermediate frames are large; only retain the final MP4 and job metadata.
         shutil.rmtree(directory / 'results', ignore_errors=True)
+        (directory / 'avatar.mp4').unlink(missing_ok=True)
         with lock:
             pending.discard(job_id)
 
 class Job(BaseModel):
     id: str
     audio: str
+    lesson: dict | None = None
 
 @app.get('/health', dependencies=[Depends(authorize)])
 def health():
@@ -142,6 +151,8 @@ def health():
 @app.post('/jobs', status_code=202, dependencies=[Depends(authorize)])
 def submit(job: Job):
     directory = folder(job.id)
+    try: story = read_story(job.lesson) if job.lesson is not None else None
+    except ValueError: raise HTTPException(422, 'Invalid lesson storyboard') from None
     if len(job.audio) > 5_400_000:
         raise HTTPException(413, 'Audio too large')
     try:
@@ -160,10 +171,44 @@ def submit(job: Job):
             raise HTTPException(429, 'GPU busy')
         directory.mkdir(mode=0o700)
         (directory / 'input.audio').write_bytes(audio)
+        if story: (directory / 'lesson.json').write_text(json.dumps(story, ensure_ascii=False))
         status(directory, {'status': 'PENDING'})
         pending.add(job.id)
         pool.submit(run_job, job.id)
     return {'id': job.id}
+
+class Film(BaseModel):
+    id: str
+    parts: list[str]
+
+def run_film(job_id, parts):
+    directory=folder(job_id)
+    try:
+        status(directory, {'status':'PROCESSING'})
+        assemble([folder(part)/'result.mp4' for part in parts],directory/'result.mp4')
+        duration=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',str(directory/'result.mp4')],timeout=15))
+        status(directory, {'status':'COMPLETED','durationSeconds':duration})
+    except Exception as error:
+        (directory/'failure.json').write_text(json.dumps({'type':type(error).__name__}))
+        status(directory, {'status':'FAILED','error':'Le film n’a pas pu être assemblé.'})
+    finally:
+        with lock:pending.discard(job_id)
+
+@app.post('/films', status_code=202, dependencies=[Depends(authorize)])
+def submit_film(film: Film):
+    directory=folder(film.id)
+    if not 1<=len(film.parts)<=12 or len(set(film.parts))!=len(film.parts) or film.id in film.parts:raise HTTPException(422,'Invalid film parts')
+    for part in film.parts:
+        child=folder(part)
+        if not (child/'lesson.json').is_file() or not (child/'result.mp4').is_file() or json.loads((child/'status.json').read_text()).get('status')!='COMPLETED':raise HTTPException(409,'Lesson part unavailable')
+    with lock:
+        if (directory/'status.json').exists() and json.loads((directory/'status.json').read_text()).get('status')!='FAILED':return {'id':film.id}
+        if film.id in pending:return {'id':film.id}
+        if len(pending)>=3:raise HTTPException(429,'GPU busy')
+        directory.mkdir(mode=0o700,exist_ok=True)
+        (directory/'film.json').write_text(json.dumps({'parts':film.parts}))
+        status(directory,{'status':'PENDING'});pending.add(film.id);pool.submit(run_film,film.id,film.parts)
+    return {'id':film.id}
 
 @app.get('/jobs/{job_id}', dependencies=[Depends(authorize)])
 def get_status(job_id: str):
