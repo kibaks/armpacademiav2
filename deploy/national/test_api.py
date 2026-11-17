@@ -67,4 +67,16 @@ class ApiTests(unittest.TestCase):
     def test_limits_and_empty_text(self):
         self.assertEqual(self.client.post('/translate', headers=self.headers, json={'text': 'x' * 6001, 'language': 'sw'}).status_code, 422)
         self.assertEqual(self.client.post('/translate', headers=self.headers, json={'text': ' ', 'language': 'sw'}).status_code, 422)
+class SentenceTests(unittest.TestCase):
+    def test_definitions_and_examples_are_separate_complete_units(self):
+        text = 'Un besoin décrit ce qui est nécessaire. Il faut préciser son usage. Exemple fictif : une école décrit son mobilier.'
+        units = service.translation_sentences(text)
+        self.assertEqual(len(units), 3)
+        self.assertEqual(' '.join(units), text)
+    def test_legal_references_initials_and_numbered_headings_stay_whole(self):
+        for text in ['Art. Premier : une règle. Une exception.', 'M. David lit le dossier. Il vérifie les pièces.', '1. Définir le besoin. Préparer le dossier.']:
+            units = service.translation_sentences(text)
+            self.assertEqual(len(units), 2)
+            self.assertEqual(' '.join(units), text)
+
 if __name__ == '__main__': unittest.main()

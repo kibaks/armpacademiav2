@@ -3,6 +3,7 @@ import base64
 from functools import lru_cache
 import hmac
 import io
+import re
 import os
 from pathlib import Path
 import subprocess
@@ -83,6 +84,19 @@ def health():
 def capabilities():
     return {'provider': 'national-local', 'translation': list(LANGUAGES), 'speech': list(VOICES) + [code for code in ('kg', 'lua') if code in os.environ.get('NATIONAL_EXTRA_VOICES', '').split(',')], 'limitations': {'ln': 'Voix locale lingala avec références natives : prononciation à vérifier.', 'sw': 'Accent congolais non validé.', 'kg': 'Kituba de RDC : voix locale expérimentale, prononciation à valider.', 'lua': 'OmniVoice local : prononciation à valider.'}, 'translationModel': 'facebook/nllb-200-distilled-600M', 'reviewRequired': True, 'license': 'non-commercial'}
 
+def translation_sentences(paragraph):
+    # Keep initials, legal abbreviations and numbered headings with their text.
+    pieces = re.split(r'(?<=[.!?])\s+(?=[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŸ«“])', paragraph.strip())
+    sentences = []
+    for piece in pieces:
+        previous = sentences[-1].split()[-1] if sentences else ''
+        abbreviated = previous.lower() in {'m.', 'mme.', 'dr.', 'prof.', 'art.', 'al.', 'etc.', 'n°.'} or bool(re.fullmatch(r'(?:[A-Za-z]\.)+|\d+\.', previous))
+        if sentences and abbreviated:
+            sentences[-1] += ' ' + piece
+        else:
+            sentences.append(piece)
+    return sentences
+
 @app.post('/translate', dependencies=[Depends(authorize)])
 def translate(body: Translation):
     if body.language not in {'fr', *LANGUAGES} or body.sourceLanguage not in {'fr', *LANGUAGES} or not body.text.strip():
@@ -96,7 +110,12 @@ def translate(body: Translation):
         # Keep paragraph boundaries; never silently truncate a legal condition.
         parts = unicodedata.normalize('NFC', body.text).split('\n')
         translated = list(parts)
-        active = [(index, paragraph) for index, paragraph in enumerate(parts) if paragraph.strip()]
+        active = []
+        for index, paragraph in enumerate(parts):
+            if paragraph.strip():
+                translated[index] = ''
+                units = translation_sentences(paragraph) if body.sourceLanguage == 'fr' else [paragraph]
+                active.extend((index, unit) for unit in units)
         # Small batches share decoder work without an unbounded GPU allocation.
         for start in range(0, len(active), 4):
             batch = active[start:start + 4]
@@ -116,7 +135,7 @@ def translate(body: Translation):
             if len(texts) != len(batch) or any(not text.strip() for text in texts):
                 raise HTTPException(503, 'Empty translation')
             for (index, _), text in zip(batch, texts):
-                translated[index] = unicodedata.normalize('NFC', text.strip())
+                translated[index] += (' ' if translated[index] else '') + unicodedata.normalize('NFC', text.strip())
         return {'text': '\n'.join(translated), 'language': body.language, 'provider': 'nllb-200', 'reviewRequired': True}
     except HTTPException:
         raise
