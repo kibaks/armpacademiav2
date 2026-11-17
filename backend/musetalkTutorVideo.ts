@@ -49,7 +49,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const text = language==='fr' ? normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.())) : normalizeNationalSpeech(raw);
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : []), ...(lesson ? ['course-motion-v1',lesson] : [])])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : []), ...(lesson ? ['course-motion-v2-vector',lesson] : [])])).digest('hex');
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {
@@ -92,7 +92,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (!Array.isArray(parts) || parts.length<1 || parts.length>12 || new Set(parts).size!==parts.length || !parts.every((id:unknown)=>typeof id==='string' && /^[a-f0-9]{64}$/.test(id))) return res.status(400).json({error:'Séquences invalides.'});
       const children=await Promise.all(parts.map((id:string)=>db().collection('musetalkTutorJobs').doc(id).get()));
       if (children.some((snapshot:any)=>{const job=snapshot.data();return !job || job.uid!==req.identity.uid || job.kind!=='motion-scene' || job.status!=='COMPLETED' || Date.now()-job.createdAt>=86400000;})) return res.status(404).json({error:'Une séquence du film est indisponible.'});
-      const id=createHash('sha256').update(JSON.stringify([req.identity.uid,'course-film-v1',parts])).digest('hex');
+      const id=createHash('sha256').update(JSON.stringify([req.identity.uid,'course-film-v2-vector',parts])).digest('hex');
       ref=db().collection('musetalkTutorJobs').doc(id);
       const reservation=await db().runTransaction(async(tx:any)=>{
         const existing=await tx.get(ref),job=existing.data();

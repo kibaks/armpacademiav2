@@ -17,10 +17,10 @@ export function CourseMotionVideo(props:Props){
   const current=++generation.current,valid=()=>current===generation.current && !controller.signal.aborted;
   setState({kind:'working',progress:0,label:'Préparation du film du chapitre…'});
   try{
-   const source=JSON.stringify(['course-film-v1',props.sentences,props.screens,music]);
+   const source=JSON.stringify(['course-film-v2-vector',props.sentences,props.screens,music]);
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source));
    const fingerprint=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
-   const storageKey=`academia-course-film-v1:${props.userId||'session'}:${key}:${music}`;
+   const storageKey=`academia-course-film-v2-vector:${props.userId||'session'}:${key}:${music}`;
    let saved:{id?:string;fingerprint?:string}|null=null;try{saved=JSON.parse(localStorage.getItem(storageKey)||'null');}catch{}
    if(saved?.fingerprint===fingerprint && /^[a-f0-9]{64}$/.test(saved.id||'')){
     try{const ready=await waitForCourseVideo(saved.id!,controller.signal);if(valid()){setState({kind:'ready',progress:1,...ready});return;}}catch{controller.signal.throwIfAborted();}
@@ -54,7 +54,7 @@ export function CourseMotionVideo(props:Props){
   }catch(error){setState(previous=>({...previous,error:error instanceof Error?error.message:'Téléchargement indisponible.'}));}finally{setDownloading(false);}
  };
  return <section className="course-motion-film" aria-label="Film du chapitre">
-  <div className="course-motion-film__heading"><Clapperboard aria-hidden="true"/><div><h3>Le chapitre en vidéo</h3><p>Une tutrice parlante, des repères animés et une narration réunis dans un vrai film.</p></div></div>
+  <div className="course-motion-film__heading"><Clapperboard aria-hidden="true"/><div><h3>Le chapitre en vidéo</h3><p>Des pictogrammes en mouvement, une tutrice parlante et la narration du cours réunis dans un film.</p></div></div>
   <div className="course-motion-film__actions">
    <button type="button" className="course-motion-film__create" onClick={()=>void generate()} disabled={state.kind==='working'}>{state.kind==='working'?<LoaderCircle className="course-motion-film__spin" aria-hidden="true"/>:state.kind==='ready'?<RefreshCw aria-hidden="true"/>:<Play aria-hidden="true"/>}{state.kind==='ready'?'Retrouver le film':state.kind==='error'?'Réessayer la réalisation':'Créer le film du chapitre'}</button>
    <label><input type="checkbox" checked={music} disabled={state.kind==='working'} onChange={event=>{setMusic(event.target.checked);setState({kind:'idle',progress:0});}}/>Ambiance musicale douce</label>

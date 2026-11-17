@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from course_motion import read_story, frame, fitted_text, compose, assemble
+from course_motion import read_story, frame, fitted_text, compose, assemble, pictogram_kind, animated_illustration
 from PIL import Image, ImageDraw
 
 STORY={'title':'Définir le besoin','chapter':'Un achat au service des citoyens','sceneIndex':0,'sceneCount':2,'terms':['Besoin','Usage','Caractéristiques'],'cues':[{'text':'Décrivez ce qui est nécessaire, sans imposer une marque.','start':0,'phase':'explanation'},{'text':'Vérifiez les caractéristiques utiles avant la consultation.','start':.7,'phase':'rule'}],'legalRef':'Extrait pédagogique du cours','music':False}
@@ -12,6 +12,15 @@ class MotionTests(unittest.TestCase):
   first,last=frame(story,0,4),frame(story,3.9,4)
   self.assertEqual(first.size,(1280,720));self.assertNotEqual(first.tobytes(),last.tobytes())
   self.assertEqual(story['cues'][0]['text'],STORY['cues'][0]['text'])
+ def test_pictograms_match_source_concepts_and_keep_animating(self):
+  for term,kind in [('autorité contractante','building'),('travaux','works'),('prix','coins'),('citoyens','people'),('contrôle','shield'),('égalité','scales'),('DAO','document')]:
+   self.assertEqual(pictogram_kind(term),kind)
+   images=[]
+   for t in [2,2.5]:
+    image=Image.new('RGB',(879,420),'white');draw=ImageDraw.Draw(image)
+    animated_illustration(draw,{**STORY,'terms':[term]},STORY['cues'][0],t,t)
+    images.append(image.tobytes())
+   self.assertNotEqual(*images,term)
  def test_invalid_metadata_never_reaches_the_encoder(self):
   for patch in [{'sceneIndex':-1},{'sceneCount':100},{'music':'yes'},{'cues':[{'text':'X','start':float('nan'),'phase':'rule'}]}]:
    with self.assertRaises(ValueError):read_story({**STORY,**patch})

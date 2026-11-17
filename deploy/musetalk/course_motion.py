@@ -55,21 +55,87 @@ def read_story(value):
         previous=cue['start'];normalized.append({'text':cue['text'],'start':cue['start'],'phase':cue['phase']})
     return {'title':value['title'].strip(),'chapter':value['chapter'].strip(),'sceneIndex':index,'sceneCount':count,'terms':terms,'cues':normalized,'legalRef':legal,'music':value['music']}
 
-def motif(draw,text,t):
-    value=text.lower();x,y=770,43+round(math.sin(t*.9)*2)
-    if any(word in value for word in ['citoyen','famille','communauté']):
-        for dx,dy,color in [(-25,8,'#7BA8A4'),(25,8,'#7BA8A4'),(0,0,NAVY)]:
-            draw.ellipse((x+dx-9,y+dy-22,x+dx+9,y+dy-4),fill=color)
-            draw.rounded_rectangle((x+dx-13,y+dy,x+dx+13,y+dy+24),10,fill=color)
-        draw.arc((x-42,y-31,x+42,y+42),15,165,fill=GOLD,width=3)
-    elif any(word in value for word in ['prix','budget','crédit','paiement']):
+def pictogram_kind(text):
+    import unicodedata
+    value=''.join(c for c in unicodedata.normalize('NFD',text.lower()) if unicodedata.category(c)!='Mn')
+    groups=[('people',('citoyen','famille','communaute','personne','eleve')),('building',('autorite','entreprise','institution','ecole','administration')),('coins',('prix','budget','credit','paiement','financ','montant')),('works',('travaux','ouvrage','chantier','construction')),('shield',('controle','verifi','conform','garantie')),('scales',('egalite','equite','concurrence','transparence')),('document',('dossier','document','dao','contrat','engagement','offre','ppm','besoin','caracteristique'))]
+    for kind,words in groups:
+        if any(word in value for word in words):return kind
+    return 'document'
+
+def pictogram(draw,kind,cx,cy,scale,t,entry):
+    """Code-native vector primitives; large semantic motion, no remote artwork."""
+    def box(a,b,c,d):return (cx+a*scale,cy+b*scale,cx+c*scale,cy+d*scale)
+    def line(points,color=NAVY,width=3):draw.line([(cx+x*scale,cy+y*scale) for x,y in points],fill=color,width=max(1,round(width*scale)),joint='curve')
+    def rect(a,b,c,d,fill,outline=None):draw.rounded_rectangle(box(a,b,c,d),max(1,round(4*scale)),fill=fill,outline=outline,width=max(1,round(2*scale)))
+    beat=(math.sin(t*1.7)+1)/2
+    if kind=='building':
+        draw.polygon([(cx+x*scale,cy+y*scale) for x,y in [(-38,-16),(0,-40),(38,-16)]],fill=NAVY)
+        rect(-35,-12,35,-5,GOLD)
+        for x in (-25,-5,15):rect(x,0,x+10,29,'#6D9D99')
+        rect(-39,33,39,40,NAVY)
+        # A document travels toward the institution, then starts again.
+        travel=(t*.24)%1;rect(-70+travel*35,14-travel*7,-51+travel*35,37-travel*7,'#FFFFFF',GOLD)
+    elif kind=='people':
+        for x,dy in [(-28,7),(28,7),(0,0)]:
+            rise=round(math.sin(t*1.5+x*.04)*3)
+            draw.ellipse(box(x-10,-34+dy+rise,x+10,-14+dy+rise),fill=NAVY if x==0 else '#6D9D99')
+            rect(x-14,-7+dy+rise,x+14,28+dy+rise,NAVY if x==0 else '#6D9D99')
+        line([(-48,37),(-20,43),(20,43),(48,37)],GOLD,3)
+    elif kind=='coins':
         for i in range(3):
-            dx=(i-1)*23;rise=round((math.sin(t*.7+i)+1)*2)
-            draw.rounded_rectangle((x+dx-9,y+19-i*12-rise,x+dx+9,y+34),4,fill=[NAVY,'#6D9D99',GOLD][i])
+            height=(16+i*13)*ease(min(1,entry*1.5-i*.15))
+            rect(-38+i*27,34-height,-18+i*27,34,[NAVY,'#6D9D99',GOLD][i])
+        coin_y=-30+beat*13
+        draw.ellipse(box(8,coin_y,37,coin_y+29),fill='#F9E9C4',outline=GOLD,width=max(1,round(3*scale)))
+        line([(18,coin_y+14),(28,coin_y+14)],GOLD,3)
+    elif kind=='works':
+        line([(-40,35),(41,35)],NAVY,4)
+        line([(-20,32),(-20,-39),(25,-39),(25,-28)],NAVY,4)
+        line([(-38,-26),(44,-26)],GOLD,5)
+        hook_x=14+math.sin(t*1.2)*16
+        line([(hook_x,-26),(hook_x,4)],NAVY,2)
+        rect(hook_x-12,4,hook_x+12,18,'#6D9D99')
+        for i in range(3):rect(0+i*13,23,10+i*13,33,'#D8AA4B')
+    elif kind=='shield':
+        points=[(-32,-35),(0,-44),(32,-35),(28,7),(0,38),(-28,7),(-32,-35)]
+        draw.polygon([(cx+x*scale,cy+y*scale) for x,y in points],fill='#E5F1EF');line(points,'#6D9D99',3)
+        check=[(-17,-5),(-4,10),(20,-17)];progress=min(1,entry*1.6)
+        if progress<.5:
+            q=progress*2;line([check[0],(check[0][0]+13*q,check[0][1]+15*q)],NAVY,5)
+        else:
+            q=(progress-.5)*2;line([check[0],check[1],(-4+24*q,10-27*q)],NAVY,5)
+        scan=-32+((t*.3)%1)*58;line([(-22,scan),(22,scan)],GOLD,2)
+    elif kind=='scales':
+        tilt=math.sin(t*1.1)*(2+3*(1-entry))
+        line([(0,-38),(0,34),(-24,34),(24,34)],NAVY,4)
+        line([(-38,-20+tilt),(38,-20-tilt)],GOLD,4)
+        for x,offset in [(-30,tilt),(30,-tilt)]:
+            line([(x,-20+offset),(x-14,11+offset),(x+14,11+offset),(x,-20+offset)],NAVY,2)
+            draw.arc(box(x-14,0+offset,x+14,21+offset),0,180,fill='#6D9D99',width=max(2,round(5*scale)))
     else:
-        draw.rounded_rectangle((x-27,y-24,x+27,y+32),7,fill='#EDF3F9',outline='#7291AD',width=2)
-        draw.line((x-14,y-9,x+14,y-9),fill=GOLD,width=4)
-        for i in range(3):draw.line((x-14,y+4+i*9,x+9-(i%2)*6,y+4+i*9),fill=NAVY,width=2)
+        rect(-30,-40,30,39,'#F1F5FA',NAVY)
+        draw.polygon([(cx+10*scale,cy-40*scale),(cx+30*scale,cy-20*scale),(cx+10*scale,cy-20*scale)],fill='#CADBEA')
+        for i in range(4):
+            reveal=ease(entry*2-i*.18);line([(-18,-17+i*12),(-18+(36 if i!=3 else 23)*reveal,-17+i*12)],GOLD if i==0 else '#6D9D99',3)
+        # Visible page-to-page motion, confined to the document illustration.
+        scan=-22+((t*.25)%1)*53;line([(-21,scan),(21,scan)],'#BACDDF',1)
+
+def animated_illustration(draw,story,cue,seconds,cue_age):
+    # Labels only from the source; links are associative, never legal process arrows.
+    terms=story['terms'] or [story['title']]
+    count=len(terms);centers=[439] if count==1 else [245,620] if count==2 else [160,439,718]
+    for i in range(count-1):
+        left,right=centers[i]+62,centers[i+1]-62
+        draw.line((left,196,right,196),fill='#D8E4ED',width=3)
+        dot=left+((seconds*.35)%1)*(right-left)
+        draw.ellipse((dot-4,192,dot+4,200),fill=GOLD)
+    for i,term in enumerate(terms):
+        entry=ease((cue_age-i*.16)/.65);cx=centers[i];cy=190+round((1-entry)*32)
+        active=term.casefold() in cue['text'].casefold()
+        draw.ellipse((cx-58,cy-58,cx+58,cy+58),fill='#FFF3D8' if active else '#F0F5FA')
+        pictogram(draw,pictogram_kind(term),cx,cy,.95*(.65+.35*entry),seconds,entry)
+        fitted_text(draw,term,(cx-105,257),210,43,19,NAVY)
 
 def frame(story,seconds,duration):
     p=max(0,min(1,seconds/duration));image=Image.new('RGB',(W,H),'#F0F4F8');d=ImageDraw.Draw(image)
@@ -89,9 +155,9 @@ def frame(story,seconds,duration):
     label='LE BON RÉFLEXE' if cue['phase']=='rule' else 'COMPRENDRE'
     ld.rounded_rectangle((27,25,250,62),8,fill='#FFF3D8' if cue['phase']=='rule' else '#EAF3F4')
     ld.text((41,35),label,font=font(15,True),fill='#88601A' if cue['phase']=='rule' else '#286D69')
-    motif(ld,cue['text']+' '+' '.join(story['terms']),seconds)
-    fitted_text(ld,story['title'],(28,89),810,60,27,NAVY)
-    fitted_text(ld,cue['text'],(28,165),806,204,39)
+    animated_illustration(ld,story,cue,seconds,max(0,seconds-begin))
+    fitted_text(ld,story['title'],(28,77),810,55,25,NAVY)
+    fitted_text(ld,cue['text'],(28,310),806,100,28)
     if appear<1:layer.putalpha(layer.getchannel('A').point(lambda a:int(a*appear)))
     image.paste(layer,(356,166+round((1-appear)*12)),layer)
     d=ImageDraw.Draw(image)

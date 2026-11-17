@@ -170,3 +170,17 @@ source answers. This is not a legal review of the underlying course catalog.
 Validation: `npx tsx --test tests/courseMotionVideo.test.ts tests/musetalkTutorVideo.test.ts tests/qwenTutor.test.ts`.
 Worker: `PYTHONPATH=/opt/MuseTalk /workspace/academia/national-venv/bin/python -m unittest -v test_course_motion test_api`
 from the staged worker directory (the national venv includes the API test client).
+
+
+### Vector illustration revision
+
+`course-motion-v2-vector` invalidates earlier scene and browser film caches.
+Large code-drawn pictograms now occupy the main explanation area: institution,
+actors, budget, works, control, equality and documents. Their motion includes
+page writing, travelling documents, lifting loads, a drawn check and moving
+budget elements, with staggered entrances synchronized to the current source cue.
+Concept labels remain extracted from the course; connecting dots express an
+association, not a legally prescribed sequence. The talking tutor remains in
+its separate proportional inset. Captions are preserved in full below the
+illustration. `test_course_motion.py` verifies all seven pictogram categories
+and motion beyond their entrance as well as real audio/video encoding.
