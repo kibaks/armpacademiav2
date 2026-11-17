@@ -38,3 +38,11 @@ test('an interrupted follow-up does not submit another job and invalid responses
  await assert.rejects(courseVideoRequest('',{},new AbortController().signal,async()=>new Response('<html>Unavailable</html>',{status:503})),/moteur vidéo/);
  await assert.rejects(waitForCourseVideo('a'.repeat(64),new AbortController().signal,async()=>Response.json({status:'FAILED',error:'Échec de cette séquence.'}),async()=>{}),/Échec de cette séquence/);
 });
+
+test('film captions preserve the corrected source definition and all its wording',()=>{
+ const screen=calibrated.sceneData.screens[0];
+ const story=courseMotionStoryboard(screen,lesson.title,0,calibrated.sentences.length,true);
+ assert.ok(story.cues[0].text.startsWith('Le marché public est'));
+ assert.equal(story.cues.filter(c=>c.phase==='explanation').map(c=>c.text).join(' '),screen.explanation.trim().replace(/\s+/g,' '));
+ assert.equal(story.cues[0].start,0);
+});
