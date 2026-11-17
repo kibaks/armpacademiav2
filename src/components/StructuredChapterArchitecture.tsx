@@ -397,7 +397,7 @@ III. CADRE DE SAISINE (EN CAS DE CONTESTATION)
         id: 'opt-saucisson',
         label: `Diviser le montant en plusieurs bons de commande inférieurs au seuil pour éviter le contrôle a priori.`,
         isCorrect: false,
-        feedback: `Infraction caractérisée : il s'agit d'un fractionnement artificiel (« saucissonnage ») formellement interdit et sanctionné par l'ARMP.`
+        feedback: `Infraction caractérisée : le fractionnement artificiel (« saucissonnage ») est formellement interdit et sanctionné par l'ARMP.`
       }
     ]
   };

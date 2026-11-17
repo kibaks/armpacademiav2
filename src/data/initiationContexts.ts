@@ -4,7 +4,7 @@ export const INITIATION_CONTEXTS = [
     "Fournitures, travaux et services",
     "une administration prépare plusieurs achats",
     [
-      "Une administration achète des ordinateurs pour ses agents : il s’agit de répondre à un besoin de service, avec des fonds publics et des règles à respecter.",
+      "Une autorité contractante acquiert des fournitures informatiques pour ses agents afin de satisfaire un besoin de service, avec des fonds publics et dans le respect des règles de la commande publique.",
       "La réhabilitation d’une route, l’achat de matériel informatique et une formation des agents répondent à des besoins différents. Le dossier doit préciser la nature de chaque prestation.",
       "Deux entreprises souhaitent fournir les mêmes ordinateurs. Elles doivent disposer des mêmes informations utiles pour préparer leurs offres."
     ]

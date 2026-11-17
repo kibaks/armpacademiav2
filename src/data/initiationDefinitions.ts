@@ -5,7 +5,7 @@ export const INITIATION_DEFINITIONS = [
   [
     [
       "Marché public",
-      "Il s’agit d’un engagement écrit : une entreprise réalise des travaux, livre des biens ou fournit une prestation en échange d’un prix, pour une autorité contractante qui apporte un financement ou une garantie financière.",
+      "Le marché public est un engagement écrit : une entreprise réalise des travaux, livre des biens ou fournit une prestation en échange d’un prix, pour une autorité contractante qui apporte un financement ou une garantie financière.",
       "Loi n° 10/010 · article 5"
     ],
     [
@@ -168,7 +168,7 @@ export const INITIATION_DEFINITIONS = [
     ],
     [
       "Avenant",
-      "Il s’agit d’un acte contractuel adaptant certaines clauses à des événements postérieurs à l’approbation du marché. Il reste soumis aux limites et autorisations légales ; une demande orale ne tient pas lieu d’avenant.",
+      "L’avenant est un acte contractuel adaptant certaines clauses à des événements postérieurs à l’approbation du marché. Il reste soumis aux limites et autorisations légales ; une demande orale ne tient pas lieu d’avenant.",
       "Loi n° 10/010 · articles 5 et 58"
     ]
   ],
