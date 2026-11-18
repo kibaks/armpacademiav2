@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { SingleScreenCardData } from './ProfessorFilmScenes';
 import { cartoonSpeechMouth } from '../utils/cartoonLessonScene';
 import { sampleLessonStoryboard, motionWindow } from '../utils/motionLessonStoryboard';
+import { drawCoursePictogram } from '../utils/coursePictograms';
 import { lessonConceptLabels } from '../utils/lessonConceptLabels';
 import { advanceLessonMotion, type LessonMotionClock } from '../utils/lessonMotionClock';
 import './CartoonLesson.css';
@@ -78,7 +79,7 @@ function trace(c:Pen,points:number[],p:number,color=teal,width=4){
 }
 function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=false){
  const portrait=w/h<1, W=portrait?720:1280,H=portrait?1120:720;
- const shot=sampleLessonStoryboard(props.screen,props.progress,portrait?20:32);
+ const shot=sampleLessonStoryboard(props.screen,props.progress,portrait?20:32,true);
  const margin=portrait?32:48,navy='#123457',muted='#587088',accent='#D8AA4B';
  c.save();c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,w,h);c.scale(w/W,h/H);
  c.fillStyle='#F0F4F8';c.fillRect(0,0,W,H);
@@ -107,16 +108,15 @@ function drawScene(c:Pen,props:StageProps,time:number,w:number,h:number,reduced=
   c.save();c.globalAlpha=.28+.72*entry;c.translate((1-entry)*12,0);
   box(c,cardX,y,cardW,78,'#F0F5FA',14);
   box(c,cardX,y,4,78,index===shot.pageIndex%items.length?accent:'#C3D4E5',2);
-  ellipse(c,cardX+36,y+39,17,17,navy);
-  ellipse(c,cardX+36,y+39,3,3,'#FFFFFF');
-  paragraph(c,term.charAt(0).toUpperCase()+term.slice(1),cardX+67,y+31,cardW-86,62,portrait?23:24,navy,700);
+  drawCoursePictogram(c,term,cardX+47,y+39,reduced?0:time);
+  paragraph(c,term.charAt(0).toUpperCase()+term.slice(1),cardX+99,y+31,cardW-118,62,portrait?23:24,navy,700);
   c.restore();
  });
  const textY=portrait?658:184,textX=portrait?32:768,textW=portrait?656:464,textH=portrait?340:400;
  box(c,textX,textY,textW,textH,'#FFFFFF',24);
  box(c,textX+26,textY+25,shot.phase==='rule'?136:159,28,shot.phase==='rule'?'#FFF3D8':'#EAF3F4',7);
  c.textAlign='left';c.fillStyle=shot.phase==='rule'?'#88601A':'#286D69';c.font=`750 ${portrait?14:11}px system-ui,sans-serif`;
- c.fillText(shot.phase==='rule'?'LE BON RÉFLEXE':'L’IDÉE ESSENTIELLE',textX+38,textY+44);
+ c.fillText(shot.phase==='rule'?'LE BON RÉFLEXE':'LE TEXTE DU COURS',textX+38,textY+44);
  const appear=reduced?1:motionWindow(shot.pageProgress,0,.1);
  c.save();c.globalAlpha=appear;c.translate(0,(1-appear)*8);
  // Display each complete thought together; no flickering letter-by-letter text.

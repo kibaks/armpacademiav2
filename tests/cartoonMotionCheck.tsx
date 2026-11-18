@@ -12,7 +12,7 @@ function Check() {
   <h1 style={{fontSize:26,fontWeight:750,marginBottom:8}}>Aperçu du cours animé</h1>
   <p>Présentation pédagogique ARMP · Des repères clairs pour comprendre le cours.</p>
   <button style={{ padding: '12px 24px', marginBottom: 16 }} onClick={() => setPlaying(p => !p)}>{playing ? 'Pause' : 'Lire'}</button>
-  <CartoonLessonStage screen={screen} progress={.45} playing={playing} speaking={false} mouthOpenness={0} viseme="rest" legalRef={course.legalRef} sceneCount={7}/>
+  <CartoonLessonStage screen={screen} progress={.08} playing={playing} speaking={false} mouthOpenness={0} viseme="rest" legalRef={course.legalRef} sceneCount={5}/>
  </main>;
 }
 createRoot(document.getElementById('root')!).render(<Check/>);

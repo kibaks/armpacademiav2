@@ -47,12 +47,13 @@ export function essentialLessonCues(text: string): string[] {
   }
   return [...new Set(cues)].slice(0, 3);
 }
-export function sampleLessonStoryboard(screen: SingleScreenCardData, progress: number, _maxWords = 32) {
+export function sampleLessonStoryboard(screen: SingleScreenCardData, progress: number, maxWords = 32, completeSource = false) {
   const p = clamp(progress);
-  const introEnd = Math.max(.05, Math.min(.35, screen.explanationStartRatio || .12));
-  const ruleStart = Math.max(introEnd + .1, Math.min(.95, screen.fieldRuleStartRatio || .75));
-  const isRule = p >= ruleStart;
-  const selected = essentialLessonCues(isRule ? screen.fieldRule : screen.explanation);
+  const introEnd = completeSource ? Math.max(0, Math.min(.35, screen.explanationStartRatio ?? 0)) : Math.max(.05, Math.min(.35, screen.explanationStartRatio || .12));
+  const ruleStart = completeSource && !screen.fieldRule.trim() ? 1 : Math.max(introEnd + .1, Math.min(completeSource ? .995 : .95, screen.fieldRuleStartRatio ?? .75));
+  const isRule = p >= ruleStart && (!completeSource || Boolean(screen.fieldRule.trim()));
+  const source = isRule ? screen.fieldRule : screen.explanation;
+  const selected = completeSource ? paginateLessonText(source,maxWords).filter(Boolean) : essentialLessonCues(source);
   const pages = selected.length ? selected : [isRule ? 'Le bon réflexe' : 'L’idée essentielle'];
   const start = isRule ? ruleStart : introEnd, end = isRule ? 1 : ruleStart;
   const sectionProgress = clamp((p - start) / (end - start));

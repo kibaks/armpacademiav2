@@ -28,3 +28,15 @@ test('the illustrated course displays and narrates complete source sentences', (
  assert.ok(sceneData.screens[0].spokenText.includes(sceneData.screens[0].explanation));
  assert.ok(sceneData.screens[0].spokenText.includes('toutes les parties'));
 });
+
+
+test('the live course stage shows the corrected definition instead of an old summary', async()=>{
+ const {buildCourseCatalog}=await import('../shared/courseCatalog');
+ const {sampleLessonStoryboard}=await import('../src/utils/motionLessonStoryboard');
+ const course=buildCourseCatalog()[0],lesson=course.lessons[0];
+ const {sceneData}=buildSynchronizedLessonScreens(lesson.title,lesson.content,course.code,course.legalRef,0);
+ const screen=sceneData.screens[0];
+ assert.match(sampleLessonStoryboard(screen,0,32,true).text,/^Le marché public est/);
+ assert.equal(sampleLessonStoryboard(screen,1,32,true).phase,'explanation');
+ assert.ok(!sampleLessonStoryboard(screen,1,32,true).text.includes('Le bon réflexe'));
+});

@@ -580,7 +580,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       <header className="cartoon-player__header">
         <div className="cartoon-player__heading">
           <span className="cartoon-player__mark"><GraduationCap size={23} aria-hidden="true" /></span>
-          <div><small>{course.code || 'ACADEMIA'} · COURS ANIMÉ · CHAPITRE {lessonIndex + 1}</small><h2 title={safeTitle}>{lessonDisplayHeading(safeTitle, course.code || "Cours animé")}</h2></div>
+          <div><small>{course.code || 'ACADEMIA'} · PICTOGRAMMES ANIMÉS · CHAPITRE {lessonIndex + 1}</small><h2 title={safeTitle}>{lessonDisplayHeading(safeTitle, course.code || "Cours animé")}</h2></div>
         </div>
         <div className="cartoon-player__header-actions">
           {uploadedVideoUrl && <button type="button" className={`cartoon-player__pill ${showRawVideo ? 'is-active' : ''}`} onClick={() => setShowRawVideo(value => !value)} aria-pressed={showRawVideo} aria-label={showRawVideo ? 'Afficher le cours animé' : 'Afficher la vidéo du cours'}><Video /><span>{showRawVideo ? 'Animation' : 'Vidéo'}</span></button>}
