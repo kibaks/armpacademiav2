@@ -1,3 +1,5 @@
+import publishedTutorFilm from '../assets/courses/init-01-chapitre-01-tutrice-v1.mp4';
+import publishedTutorPoster from '../assets/courses/init-01-chapitre-01-tutrice-v1.jpg';
 import { CourseMotionVideo } from './CourseMotionVideo';
 import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
 import { CartoonLessonStage } from './CartoonLessonStage';
@@ -134,6 +136,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const lesson = course.lessons?.[lessonIndex] || course.lessons?.[0];
   const safeTitle = lesson?.title || course.title || 'Module Marchés Publics RDC';
   const safeContent = lesson?.content || course.description || '';
+  const hasPublishedTutorFilm = course.id === 'INIT-01' && lessonIndex === 0;
+  const uploadedVideoUrl = hasPublishedTutorFilm ? publishedTutorFilm : lesson?.mediaUrl;
 
   // Resolve connected user profile from prop or active session in localStorage
   const effectiveUserProfile = useMemo(() => {
@@ -171,14 +175,15 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const [filmProgress, setFilmProgress] = useState<number>(0);
   const [playbackState, setPlaybackState] = useState<SpeechPlaybackState | null>(null);
   const playbackStateRef = useRef<SpeechPlaybackState | null>(null);
-  const [showRawVideo, setShowRawVideo] = useState<boolean>(false);
+  const [showRawVideo, setShowRawVideo] = useState<boolean>(hasPublishedTutorFilm);
 
   const smoothProgressRef = useRef<number>(0);
   const lastVoiceStartAtRef = useRef<number>(0);
 
   useEffect(() => {
     setManualSceneOverride(null);
-  }, [course.id, lessonIndex]);
+    setShowRawVideo(hasPublishedTutorFilm);
+  }, [course.id, lessonIndex, hasPublishedTutorFilm]);
 
   // ===========================================================================
   // SHARED SYNCHRONIZED LESSON BUILDER:
@@ -221,8 +226,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
 
   // Prewarm all 5 synchronized sentences immediately when the lesson opens
   useEffect(() => {
-    speechService.prewarmSentences(calibratedLesson.sentences, voicePersona);
-  }, [calibratedLesson.sentences, voicePersona]);
+    if (!showRawVideo) speechService.prewarmSentences(calibratedLesson.sentences, voicePersona);
+  }, [calibratedLesson.sentences, voicePersona, showRawVideo]);
 
   // Subscribe to speechService state with fine-grained 0.2% resolution so the hand draws in real time with the voice
   useEffect(() => {
@@ -291,6 +296,10 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       return;
     }
 
+    if (showRawVideo && uploadedVideoUrl) {
+      speechService.stop(); ambientMusicService.stop(); setIsPlaying(false); return;
+    }
+
     smoothProgressRef.current = 0;
     setFilmProgress(0);
     setIsPlaying(true);
@@ -309,7 +318,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     return () => {
       speechService.stop();
     };
-  }, [course.id, lessonIndex, manualSceneOverride, isCoursePreloading]);
+  }, [course.id, lessonIndex, manualSceneOverride, isCoursePreloading, showRawVideo, uploadedVideoUrl]);
 
   // Ensure animation loop always runs if external speech starts
   useEffect(() => {
@@ -556,7 +565,6 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedScreenIndex?.ts]);
 
-  const uploadedVideoUrl = (lesson as any)?.mediaUrl;
 
   const playerRef = useRef<HTMLDivElement>(null);
   const [fullScreen, setFullScreen] = useState(false);
@@ -580,18 +588,18 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
       <header className="cartoon-player__header">
         <div className="cartoon-player__heading">
           <span className="cartoon-player__mark"><GraduationCap size={23} aria-hidden="true" /></span>
-          <div><small>{course.code || 'ACADEMIA'} · PICTOGRAMMES ANIMÉS · CHAPITRE {lessonIndex + 1}</small><h2 title={safeTitle}>{lessonDisplayHeading(safeTitle, course.code || "Cours animé")}</h2></div>
+          <div><small>{course.code || 'ACADEMIA'} · {showRawVideo ? 'VIDÉO AVEC LA TUTRICE' : 'PICTOGRAMMES ANIMÉS'} · CHAPITRE {lessonIndex + 1}</small><h2 title={safeTitle}>{lessonDisplayHeading(safeTitle, course.code || "Cours animé")}</h2></div>
         </div>
         <div className="cartoon-player__header-actions">
-          {uploadedVideoUrl && <button type="button" className={`cartoon-player__pill ${showRawVideo ? 'is-active' : ''}`} onClick={() => setShowRawVideo(value => !value)} aria-pressed={showRawVideo} aria-label={showRawVideo ? 'Afficher le cours animé' : 'Afficher la vidéo du cours'}><Video /><span>{showRawVideo ? 'Animation' : 'Vidéo'}</span></button>}
+          {uploadedVideoUrl && <button type="button" className={`cartoon-player__pill ${showRawVideo ? 'is-active' : ''}`} onClick={() => {speechService.stop();ambientMusicService.stop();setIsPlaying(false);setShowRawVideo(value => !value);}} aria-pressed={showRawVideo} aria-label={showRawVideo ? 'Afficher le cours animé' : 'Afficher la vidéo du cours'}><Video /><span>{showRawVideo ? 'Animation' : 'Vidéo'}</span></button>}
           <button type="button" className="cartoon-player__icon-button" onClick={toggleFullScreen} aria-label={fullScreen ? 'Quitter le plein écran' : 'Afficher en plein écran'}>{fullScreen ? <Minimize2 /> : <Maximize2 />}</button>
         </div>
       </header>
-      {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video src={uploadedVideoUrl} controls playsInline /></div> :
+      {showRawVideo && uploadedVideoUrl ? <div className="cartoon-player__raw"><video key={uploadedVideoUrl} src={uploadedVideoUrl} poster={hasPublishedTutorFilm ? publishedTutorPoster : undefined} controls playsInline preload="metadata" aria-label={`Vidéo avec la tutrice : ${safeTitle}`} onPlay={()=>{speechService.stop();ambientMusicService.stop();setIsPlaying(false);}} onTimeUpdate={event=>{const video=event.currentTarget;if(Number.isFinite(video.duration) && video.duration>0)setFilmProgress(video.currentTime/video.duration*100);}} onEnded={()=>{setFilmProgress(100);setIsPlaying(false);}} /></div> :
         <CartoonLessonStage screen={currentScreenCard} progress={actVoiceProgress} playing={isPlaying && !isPreloading && !isCoursePreloading} speaking={isSpeaking && isPlaying} mouthOpenness={playbackState?.mouthOpenness || 0} viseme={playbackState?.viseme || 'closed'} male={voicePersona === 'henri'} legalRef={course.legalRef || ''} sceneCount={calibratedLesson.sceneData.screens.length} reducedMotion={!motionEnabled} />}
       {!showRawVideo && <details className="cartoon-film__transcript" onToggle={event => setDetailedDiagram(event.currentTarget.open)}><summary>Voir le schéma détaillé du cours</summary>{detailedDiagram && <InitiationMotionStage screen={currentScreenCard} progress={actVoiceProgress} courseId={course.id} lessonIndex={lessonIndex} reducedMotion={!motionEnabled || !isPlaying} />}</details>}
-      <CourseMotionVideo courseId={course.id} lessonIndex={lessonIndex} chapter={safeTitle} screens={calibratedLesson.sceneData.screens} sentences={calibratedLesson.sentences} userId={effectiveUserProfile?.id} onPrepare={()=>{speechService.stop();setIsPlaying(false);setVoiceMuted(true);}}/>
-      <div className="cartoon-player__transport">
+      {!hasPublishedTutorFilm && <CourseMotionVideo courseId={course.id} lessonIndex={lessonIndex} chapter={safeTitle} screens={calibratedLesson.sceneData.screens} sentences={calibratedLesson.sentences} userId={effectiveUserProfile?.id} onPrepare={()=>{speechService.stop();setIsPlaying(false);setVoiceMuted(true);}}/>}
+      {!showRawVideo && <><div className="cartoon-player__transport">
         <div className="cartoon-player__progress"><input type="range" min="0" max="100" step="0.2" value={filmProgress} onChange={event => handleSeek(Number(event.target.value))} aria-label="Progression de la leçon" aria-valuetext={`${Math.round(filmProgress)} % de la leçon`} /><span>{Math.round(filmProgress)} %</span></div>
         <div className="cartoon-player__tools">
           <div className="cartoon-player__tool-group">
@@ -616,7 +624,7 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
           <strong>{screen.shortTabLabel.replace(/^\d+\s*[.•:–-]?\s*/, '')}</strong>
           <span className="cartoon-player__scene-meter" style={{ width: `${index < activeAct.index ? 100 : index === activeAct.index ? actVoiceProgress * 100 : 0}%` }} />
         </button>)}
-      </nav>
+      </nav></>}
       <footer className="cartoon-player__lesson-nav">
         <button type="button" onClick={onPrevLesson} disabled={!hasPrevLesson} className="cartoon-player__pill"><ChevronLeft />Chapitre précédent</button>
         {requiresValidationTest ? <button type="button" onClick={onOpenValidationTest} className={`cartoon-player__validation ${isLessonValidated ? 'is-validated' : ''}`}>{isLessonValidated ? <CheckCircle2 /> : <ShieldCheck />}{isLessonValidated ? 'Test validé' : 'Valider mes acquis'}</button> : <span className="cartoon-player__chapter-label">Chapitre {lessonIndex + 1} sur {course.lessons?.length || 1}</span>}
