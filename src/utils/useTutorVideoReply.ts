@@ -1,3 +1,4 @@
+import {tutorReplyStoryboard,type TutorVideoContext} from './tutorReplyStoryboard';
 import { type TutorLanguage } from '../../shared/tutorLanguages';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../lib/adminApi';
@@ -13,7 +14,7 @@ export function useTutorVideoReply(persona: string, active = true) {
   const generation = useRef(0);
   const backgroundAudio = useRef(false);
   const deferPlayback = useRef(false);
-  const lastRequest = useRef<{ text: string; voice: string; language: TutorLanguage } | null>(null);
+  const lastRequest = useRef<{ text: string; voice: string; language: TutorLanguage; context: TutorVideoContext } | null>(null);
   const activeRef = useRef(active);
   const objectUrl = useRef<string | null>(null);
   const releaseMedia = () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); objectUrl.current = null; };
@@ -46,7 +47,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     }
   }), []);
 
-  const start = async (text: string, voice: string, progressive = true, alongsideAudio = false, automaticPlayback = false, language: TutorLanguage = 'fr'): Promise<boolean> => {
+  const start = async (text: string, voice: string, progressive = true, alongsideAudio = false, automaticPlayback = false, language: TutorLanguage = 'fr', context: TutorVideoContext = {}): Promise<boolean> => {
     if (!activeRef.current) return true;
     backgroundAudio.current = alongsideAudio;
     deferPlayback.current = !automaticPlayback;
@@ -60,7 +61,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     if (!settings?.enabled || !settings.personas.includes(voice)) return false;
     // Veo is an eight-second excerpt, never silently truncate a full answer.
     if (settings.provider === 'veo' && (text.length > (settings.maxTextLength || 140) || text.trim().split(/\s+/).length > 22)) return false;
-    lastRequest.current = { text, voice, language };
+    lastRequest.current = { text, voice, language, context };
     const abort = new AbortController();
     controller.current = abort;
     const deadline = AbortSignal.timeout(10 * 60 * 1000);
@@ -72,7 +73,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     try {
       const response = await authenticatedFetch('/api/ai/tutor-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, persona: voice, language }), signal,
+        body: JSON.stringify({ text, persona: voice, language, lesson: tutorReplyStoryboard(text,context) ?? undefined, retry:true }), signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'La vidéo est indisponible.');
@@ -90,7 +91,7 @@ export function useTutorVideoReply(persona: string, active = true) {
           if (result.status === 'STREAMING' && stream) {
             objectUrl.current = openTutorVideoStream(url, signal, () => {
               // Retry the same cached job with ordinary playback if MSE fails.
-              if (current()) void start(text, voice, false, alongsideAudio, automaticPlayback, language);
+              if (current()) void start(text, voice, false, alongsideAudio, automaticPlayback, language, context);
             });
             setState({ status: 'ready', url: objectUrl.current, progressive: true, audioUrl: result.audioUrl, durationSeconds: result.durationSeconds, manualPlayback: alongsideAudio && deferPlayback.current });
             return true;
@@ -138,7 +139,7 @@ export function useTutorVideoReply(persona: string, active = true) {
     stop();
     if (last) void speechService.play(last.text, `video-audio-${Date.now()}`, { voice: last.voice, language: last.language });
   };
-  const retry = () => { const last = lastRequest.current; if (last) void start(last.text, last.voice, false, false, false, last.language); };
+  const retry = () => { const last = lastRequest.current; if (last) void start(last.text, last.voice, false, false, false, last.language, last.context); };
   const deferAutomaticPlayback = () => {
     deferPlayback.current = true;
     setState(previous => previous.status === 'ready' ? {...previous,manualPlayback:true} : previous);

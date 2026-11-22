@@ -22,3 +22,11 @@ test('signed registration verifies worker health, rejects stale/replayed request
  assert.equal((await (await fetch(root+'/api/probe')).json()).MUSETALK_API_URL,base+'/musetalk');
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
+
+
+test('an expired registry address cannot replace the recovered deployment gateway',async()=>{
+ const env={MUSETALK_API_URL:base+'/musetalk'};
+ const db={collection:()=>({doc:()=>({get:async()=>({data:()=>({baseUrl:'https://expired-academia.trycloudflare.com',instance:'60042833',timestamp:now-86400001})})})})};
+ const app=express();app.use(createEngineGatewayMiddleware({env,db:()=>db,now:()=>now}));app.get('/api/probe',(_req,res)=>res.json(env));
+ const server=app.listen(0);try{const port=(server.address() as any).port;const response=await fetch(`http://127.0.0.1:${port}/api/probe`);assert.equal((await response.json()).MUSETALK_API_URL,base+'/musetalk');}finally{server.close();}
+});

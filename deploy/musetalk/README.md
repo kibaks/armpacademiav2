@@ -184,3 +184,14 @@ association, not a legally prescribed sequence. The talking tutor remains in
 its separate proportional inset. Captions are preserved in full below the
 illustration. `test_course_motion.py` verifies all seven pictogram categories
 and motion beyond their entrance as well as real audio/video encoding.
+
+### Context-bound explanatory replies
+
+The reply video request now includes a storyboard made exclusively from the actual
+spoken answer, with the question associated with that reply and the current
+lesson title. Replaying an older answer retains its associated question. Caption
+pages preserve the complete response and source-derived pictograms; changing the
+answer or context changes the private scene cache key. Lessons open their own
+video-generation panel by default. The published first-chapter MP4 is reused only
+when the full lesson source still matches its manifest; edited lessons generate
+new videos instead of displaying that fixed introduction.

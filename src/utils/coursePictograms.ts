@@ -1,7 +1,7 @@
 /** Code-drawn illustrations of source concepts; no implied legal sequence. */
 export function coursePictogramKind(text:string){
  const s=text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
- if(/citoyen|famille|communaute|personne|eleve/.test(s))return 'people';
+ if(/citoyen|famille|communaute|personne|eleve|soumissionnaire|attributaire|titulaire/.test(s))return 'people';
  if(/autorite|entreprise|institution|ecole|administration/.test(s))return 'building';
  if(/prix|budget|credit|paiement|financ|montant/.test(s))return 'coins';
  if(/travaux|ouvrage|chantier|construction/.test(s))return 'works';

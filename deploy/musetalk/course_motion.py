@@ -58,7 +58,7 @@ def read_story(value):
 def pictogram_kind(text):
     import unicodedata
     value=''.join(c for c in unicodedata.normalize('NFD',text.lower()) if unicodedata.category(c)!='Mn')
-    groups=[('people',('citoyen','famille','communaute','personne','eleve')),('building',('autorite','entreprise','institution','ecole','administration')),('coins',('prix','budget','credit','paiement','financ','montant')),('works',('travaux','ouvrage','chantier','construction')),('shield',('controle','verifi','conform','garantie')),('scales',('egalite','equite','concurrence','transparence')),('document',('dossier','document','dao','contrat','engagement','offre','ppm','besoin','caracteristique'))]
+    groups=[('people',('citoyen','famille','communaute','personne','eleve','soumissionnaire','attributaire','titulaire')),('building',('autorite','entreprise','institution','ecole','administration')),('coins',('prix','budget','credit','paiement','financ','montant')),('works',('travaux','ouvrage','chantier','construction')),('shield',('controle','verifi','conform','garantie')),('scales',('egalite','equite','concurrence','transparence')),('document',('dossier','document','dao','contrat','engagement','offre','ppm','besoin','caracteristique'))]
     for kind,words in groups:
         if any(word in value for word in words):return kind
     return 'document'

@@ -699,9 +699,13 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       .slice(0, 1800);
   };
 
-  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, customLanguage?: TutorLanguage, playbackMode?: 'audio' | 'video') => {
+  const speak = async (text: string, msgId?: string, customVoice?: VoicePersona, customSpeed?: number, customLanguage?: TutorLanguage, playbackMode?: 'audio' | 'video', explicitQuestion?: string) => {
     if (!text) return;
     const explanationRun = ++explanationRunRef.current;
+    const replyIndex=msgId ? messages.findIndex(message=>message.id===msgId) : -1;
+    const preceding=replyIndex>=0 ? messages.slice(0,replyIndex) : messages;
+    const relatedQuestion=[...preceding].reverse().find(message=>message.sender==='user');
+    const questionForVideo=explicitQuestion || relatedQuestion?.media?.transcriptText || relatedQuestion?.text;
     setExplanationMessageId(msgId);
     const spokenLanguage = customLanguage || (msgId ? messages.find(message => message.id === msgId)?.language || 'fr' : 'fr');
     if (!nationalVoiceAvailable(spokenLanguage, text)) { showNotice('La voix installée ne peut pas lire ce passage avec tous ses caractères. Le texte reste disponible.'); return; }
@@ -720,7 +724,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       // Prefer the synchronized video, but bound the wait for slow renderers.
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const ready = await Promise.race([
-        tutorVideo.start(clean, voiceToUse, true, true, true, spokenLanguage),
+        tutorVideo.start(clean, voiceToUse, true, true, true, spokenLanguage, {question:questionForVideo,lessonTitle:learningContext?.lastCourseTitle}),
         new Promise<false>(resolve=>{ timeout=setTimeout(()=>resolve(false),8000); }),
       ]);
       if (timeout) clearTimeout(timeout);
@@ -1338,7 +1342,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       persistMessages(updatedConversation);
 
       if (autoSpeak || mediaToSend?.type === 'audio' || isCallActive || isVideoCallActive) {
-        setTimeout(() => speak(reply, botMsgId, undefined, undefined, tutorLanguage(data.language)), 80);
+        setTimeout(() => speak(reply, botMsgId, undefined, undefined, tutorLanguage(data.language), undefined, transcribedText || updatedUserMessages.find(message=>message.id===userMsgId)?.text), 80);
       }
     } catch (error) {
       const fallbackBotMsg: EnhancedMessage = {

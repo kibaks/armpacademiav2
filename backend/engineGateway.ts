@@ -47,7 +47,7 @@ export function createEngineGatewayRouter(options: Options = {}) {
       if (!accepted) return void res.sendStatus(409);
       applyGatewayBase(env, base);
       res.json({ registered: true });
-    } catch { res.status(503).json({ error: 'Gateway registration unavailable' }); }
+    } catch (error) { console.warn('[Engine gateway] Registration unavailable', {code: typeof (error as any)?.code === 'string' || typeof (error as any)?.code === 'number' ? (error as any).code : 'unknown'}); res.status(503).json({ error: 'Gateway registration unavailable' }); }
   });
   return router;
 }
@@ -65,7 +65,7 @@ export function createEngineGatewayMiddleware(options: Options = {}): RequestHan
           finally { if (timer) clearTimeout(timer); }
           const record = snapshot?.data();
           const base = gatewayBase(record?.baseUrl);
-          if (base && record?.instance === '60042833') applyGatewayBase(env, base);
+          if (base && record?.instance === '60042833' && Number.isSafeInteger(record.timestamp) && now()-record.timestamp>=-300000 && now()-record.timestamp<86400000) applyGatewayBase(env, base);
         } catch { /* Preserve the deployment configuration if the registry is unavailable. */ }
         finally { nextRead = now() + 30000; pending = null; }
       })();

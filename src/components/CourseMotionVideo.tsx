@@ -10,7 +10,8 @@ export function CourseMotionVideo(props:Props){
  const [music,setMusic]=useState(true),[state,setState]=useState<State>({kind:'idle',progress:0}),[downloading,setDownloading]=useState(false);
  const active=useRef<AbortController|null>(null),generation=useRef(0);
  const key=props.courseId+':'+props.lessonIndex;
- useEffect(()=>{generation.current++;active.current?.abort();setState({kind:'idle',progress:0});return()=>{generation.current++;active.current?.abort();};},[key]);
+ const sourceKey=JSON.stringify([props.sentences,props.screens]);
+ useEffect(()=>{generation.current++;active.current?.abort();setState({kind:'idle',progress:0});return()=>{generation.current++;active.current?.abort();};},[key,sourceKey,props.userId]);
  const generate=async()=>{
   if(active.current && !active.current.signal.aborted && state.kind==='working')return;
   props.onPrepare();active.current?.abort();const controller=new AbortController();active.current=controller;
@@ -54,9 +55,9 @@ export function CourseMotionVideo(props:Props){
   }catch(error){setState(previous=>({...previous,error:error instanceof Error?error.message:'Téléchargement indisponible.'}));}finally{setDownloading(false);}
  };
  return <section className="course-motion-film" aria-label="Film du chapitre">
-  <div className="course-motion-film__heading"><Clapperboard aria-hidden="true"/><div><h3>Le chapitre en vidéo</h3><p>Des pictogrammes en mouvement, une tutrice parlante et la narration du cours réunis dans un film.</p></div></div>
+  <div className="course-motion-film__heading"><Clapperboard aria-hidden="true"/><div><h3>La leçon avec la tutrice</h3><p>La vidéo est réalisée à partir du texte de cette leçon, avec la tutrice et des illustrations adaptées.</p></div></div>
   <div className="course-motion-film__actions">
-   <button type="button" className="course-motion-film__create" onClick={()=>void generate()} disabled={state.kind==='working'}>{state.kind==='working'?<LoaderCircle className="course-motion-film__spin" aria-hidden="true"/>:state.kind==='ready'?<RefreshCw aria-hidden="true"/>:<Play aria-hidden="true"/>}{state.kind==='ready'?'Retrouver le film':state.kind==='error'?'Réessayer la réalisation':'Créer le film du chapitre'}</button>
+   <button type="button" className="course-motion-film__create" onClick={()=>void generate()} disabled={state.kind==='working'}>{state.kind==='working'?<LoaderCircle className="course-motion-film__spin" aria-hidden="true"/>:state.kind==='ready'?<RefreshCw aria-hidden="true"/>:<Play aria-hidden="true"/>}{state.kind==='ready'?'Retrouver le film':state.kind==='error'?'Réessayer la réalisation':'Générer la vidéo de cette leçon'}</button>
    <label><input type="checkbox" checked={music} disabled={state.kind==='working'} onChange={event=>{setMusic(event.target.checked);setState({kind:'idle',progress:0});}}/>Ambiance musicale douce</label>
    {state.kind==='working' && <button type="button" onClick={()=>{generation.current++;active.current?.abort();setState({kind:'idle',progress:0,label:'Suivi arrêté. Les séquences déjà envoyées au serveur restent réutilisables.'});}}>Arrêter le suivi</button>}
   </div>
