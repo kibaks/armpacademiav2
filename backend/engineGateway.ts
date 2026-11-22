@@ -34,20 +34,28 @@ export function createEngineGatewayRouter(options: Options = {}) {
     if (!base || !Number.isSafeInteger(timestamp) || Math.abs(now() - timestamp) > 300000 || typeof signature !== 'string' || !/^[a-f0-9]{64}$/.test(signature) || !key || key.length < 32) return void res.sendStatus(401);
     const expected = gatewaySignature(base, timestamp, key);
     if (!timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))) return void res.sendStatus(401);
+    let phase='worker';
     try {
       // Verify the replacement endpoint with the existing worker credential before saving it.
       const health = await (options.fetcher || fetch)(base + '/national/capabilities', { headers: { authorization: `Bearer ${key}` }, redirect: 'error', signal: AbortSignal.timeout(12000) });
       if (!health.ok || (await health.json()).provider !== 'national-local') return void res.sendStatus(422);
-      const ref = db().collection(collection).doc('active');
-      const accepted = await db().runTransaction(async (tx: any) => {
+      phase='registry';
+      console.info('[Engine gateway] Worker verified');
+      const registry=db();
+      const ref = registry.collection(collection).doc('active');
+      const transaction = registry.runTransaction(async (tx: any) => {
         const previous = (await tx.get(ref)).data();
         if (previous?.timestamp >= timestamp) return false;
         tx.set(ref, { baseUrl: base, timestamp, instance: '60042833' }); return true;
       });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let accepted;
+      try { accepted=await Promise.race([transaction,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('Registry timeout'),{code:'registry-timeout'})),15000);})]); }
+      finally { if(timer)clearTimeout(timer); }
       if (!accepted) return void res.sendStatus(409);
       applyGatewayBase(env, base);
       res.json({ registered: true });
-    } catch (error) { console.warn('[Engine gateway] Registration unavailable', {code: typeof (error as any)?.code === 'string' || typeof (error as any)?.code === 'number' ? (error as any).code : 'unknown'}); res.status(503).json({ error: 'Gateway registration unavailable' }); }
+    } catch (error) { console.warn('[Engine gateway] Registration unavailable', {phase,code: typeof (error as any)?.code === 'string' || typeof (error as any)?.code === 'number' ? (error as any).code : 'unknown'}); res.status(503).json({ error: 'Gateway registration unavailable' }); }
   });
   return router;
 }

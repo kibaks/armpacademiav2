@@ -1,6 +1,7 @@
 // Keep initialization failures observable without exposing stack traces or secrets.
 let application;
 export default async function handler(req, res) {
+  res.setHeader('X-Academia-Revision', process.env.VERCEL_GIT_COMMIT_SHA || 'context-video-v1');
   try {
     application ||= import('../dist/api.mjs').then(module => module.default);
     const app = await application;
