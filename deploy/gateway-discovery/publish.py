@@ -28,7 +28,7 @@ def run():
     key=os.environ['MUSETALK_API_KEY']
     if len(key)<32:raise RuntimeError('Worker key required')
     logging.basicConfig(level=logging.INFO,format='%(asctime)s %(message)s',handlers=[logging.StreamHandler(),logging.FileHandler('/workspace/academia/logs/gateway-discovery.log')])
-    previous=None;last_registered=0;next_probe=0;failures=0;last_restart=0
+    previous=None;last_registered=0;next_probe=0;failures=0;last_restart=0;next_registration=0
     while True:
         try:
             base=latest_gateway();now=time.monotonic()
@@ -42,7 +42,7 @@ def run():
                     subprocess.run(['supervisorctl','restart','academia-tunnel'],check=True,timeout=35,stdout=subprocess.DEVNULL)
                     last_restart=now;failures=0;previous=None
                     time.sleep(15);continue
-            if base and (base!=previous or now-last_registered>=600):
+            if base and now>=next_registration and (base!=previous or now-last_registered>=600):
                 timestamp=int(time.time()*1000)
                 payload=json.dumps({'baseUrl':base,'timestamp':timestamp}).encode()
                 message=f'academia-gateway-v1\n60042833\n{timestamp}\n{base}'.encode()
@@ -52,7 +52,11 @@ def run():
                     if response.status==200 and json.load(response).get('registered') is True:
                         previous=base;last_registered=now
                         STATE.write_text(json.dumps({'baseUrl':base}));logging.info('Current gateway registered')
-        except urllib.error.HTTPError as error:logging.warning('Registration pending: HTTP %s',error.code)
+        except urllib.error.HTTPError as error:
+            logging.warning('Registration pending: HTTP %s',error.code)
+            try:code=json.load(error).get('code')
+            except Exception:code=None
+            if error.code==429 or code=='GATEWAY_REGISTRY_UNAVAILABLE':next_registration=time.monotonic()+900
         except Exception as error:logging.warning('Registration pending: %s',type(error).__name__)
         time.sleep(15)
 if __name__=='__main__':run()

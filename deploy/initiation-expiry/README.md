@@ -7,3 +7,8 @@ Le superviseur du serveur appelle toutes les minutes la route interne avec un se
 Chaque appel traite dix profils et conserve un curseur pour la page suivante ; la notification peut donc suivre l’échéance de quelques minutes selon le nombre de comptes. Une transaction et un bail de livraison empêchent les appels simultanés d’envoyer plusieurs notifications pour une même échéance. En cas d’erreur, le prochain passage réessaie. Un arrêt du serveur retarde les emails, sans repousser les échéances.
 
 Le mail personnalisé ouvre la connexion et la réactivation existante par OTP. Le lien seul ne modifie aucun compte. Après validation d’un code livré, valable dix minutes et à usage unique, l’accès repart pour exactement cinq jours. Les mots de passe et la progression sont conservés. Les désactivations administratives Firebase ne sont jamais levées.
+
+Le scan de notification utilise désormais un intervalle de cinq minutes par
+ défaut (`INITIATION_SCAN_INTERVAL_SECONDS`, minimum 60 secondes) et recule
+ progressivement jusqu’à trente minutes en cas d’indisponibilité de la base.
+ Le contrôle d’expiration lors des requêtes authentifiées reste inchangé.

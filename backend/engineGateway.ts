@@ -47,7 +47,7 @@ export function createEngineGatewayRouter(options: Options = {}) {
         const previous = (await tx.get(ref)).data();
         if (previous?.timestamp >= timestamp) return false;
         tx.set(ref, { baseUrl: base, timestamp, instance: '60042833' }); return true;
-      });
+      },{maxAttempts:1});
       let timer: ReturnType<typeof setTimeout> | undefined;
       let accepted;
       try { accepted=await Promise.race([transaction,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('Registry timeout'),{code:'registry-timeout'})),15000);})]); }
@@ -55,7 +55,12 @@ export function createEngineGatewayRouter(options: Options = {}) {
       if (!accepted) return void res.sendStatus(409);
       applyGatewayBase(env, base);
       res.json({ registered: true });
-    } catch (error) { console.warn('[Engine gateway] Registration unavailable', {phase,code: typeof (error as any)?.code === 'string' || typeof (error as any)?.code === 'number' ? (error as any).code : 'unknown'}); res.status(503).json({ error: 'Gateway registration unavailable' }); }
+    } catch (error) {
+      const code=(error as any)?.code;
+      console.warn('[Engine gateway] Registration unavailable',{phase,code:typeof code==='string'||typeof code==='number'?code:'unknown',...(code===8?{details:String((error as any)?.details||(error as any)?.message||'').slice(0,300)}:{})});
+      if(code===8)return void res.set('Retry-After','900').status(429).json({error:'Database temporarily unavailable',code:'DATABASE_RESOURCE_EXHAUSTED'});
+      res.status(503).json({error:'Gateway registration unavailable',code:phase==='registry'?'GATEWAY_REGISTRY_UNAVAILABLE':'ENGINE_CONNECTION_UNAVAILABLE'});
+    }
   });
   return router;
 }

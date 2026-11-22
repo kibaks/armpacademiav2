@@ -30,3 +30,15 @@ test('an expired registry address cannot replace the recovered deployment gatewa
  const app=express();app.use(createEngineGatewayMiddleware({env,db:()=>db,now:()=>now}));app.get('/api/probe',(_req,res)=>res.json(env));
  const server=app.listen(0);try{const port=(server.address() as any).port;const response=await fetch(`http://127.0.0.1:${port}/api/probe`);assert.equal((await response.json()).MUSETALK_API_URL,base+'/musetalk');}finally{server.close();}
 });
+
+test('database resource exhaustion requests backoff without changing the active endpoint',async()=>{
+ const env={MUSETALK_API_URL:'https://old.trycloudflare.com/musetalk',MUSETALK_API_KEY:key};
+ const db={...database(),runTransaction:async()=>{throw {code:8,details:'Quota exceeded.'};}};
+ const app=express();app.use(express.json());app.use('/api/engine-gateway',createEngineGatewayRouter({env,db:()=>db,now:()=>now,fetcher:async()=>Response.json({provider:'national-local'})}));
+ const server=app.listen(0);try{
+  const port=(server.address() as any).port;
+  const response=await fetch(`http://127.0.0.1:${port}/api/engine-gateway/register`,{method:'POST',headers:{'Content-Type':'application/json','x-academia-signature':gatewaySignature(base,now,key)},body:JSON.stringify({baseUrl:base,timestamp:now})});
+  assert.equal(response.status,429);assert.equal(response.headers.get('retry-after'),'900');assert.equal((await response.json()).code,'DATABASE_RESOURCE_EXHAUSTED');
+  assert.equal(env.MUSETALK_API_URL,'https://old.trycloudflare.com/musetalk');
+ }finally{server.close();}
+});

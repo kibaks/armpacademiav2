@@ -14,3 +14,9 @@ uniquement `academia-tunnel` (au maximum une fois toutes les trois minutes).
 Il conserve l’adresse courante dans un fichier local et retrouve les adresses dans
 les journaux après rotation. L’enregistrement est renouvelé toutes les dix minutes.
 Les modèles GPU et les autres services ne sont pas redémarrés par ce contrôle.
+
+En cas de quota épuisé ou de registre indisponible, l’annonce se met en attente
+quinze minutes au lieu de répéter immédiatement les transactions. La passerelle
+locale et le contrôle de disponibilité du tunnel continuent à fonctionner.
+L’application ignore les adresses enregistrées depuis plus de 24 heures et
+conserve les URL de moteurs configurées dans son déploiement.
