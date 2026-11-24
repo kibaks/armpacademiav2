@@ -519,8 +519,14 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
       .replace(/\s+/g, ' ')
       .trim();
     if (!clean) return;
-    if (await tutorVideo.start(answerText, courseTutorPersona)) return;
-    tutorVideo.stop();
+    let audioFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const videoReady = await Promise.race([
+        tutorVideo.start(answerText, courseTutorPersona, true, true, true),
+        new Promise<false>(resolve => { audioFallbackTimer = setTimeout(() => resolve(false), 2000); }),
+      ]);
+      if (videoReady) return;
+    } finally { if (audioFallbackTimer) clearTimeout(audioFallbackTimer); }
     setActiveSpeakingQaId(qaId);
     speechService.play(clean, `qa-voice-${qaId}`, {
       speed: 0.9,

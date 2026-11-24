@@ -18,7 +18,7 @@ export async function waitForCourseVideo(id:string, signal:AbortSignal, request:
   if (!response.ok) throw new Error('Le suivi de la vidéo est indisponible. Relancez le suivi pour reprendre les séquences déjà prêtes.');
   const data=await response.json().catch(()=>null);
   if(!data)throw new Error('Le suivi de la vidéo est indisponible. Réessayez.');
-  if(data.status==='COMPLETED' && typeof data.videoUrl==='string' && /^https:\/\//.test(data.videoUrl))return {id,url:data.videoUrl as string};
+  if(data.status==='COMPLETED' && typeof data.videoUrl==='string' && (/^https:\/\//.test(data.videoUrl)||/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(data.videoUrl)))return {id,url:data.videoUrl as string};
   if(data.status==='FAILED')throw new Error(data.error || 'La réalisation de cette séquence a échoué. Vous pouvez réessayer.');
   await wait(2000);
  }

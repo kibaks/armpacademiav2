@@ -1,3 +1,4 @@
+import { huggingFaceVideoRequest, isHuggingFaceVideo } from './huggingFaceTutorVideo.js';
 import type { RequestHandler, Response as ExpressResponse } from 'express';
 import { qwenTutorConfig } from './qwenTutor.js';
 import { tutorLanguage, type TutorLanguage } from '../shared/tutorLanguages.js';
@@ -55,6 +56,16 @@ export async function sendTutorReply(res: ExpressResponse, payload: { reply: str
   }
 }
 export async function nationalSpeechPayload(text: string, language: TutorLanguage, options: { env?: NodeJS.ProcessEnv; fetcher?: typeof fetch; voice?: string } = {}) {
+  const env=options.env||process.env;
+  if(language==='fr' && isHuggingFaceVideo(env) && env.HF_MUSETALK_URL && env.HF_MUSETALK_TOKEN){
+    const response=await huggingFaceVideoRequest(new URL(env.HF_MUSETALK_URL),env.HF_MUSETALK_TOKEN,'/speech',{method:'POST',body:JSON.stringify({text,language,voice:options.voice})},options.fetcher||fetch);
+    if(!response.ok)throw new NationalLanguageError(response.status===503?'Le moteur vocal se réveille. La vidéo et sa voix arriveront dès que le chargement sera terminé.':'La voix est momentanément indisponible.');
+    const data=await response.json();
+    if(data.mimeType!=='audio/mpeg'||typeof data.audioData!=='string'||data.audioData.length>5333336||!/^[A-Za-z0-9+/]+={0,2}$/.test(data.audioData))throw new NationalLanguageError('La voix reçue est invalide.');
+    const audio=Buffer.from(data.audioData,'base64');
+    if(audio.length<=44||!(audio.toString('ascii',0,3)==='ID3'||(audio[0]===0xff&&(audio[1]&0xe0)===0xe0)))throw new NationalLanguageError('La voix reçue est invalide.');
+    return {audioData:data.audioData,audioBase64:data.audioData,mimeType:'audio/mpeg',provider:'huggingface-piper' as const,language,voiceId:options.voice==='henri'?'hf-piper-tom-v1':'hf-piper-siwis-v1',wordBoundaries:[]};
+  }
   const consistent = (options.env || process.env).TUTOR_CONSISTENT_VOICE === 'true';
   const voice = options.voice === 'henri' ? 'male' : 'female';
   if (!['ln', 'sw', 'kg', 'lua'].includes(language) && !(consistent && language === 'fr')) throw new NationalLanguageError('Aucune voix n’est installée pour cette langue.', 422);

@@ -725,7 +725,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const ready = await Promise.race([
         tutorVideo.start(clean, voiceToUse, true, true, true, spokenLanguage, {question:questionForVideo,lessonTitle:learningContext?.lastCourseTitle}),
-        new Promise<false>(resolve=>{ timeout=setTimeout(()=>resolve(false),8000); }),
+        new Promise<false>(resolve=>{ timeout=setTimeout(()=>resolve(false),2000); }),
       ]);
       if (timeout) clearTimeout(timeout);
       if (explanationRun !== explanationRunRef.current || !modalOpenRef.current) return;

@@ -950,6 +950,7 @@ interface CachedTtsPayload {
   provider:
     | 'national-omnivoice'
     | 'national-vits'
+    | 'huggingface-piper'
     | 'piper'
     | 'cartesia-sonic'
     | 'elevenlabs-v2'

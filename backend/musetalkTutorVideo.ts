@@ -10,6 +10,7 @@ import { normalizeVideoText } from './syncTutorVideo.js';
 import { synthesizePiperTutor } from './piperTutorSpeech.js';
 import { synthesizeCartesiaTutor } from './cartesiaTutorSpeech.js';
 import { synthesizeElevenTutor } from './elevenTutorSpeech.js';
+import { isHuggingFaceVideo, huggingFaceVideoRequest, saveVideoPayload, loadVideoPayload, purgeExpiredVideoCache } from './huggingFaceTutorVideo.js';
 
 type Deps = { env?: NodeJS.ProcessEnv; db?: () => any; authenticate?: RequestHandler; fetcher?: typeof fetch;
   synthesize?: (text: string, persona: string) => Promise<{ audioBuffer: Buffer; mimeType: string } | null> };
@@ -17,11 +18,13 @@ const personas = ['vivienne'];
 export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   const router = Router(), env = deps.env || process.env, request = deps.fetcher || fetch;
   const db = () => deps.db?.() || services().db;
+  const hf = isHuggingFaceVideo(env);
   let endpoint: URL | null = null;
-  const refreshEndpoint = () => { endpoint = null; try { const url = new URL(env.MUSETALK_API_URL || ''); if (url.protocol === 'https:' && !url.username && !url.password) endpoint = url; } catch { /* not configured */ } };
+  const refreshEndpoint = () => { endpoint = null; try { const url = new URL((hf?env.HF_MUSETALK_URL:env.MUSETALK_API_URL) || ''); if (url.protocol === 'https:' && !url.username && !url.password) endpoint = url; } catch { /* not configured */ } };
   refreshEndpoint();
-  const configured = () => (refreshEndpoint(), env.TUTOR_VIDEO_ENABLED === 'true' && !!endpoint && !!env.MUSETALK_API_KEY);
+  const configured = () => (refreshEndpoint(), env.TUTOR_VIDEO_ENABLED === 'true' && !!endpoint && !!(hf?env.HF_MUSETALK_TOKEN:env.MUSETALK_API_KEY));
   const playbackUrl = (id: string) => {
+    if(hf)return `/api/ai/tutor-video/${id}/media`;
     refreshEndpoint();
     const expires = Math.floor(Date.now() / 1000) + 15 * 60;
     const token = createHmac('sha256', env.MUSETALK_API_KEY!).update(`${id}:${expires}`).digest('hex');
@@ -29,12 +32,13 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   };
   const playbackMedia = (id: string) => {
     const videoUrl=playbackUrl(id);
+    if(hf)return {videoUrl};
     return {videoUrl,audioUrl:videoUrl.replace('/play?','/audio?')};
   };
-  const remote = (suffix: string, init: RequestInit = {}) => { refreshEndpoint(); return request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) }); };
+  const remote = (suffix: string, init: RequestInit = {}) => { refreshEndpoint(); if(hf)return huggingFaceVideoRequest(endpoint!,env.HF_MUSETALK_TOKEN!,suffix,init,request); return request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) }); };
   router.use(deps.authenticate || authenticate);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: 'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: null, progressiveStreaming: env.MUSETALK_PROGRESSIVE === 'true' }));
+  router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: hf?'huggingface':'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: hf?120:null, automaticWakeup:hf, progressiveStreaming: !hf && env.MUSETALK_PROGRESSIVE === 'true' }));
   router.post('/', async (req: any, res) => {
     let ref: any, reserved = false;
     try {
@@ -49,7 +53,8 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const text = language==='fr' ? normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.())) : normalizeNationalSpeech(raw);
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
-      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : []), ...(lesson ? ['course-motion-v2-vector',lesson] : [])])).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, hf?'musetalk-hf-durable-v1':env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : []), ...(lesson ? ['course-motion-v2-vector',lesson] : [])])).digest('hex');
+      if(hf)await purgeExpiredVideoCache(db()).catch(()=>undefined);
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
       const reservation = await db().runTransaction(async (tx: any) => {
@@ -70,10 +75,29 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         if (retried.status!==404) throw new Error('RETRY_FAILED');
       }
       reserved = true;
+      if(hf && language==='fr'){
+        await ref.update({hfSpeech:{text,voice:persona},hfLesson:lesson,status:'PENDING'});
+        const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({text,voice:persona,language})});
+        if(voiced.status===503 || voiced.status===429)return res.status(202).json({id,status:'WARMING'});
+        if(!voiced.ok)throw new Error('NO_AUDIO');
+        const speech=await voiced.json();
+        if(speech.mimeType!=='audio/mpeg'||typeof speech.audioData!=='string'||speech.audioData.length>5333336)throw new Error('NO_AUDIO');
+        const bytes=Buffer.from(speech.audioData,'base64');
+        if(bytes.length<=44 || bytes.length>4000000)throw new Error('NO_AUDIO');
+        await saveVideoPayload(ref,'audio',bytes);
+        const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id,audio:speech.audioData,...(lesson?{lesson}:{})})});
+        if(!submitted.ok && submitted.status!==503 && submitted.status!==429)throw new Error('SUBMISSION_FAILED');
+        return res.status(202).json({id,status:submitted.ok?'PENDING':'WARMING'});
+      }
       const national = language==='fr' && env.TUTOR_CONSISTENT_VOICE !== 'true' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request,voice:persona});
       const audio = national ? {audioBuffer:Buffer.from(national.audioData,'base64'),mimeType:national.mimeType} : await (deps.synthesize ? deps.synthesize(text, persona) : synthesizePiperTutor(text, persona).then(async value => value || await synthesizeCartesiaTutor(text, persona) || await synthesizeElevenTutor(text, persona)));
       if (!audio || audio.audioBuffer.length > 4_000_000 || audio.audioBuffer.length <= 44) throw new Error('NO_AUDIO');
+      if(hf){
+        await saveVideoPayload(ref,'audio',audio.audioBuffer);
+        await ref.update({hfLesson:lesson,status:'PENDING'});
+      }
       const submitted = await remote('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: audio.audioBuffer.toString('base64'), ...(lesson ? {lesson} : {}) }) });
+      if(hf && (submitted.status===503 || submitted.status===429))return res.status(202).json({id,status:'WARMING'});
       if (!submitted.ok || (await submitted.json()).id !== id) throw new Error('SUBMISSION_FAILED');
       await ref.update({ status: 'PENDING' });
       return res.status(202).json({ id });
@@ -121,6 +145,26 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       // Completed jobs are immutable: issue a fresh playback ticket without another worker round trip.
       if (entry.job.status === 'COMPLETED') return res.json({ status: 'COMPLETED', ...playbackMedia(req.params.id) });
       const response = await remote(`/jobs/${req.params.id}`);
+      if(hf && (response.status===503 || response.status===429))return res.json({status:'WARMING'});
+      if(hf && response.status===404 && !entry.job.audioParts && entry.job.hfSpeech){
+        const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({...entry.job.hfSpeech,language:'fr'})});
+        if(voiced.status===503 || voiced.status===429)return res.json({status:'WARMING'});
+        if(!voiced.ok)throw new Error('NO_AUDIO');
+        const speech=await voiced.json();
+        if(speech.mimeType!=='audio/mpeg'||typeof speech.audioData!=='string'||speech.audioData.length>5333336)throw new Error('NO_AUDIO');
+        const bytes=Buffer.from(speech.audioData,'base64');
+        if(bytes.length<=44||bytes.length>4000000)throw new Error('NO_AUDIO');
+        await saveVideoPayload(entry.ref,'audio',bytes);
+        const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id:req.params.id,audio:speech.audioData,...(entry.job.hfLesson?{lesson:entry.job.hfLesson}:{})})});
+        if(submitted.ok||submitted.status===503||submitted.status===429)return res.json({status:submitted.ok?'PENDING':'WARMING'});
+        throw new Error('SUBMISSION_FAILED');
+      }
+      if(hf && response.status===404 && entry.job.audioParts){
+        const audio=await loadVideoPayload(entry.ref,entry.job,'audio');
+        const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id:req.params.id,audio:audio.toString('base64'),...(entry.job.hfLesson?{lesson:entry.job.hfLesson}:{})})});
+        if(submitted.ok || submitted.status===503 || submitted.status===429)return res.json({status:submitted.ok?'PENDING':'WARMING'});
+        throw new Error('SUBMISSION_FAILED');
+      }
       if (response.status === 404 && entry.job.status === 'FAILED') return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' });
       if (!response.ok) return res.sendStatus(503);
       const result = await response.json();
@@ -131,6 +175,11 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         return res.json({ status: 'PENDING' });
       }
       if (result.status === 'COMPLETED') {
+        if(hf){
+          const media=await remote(`/jobs/${req.params.id}/media`);
+          if(!media.ok)throw new Error('MEDIA_NOT_READY');
+          await saveVideoPayload(entry.ref,'video',Buffer.from(await media.arrayBuffer()));
+        }
         await entry.ref.update({ status: 'COMPLETED' });
         // A short-lived read-only ticket enables native streaming and byte ranges.
         // The worker key stays private; the browser does not buffer an entire MP4.
@@ -144,6 +193,26 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
     try {
       const entry = await owned(req); if (!entry || entry.job.status !== 'COMPLETED') return res.sendStatus(404);
       const range = req.headers.range;
+      if(hf){
+        const bytes=await loadVideoPayload(entry.ref,entry.job,'video');
+        let start=0,end=bytes.length-1;
+        if(typeof range==='string'){
+          const match=/^bytes=(\d*)-(\d*)$/.exec(range);
+          if(!match || (!match[1]&&!match[2]))return res.set('Content-Range',`bytes */${bytes.length}`).sendStatus(416);
+          if(match[1]){start=Number(match[1]);if(match[2])end=Number(match[2]);}
+          else start=Math.max(0,bytes.length-Number(match[2]));
+          end=Math.min(end,bytes.length-1);
+          if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||start>end)return res.set('Content-Range',`bytes */${bytes.length}`).sendStatus(416);
+          res.status(206).set('Content-Range',`bytes ${start}-${end}/${bytes.length}`);
+        }
+        res.type('video/mp4').set('Accept-Ranges','bytes').set('Content-Length',String(end-start+1));
+        res.flushHeaders();
+        for(let offset=start;offset<=end;offset+=450000){
+          if(res.destroyed)break;
+          if(!res.write(bytes.subarray(offset,Math.min(offset+450000,end+1))))await new Promise<void>(resolve=>{const finish=()=>{res.off('drain',finish);res.off('close',finish);resolve();};res.once('drain',finish);res.once('close',finish);});
+        }
+        return res.end();
+      }
       const response = await remote(`/jobs/${req.params.id}/media`, { headers: typeof range === 'string' ? { range } : {} });
       if (response.status === 416) {
         const contentRange = response.headers.get('content-range');

@@ -78,3 +78,15 @@ test('consistent identity is preserved across all languages and mismatched speak
  }
  await assert.rejects(nationalSpeechPayload('Habari', 'sw', { env: consistentEnv, fetcher: async () => Response.json({ language: 'sw', voiceId: 'different', provider: 'national-omnivoice', mimeType: 'audio/mpeg', audioData: audio }) }));
 });
+
+test('HF French speech uses only the scoped inference endpoint and reports cold starts',async()=>{
+ const hfEnv={...env,MUSETALK_PROVIDER:'huggingface',HF_MUSETALK_URL:'https://video.endpoints.huggingface.cloud',HF_MUSETALK_TOKEN:'limited-key'};
+ const mp3=Buffer.alloc(100);mp3.write('ID3');
+ const voice=await nationalSpeechPayload('Le soumissionnaire remet une offre.','fr',{env:hfEnv,voice:'vivienne',fetcher:(async(url:any,init:any)=>{
+  assert.equal(String(url),hfEnv.HF_MUSETALK_URL+'/');assert.equal(init.headers.authorization,'Bearer limited-key');
+  assert.equal(JSON.parse(init.body).inputs.operation,'/speech');
+  return Response.json({statusCode:200,body:{mimeType:'audio/mpeg',audioData:mp3.toString('base64')}});
+ }) as typeof fetch});
+ assert.equal(voice.provider,'huggingface-piper');assert.equal(voice.language,'fr');
+ await assert.rejects(()=>nationalSpeechPayload('Bonjour.','fr',{env:hfEnv,fetcher:(async()=>Response.json({error:'loading'},{status:503})) as typeof fetch}),/réveille/);
+});

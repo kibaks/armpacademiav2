@@ -3,22 +3,27 @@ import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
 import { createHmac } from 'node:crypto';
 import { createMuseTalkTutorVideoRouter } from '../backend/musetalkTutorVideo';
-async function harness(workerStatus = 'COMPLETED', progressive = false, consistent = false) {
+async function harness(workerStatus = 'COMPLETED', progressive = false, consistent = false, huggingface = false) {
   const records = new Map<string, any>();
   let submissions = 0, polls = 0;
   let tail = Promise.resolve();
   const snapshot = (ref: any) => ({ exists: records.has(ref.id), data: () => structuredClone(records.get(ref.id)) });
+  const collection = (name: string): any => ({doc: (id: string) => {
+    const ref: any = {id:`${name}/${id}`,get:async()=>snapshot(ref),
+      set:async(value:any)=>{records.set(ref.id,structuredClone(value));},
+      update:async(patch:any)=>{records.set(ref.id,{...records.get(ref.id),...patch});},
+      collection:(child:string)=>collection(`${ref.id}/${child}`)};
+    return ref;
+  }});
+  let hfAccepted=false;
   const db = {
-    collection: (collection: string) => ({ doc: (id: string) => {
-      const ref = { id: `${collection}/${id}`, get: async () => snapshot(ref), update: async (patch: any) => { records.set(ref.id, { ...records.get(ref.id), ...patch }); } };
-      return ref;
-    } }),
+    collection,
     runTransaction: (callback: any) => {
       const task = tail.then(() => callback({ get: async (ref: any) => snapshot(ref), set: (ref: any, value: any) => records.set(ref.id, structuredClone(value)) }));
       tail = task.then(() => undefined, () => undefined); return task;
     },
   };
-  const env = { TUTOR_CONSISTENT_VOICE: consistent ? 'true' : 'false', MUSETALK_API_KEY: 'private-key', MUSETALK_API_URL: 'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' };
+  const env = { TUTOR_CONSISTENT_VOICE: consistent ? 'true' : 'false', MUSETALK_API_KEY: 'private-key', HF_MUSETALK_TOKEN:'private-key',HF_MUSETALK_URL:'https://example.endpoints.huggingface.cloud',MUSETALK_PROVIDER:huggingface?'huggingface':'vast', MUSETALK_API_URL: huggingface?'https://example.endpoints.huggingface.cloud':'https://worker.example/musetalk', MUSETALK_VIDEO_DAILY_LIMIT: '1', TUTOR_VIDEO_ENABLED: 'true', MUSETALK_PROGRESSIVE: progressive ? 'true' : 'false' };
   const router = createMuseTalkTutorVideoRouter({ db: () => db, env,
     authenticate: (req: any, res, next) => { if (!req.headers.authorization) return void res.sendStatus(401); req.identity = { uid: req.headers.authorization }; next(); },
     synthesize: async () => ({ audioBuffer: Buffer.alloc(100, 1), mimeType: 'audio/wav' }),
@@ -26,6 +31,15 @@ async function harness(workerStatus = 'COMPLETED', progressive = false, consiste
       records.set('last-worker-url', String(url));
       if(options.body && String(url).endsWith('/jobs'))records.set('last-worker-submission',JSON.parse(options.body));
       assert.equal(options.headers.authorization, 'Bearer private-key');
+      if(huggingface && String(url).includes('.endpoints.huggingface.cloud')){
+        const input=JSON.parse(options.body).inputs;
+        if(workerStatus==='WARMING')return Response.json({error:'loading'},{status:503});
+        if(input.operation==='/speech')return Response.json({statusCode:200,body:{mimeType:'audio/mpeg',audioData:Buffer.alloc(100,1).toString('base64')}});
+        if(input.operation==='/jobs'){submissions++;hfAccepted=true;return Response.json({statusCode:202,body:{id:input.body.id}});}
+        polls++;
+        if(input.operation.endsWith('/media'))return Response.json({statusCode:200,videoData:Buffer.alloc(700000,7).toString('base64')});
+        return Response.json({statusCode:hfAccepted?200:404,body:hfAccepted?{status:workerStatus}: {}});
+      }
       if (String(url).endsWith('/national/speech')) {
         const body=JSON.parse(options.body);
         records.set('national-request',body);
@@ -61,7 +75,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false, consiste
   });
   const base = 'https://local.test/video';
   const post = (text = 'Bonjour. Comparons les offres.', language = 'fr', lesson?: unknown) => request(base, { method: 'POST', headers: { authorization: 'owner', 'content-type': 'application/json' }, body: JSON.stringify({ text, persona: 'vivienne', language, ...(lesson ? {lesson} : {}) }) });
-  return { base, post, request, records, env, counts: () => ({ submissions, polls }), close: async () => undefined };
+  return { setWorkerStatus:(value:string)=>{workerStatus=value;}, base, post, request, records, env, counts: () => ({ submissions, polls }), close: async () => undefined };
 
 }
 test('MuseTalk submits once, protects generated media and never exposes the worker credential', async () => {
@@ -193,4 +207,29 @@ test('a chapter film can assemble only completed motion scenes owned by its lear
  const ready=await(await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}})).json();assert.equal(ready.status,'COMPLETED');assert.ok(ready.videoUrl.startsWith('https://worker.example/'));
  assert.equal((await h.request(`${h.base}/${id}`,{headers:{authorization:'other'}})).status,404);
  h.records.get(`musetalkTutorJobs/${first}`).uid='other';assert.equal((await film()).status,404);
+});
+
+
+test('HF cold start keeps an idempotent pending job, then cached video survives GPU sleep',async()=>{
+ const h=await harness('WARMING',false,false,true);
+ const created=await h.post();assert.equal(created.status,202);
+ const {id,status}=await created.json();assert.equal(status,'WARMING');
+ assert.equal(h.counts().submissions,0);
+ const owner={headers:{authorization:'owner'}};
+ assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'WARMING');
+ h.setWorkerStatus('COMPLETED');
+ assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'PENDING');
+ const completed=await(await h.request(`${h.base}/${id}`,owner)).json();
+ assert.equal(completed.status,'COMPLETED');assert.equal(completed.videoUrl,`/api/ai/tutor-video/${id}/media`);
+ assert.equal(h.counts().submissions,1);
+ const before=h.counts();h.setWorkerStatus('WARMING');
+ assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'COMPLETED');
+ const media=await h.request(`${h.base}/${id}/media`,owner);
+ assert.equal((await media.arrayBuffer()).byteLength,700000);
+ assert.deepEqual(h.counts(),before,'cached playback must not contact or wake HF');
+ assert.equal((await h.request(`${h.base}/${id}/media`,{headers:{authorization:'other'}})).status,404);
+ const range=await h.request(`${h.base}/${id}/media`,{headers:{authorization:'owner',range:'bytes=449999-450001'}});
+ assert.equal(range.status,206);assert.equal(range.headers.get('content-range'),'bytes 449999-450001/700000');
+ assert.equal((await range.arrayBuffer()).byteLength,3);
+ assert.equal((await h.request(`${h.base}/${id}/media`,{headers:{authorization:'owner',range:'bytes=999999-'}})).status,416);
 });

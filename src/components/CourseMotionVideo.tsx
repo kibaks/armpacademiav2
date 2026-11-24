@@ -12,10 +12,21 @@ export function CourseMotionVideo(props:Props){
  const key=props.courseId+':'+props.lessonIndex;
  const sourceKey=JSON.stringify([props.sentences,props.screens]);
  useEffect(()=>{generation.current++;active.current?.abort();setState({kind:'idle',progress:0});return()=>{generation.current++;active.current?.abort();};},[key,sourceKey,props.userId]);
+ useEffect(()=>()=>{if(state.url?.startsWith('blob:'))URL.revokeObjectURL(state.url);},[state.url]);
  const generate=async()=>{
   if(active.current && !active.current.signal.aborted && state.kind==='working')return;
   props.onPrepare();active.current?.abort();const controller=new AbortController();active.current=controller;
   const current=++generation.current,valid=()=>current===generation.current && !controller.signal.aborted;
+  const showReady=async(ready:{id:string;url:string})=>{
+   let url=ready.url;
+   if(/^\/api\/ai\/tutor-video\/[a-f0-9]{64}\/media$/.test(url)){
+    const media=await authenticatedFetch(url,{signal:controller.signal});
+    if(!media.ok||!media.headers.get('content-type')?.includes('video/mp4'))throw new Error('Lecture du film indisponible.');
+    url=URL.createObjectURL(await media.blob());
+   }
+   if(valid())setState({kind:'ready',progress:1,id:ready.id,url});
+   else if(url.startsWith('blob:'))URL.revokeObjectURL(url);
+  };
   setState({kind:'working',progress:0,label:'Préparation du film du chapitre…'});
   try{
    const source=JSON.stringify(['course-film-v2-vector',props.sentences,props.screens,music]);
@@ -24,7 +35,7 @@ export function CourseMotionVideo(props:Props){
    const storageKey=`academia-course-film-v2-vector:${props.userId||'session'}:${key}:${music}`;
    let saved:{id?:string;fingerprint?:string}|null=null;try{saved=JSON.parse(localStorage.getItem(storageKey)||'null');}catch{}
    if(saved?.fingerprint===fingerprint && /^[a-f0-9]{64}$/.test(saved.id||'')){
-    try{const ready=await waitForCourseVideo(saved.id!,controller.signal);if(valid()){setState({kind:'ready',progress:1,...ready});return;}}catch{controller.signal.throwIfAborted();}
+    try{const ready=await waitForCourseVideo(saved.id!,controller.signal);if(valid()){await showReady(ready);return;}}catch{controller.signal.throwIfAborted();}
    }
    if(!props.screens.length || props.screens.length>12 || props.screens.length!==props.sentences.length)throw new Error('Ce chapitre doit être vérifié avant sa mise en vidéo.');
    const parts:string[]=[];
@@ -41,7 +52,7 @@ export function CourseMotionVideo(props:Props){
    const ready=await waitForCourseVideo(film.id,controller.signal);
    if(valid()){
     try{localStorage.setItem(storageKey,JSON.stringify({id:ready.id,fingerprint}));}catch{}
-    setState({kind:'ready',progress:1,...ready});
+    await showReady(ready);
    }
   }catch(error){if(valid())setState({kind:'error',progress:0,error:error instanceof DOMException && ['TimeoutError','AbortError'].includes(error.name)?'Le moteur prend plus de temps que prévu. Réessayez pour reprendre les séquences déjà prêtes.':error instanceof Error?error.message:'La réalisation du film est indisponible.'});}
  };

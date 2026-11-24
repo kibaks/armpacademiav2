@@ -5,7 +5,7 @@ import { authenticatedFetch } from '../lib/adminApi';
 import { openTutorVideoStream, supportsTutorVideoStream } from './tutorVideoStream';
 import { speechService } from './speechService';
 
-export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'render'; progressive?: boolean; manualPlayback?: boolean; durationSeconds?: number; audioUrl?: string };
+export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'warming' | 'render'; progressive?: boolean; manualPlayback?: boolean; durationSeconds?: number; audioUrl?: string };
 type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number; progressiveStreaming?: boolean };
 export function useTutorVideoReply(persona: string, active = true) {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
@@ -78,12 +78,14 @@ export function useTutorVideoReply(persona: string, active = true) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'La vidéo est indisponible.');
       if (!current()) return true;
-      setState({ status: 'loading', stage: 'render' });
+      setState({ status: 'loading', stage: data.status === 'WARMING' ? 'warming' : 'render' });
       let failedPolls = 0;
       // A cached reply may already be playable in the creation response.
       let result = data;
       const pollingStarted = Date.now();
       while (current()) {
+        if (result.status === 'WARMING') setState(previous => previous.stage === 'warming' ? previous : {status:'loading',stage:'warming'});
+        else if (result.status === 'PENDING' || result.status === 'PROCESSING') setState(previous => previous.stage === 'render' ? previous : {status:'loading',stage:'render'});
         if (result.status === 'FAILED') throw new Error(result.error || 'La vidéo est indisponible.');
         if (result.status === 'COMPLETED' || result.status === 'STREAMING') {
           if (typeof result.videoUrl !== 'string') throw new Error('Vidéo indisponible.');
@@ -111,7 +113,7 @@ export function useTutorVideoReply(persona: string, active = true) {
         if (result !== data || failedPolls > 0) {
           await new Promise<void>((resolve, reject) => {
             const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
-            const pollInterval = settings.provider === 'musetalk' ? (Date.now() - pollingStarted < 10000 ? 400 : 1500) : 3500;
+            const pollInterval = result.status === 'WARMING' ? 5000 : settings.provider === 'musetalk' ? (Date.now() - pollingStarted < 10000 ? 400 : 1500) : 3500;
             const timer = window.setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, pollInterval);
             signal.addEventListener('abort', onAbort, { once: true });
             if (signal.aborted) onAbort();

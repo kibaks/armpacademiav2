@@ -145,7 +145,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
           <div className="mb-2 flex justify-center gap-1.5" aria-hidden="true">
             {[0, 1, 2].map(index => <span key={index} className="h-1.5 w-6 rounded-full bg-blue-400 motion-safe:animate-pulse" style={{ animationDelay: `${index * 180}ms` }} />)}
           </div>
-          <p className="tutor-video-loading-detail font-medium">{state.stage === 'voice' ? 'La tutrice prépare sa voix…' : 'Le visage et la voix se synchronisent…'}</p>
+          <p className="tutor-video-loading-detail font-medium">{state.stage === 'voice' ? 'La tutrice prépare sa voix…' : state.stage === 'warming' ? 'Le moteur vidéo se réveille…' : 'La tutrice prépare sa vidéo…'}</p>
           <p className="tutor-video-loading-detail mt-1 text-xs text-slate-300" aria-live="off">{waitingSeconds > 0 ? `${waitingSeconds} s d’attente · ` : ''}La lecture démarre dès que possible.</p>
           {waitingSeconds >= 8 && <p className="tutor-video-loading-detail mt-2 text-xs text-blue-200">Vous pouvez écouter la réponse sans attendre la vidéo.</p>}
         </> : state.error}
