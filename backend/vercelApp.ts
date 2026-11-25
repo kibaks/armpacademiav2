@@ -1,3 +1,4 @@
+import { createTutorWarmupRouter } from './tutorWarmup.js';
 import { initiationNotificationsRouter } from './initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './engineGateway.js';
 import { createTutorMediaRouter } from './tutorMediaHealth.js';
@@ -81,6 +82,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 });
 app.use('/api/ai/tutor-video', createTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
+app.use('/api/ai', createTutorWarmupRouter());
 app.use('/api/ai/tutor-voice', createTutorVoiceMediaRouter());
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;

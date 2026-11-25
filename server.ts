@@ -1,3 +1,4 @@
+import { createTutorWarmupRouter } from './backend/tutorWarmup.js';
 import { initiationNotificationsRouter } from './backend/initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './backend/engineGateway.js';
 import { createTutorMediaRouter } from './backend/tutorMediaHealth.js';
@@ -90,6 +91,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 
 app.use('/api/ai/tutor-video', createTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
+app.use('/api/ai', createTutorWarmupRouter());
 app.use('/api/ai/tutor-voice', createTutorVoiceMediaRouter());
 // Lazy initialize Gemini AI client (supports dynamic API_KEY from paid_model_flow as well as GEMINI_API_KEY)
 let aiClient: GoogleGenAI | null = null;

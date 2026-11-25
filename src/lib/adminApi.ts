@@ -1,3 +1,4 @@
+import { createTutorPrewarm } from '../utils/tutorPrewarm';
 import { requestTutorWithWakeup } from '../utils/tutorWakeup';
 import { auth } from '../firebase';
 
@@ -35,4 +36,10 @@ export async function adminApi(path: string, method = 'GET', body?: unknown) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Opération refusée.');
   return data;
+}
+
+const wakeTutorOnce = createTutorPrewarm();
+export async function prewarmTutor() {
+  await auth.authStateReady();
+  return wakeTutorOnce(auth.currentUser?.uid, () => authenticatedFetchOnce('/api/ai/tutor/wake', {method:'POST'}));
 }

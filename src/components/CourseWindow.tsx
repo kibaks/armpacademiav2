@@ -1,5 +1,5 @@
 import { operationsApi, downloadOperation } from '../lib/operationsApi';
-import { authenticatedFetch } from '../lib/adminApi';
+import { authenticatedFetch, prewarmTutor } from '../lib/adminApi';
 import { TutorVideoPlayer } from './TutorVideoPlayer';
 import { useTutorVideoReply } from '../utils/useTutorVideoReply';
 import React, { useState, useEffect, useRef } from 'react';
@@ -110,6 +110,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   // Navigation & Mode
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [mode, setMode] = useState<Mode>('reading');
+  useEffect(() => { if (mode === 'qa') void prewarmTutor().catch(() => {}); }, [mode]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileChaptersOpen, setIsMobileChaptersOpen] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
