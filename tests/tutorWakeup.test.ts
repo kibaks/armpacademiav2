@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import { requestTutorWithWakeup } from '../src/utils/tutorWakeup';
 const warming = () => Response.json({code:'TUTOR_WARMING'},{status:503});
 test('cold GPU preserves the request until ready and delivers the successful reply once',async()=>{
- let calls=0,elapsed=0;
+ let calls=0,elapsed=0,warmNotices=0;
  const response=await requestTutorWithWakeup(async()=>++calls<4?warming():Response.json({reply:'Une offre.'}),{
-  currentSession:()=>true,now:()=>elapsed,wait:async(ms)=>{elapsed+=ms;},
- });assert.equal(calls,4);assert.equal((await response.json()).reply,'Une offre.');
+  currentSession:()=>true,onWarming:()=>{warmNotices++;},now:()=>elapsed,wait:async(ms)=>{elapsed+=ms;},
+ });assert.equal(calls,4);assert.equal(warmNotices,3);assert.equal((await response.json()).reply,'Une offre.');
 });
 test('authentication, ordinary outages and invalid responses never create retry loops',async()=>{
  for(const response of [new Response('',{status:401}),Response.json({error:'Unavailable'},{status:503}),new Response('Bad gateway',{status:503})]){

@@ -453,6 +453,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [language, setLanguage] = useState<TutorLanguage>('fr');
   const [inputLanguage, setInputLanguage] = useState<TutorLanguage>('fr');
+  const [isTutorWarming, setIsTutorWarming] = useState(false);
   const [nationalCapabilities, setNationalCapabilities] = useState<{ translation: string[]; speech: string[]; consistentVoice: boolean }>({ translation: [], speech: [], consistentVoice: false });
   const [selectedVoice, setSelectedVoice] = useState<VoicePersona>(() => speechService.getVoicePersona());
   const [voiceMode, setVoiceMode] = useState(() => speechService.getVoiceMode());
@@ -1291,6 +1292,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         audioMimeType: mediaToSend?.type === 'audio' ? mediaToSend.mimeType : undefined
       };
       const response = await authenticatedFetch('/api/ai/tutor', {
+        onTutorWarming: setIsTutorWarming,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -1699,8 +1701,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                   <AishaAvatar motionMode={presentation.motion} facialExpressions={presentation.facialExpressions} handGestures={presentation.handGestures} isLoading={true} isSpeaking={false} size={36} />
                   <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none p-3.5 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2.5 border border-slate-200 dark:border-slate-700 shadow-xs">
                     <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                    <span>
-                      {activeTutor.name} prépare votre explication…
+                    <span role="status">
+                      {isTutorWarming ? 'Le moteur se réveille. Le premier démarrage peut prendre quelques minutes ; votre question est conservée.' : `${activeTutor.name} prépare votre explication…`}
                     </span>
                   </div>
                 </div>
@@ -2185,7 +2187,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     </span>
                   ) : isLoading ? (
                     <span className="inline-flex items-center gap-2 text-amber-300 font-bold">
-                      <Loader2 className="w-4 h-4 animate-spin" /> {activeTutor.name} analyse votre question et prépare sa réponse…
+                      <Loader2 className="w-4 h-4 animate-spin" /> {isTutorWarming ? 'Le moteur se réveille. Votre question est conservée pendant le démarrage.' : `${activeTutor.name} analyse votre question et prépare sa réponse…`}
                     </span>
                   ) : (isListening || isRecordingVoice) && liveVoiceTranscript ? (
                     <span className="text-emerald-300 font-semibold">

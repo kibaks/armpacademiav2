@@ -1,6 +1,6 @@
 /** Wait only for the explicit cold-start response; never retry a completed generation. */
 export async function requestTutorWithWakeup(request: () => Promise<Response>, options: {
-  currentSession: () => boolean; signal?: AbortSignal | null;
+  currentSession: () => boolean; signal?: AbortSignal | null; onWarming?: () => void;
   now?: () => number; wait?: (ms: number, signal?: AbortSignal | null) => Promise<void>;
 }) {
   const now = options.now || Date.now, started = now();
@@ -18,6 +18,7 @@ export async function requestTutorWithWakeup(request: () => Promise<Response>, o
     if (response.status !== 503 || now() - started >= 600000) return response;
     const data = await response.clone().json().catch(() => ({}));
     if (data.code !== 'TUTOR_WARMING') return response;
+    options.onWarming?.();
     await wait(12000, options.signal);
   }
 }

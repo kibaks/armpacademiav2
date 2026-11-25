@@ -505,6 +505,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
   // Q&A (persisté dans Firestore + localStorage + réponse IA en direct avec voix d'Aïsha)
   const [isAskingTutorQA, setIsAskingTutorQA] = useState(false);
+  const [isTutorWarming, setIsTutorWarming] = useState(false);
   const [tutorQaError, setTutorQaError] = useState<string | null>(null);
   const [activeSpeakingQaId, setActiveSpeakingQaId] = useState<string | null>(null);
 
@@ -546,6 +547,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
 
     try {
       const res = await authenticatedFetch('/api/ai/tutor', {
+        onTutorWarming: setIsTutorWarming,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1653,6 +1655,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                       )}
                     </button>
                   </div>
+
+                  {isAskingTutorQA && isTutorWarming && <p role="status" className="text-sm text-blue-200">Le moteur se réveille. Le premier démarrage peut prendre quelques minutes ; votre question est conservée.</p>}
 
                   {/* Q&A Items List */}
                   <div className="space-y-3 pt-2">
