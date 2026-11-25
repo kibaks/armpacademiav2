@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { normalizeTutorQuestion, quickAcronymReply, tutorRetrievalQuery } from '../shared/tutorQuestion';
+import { normalizeTutorQuestion, quickAcronymReply, tutorRetrievalQuery, quickTutorReply } from '../shared/tutorQuestion';
 import { tutorConversationData } from '../shared/tutorReplyPolicy';
 
 test('recognizes conversational shorthand and dotted procurement abbreviations', () => {
@@ -28,4 +28,10 @@ test('the literal question and names remain intact, normalization and meanings a
  assert.equal(data.question, question);
  assert.match(data.questionNormalisee,/Jean-Claude/);
  assert.equal(data.siglesDeLaQuestion.ANO,'Avis de non-objection');
+});
+
+test('a greeting is answered directly without repeating a previous legal topic', () => {
+ assert.match(quickTutorReply('bjr aisha')!, /^Bonjour !/);
+ assert.match(quickTutorReply('bsr')!, /^Bonsoir !/);
+ assert.equal(quickTutorReply('Bonjour, le DAO est obligatoire ?'), null);
 });

@@ -1,4 +1,4 @@
-import { tutorRetrievalQuery, quickAcronymReply } from './shared/tutorQuestion.js';
+import { tutorRetrievalQuery, quickTutorReply } from './shared/tutorQuestion.js';
 import { createTutorWarmupRouter } from './backend/tutorWarmup.js';
 import { initiationNotificationsRouter } from './backend/initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './backend/engineGateway.js';
@@ -1816,8 +1816,8 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
 
   const stage = res.locals.verifiedLearningStage || await readLearningStage((req as any).identity.uid).catch(() => null);
   if (!stage) { console.warn('[Tutor LLM] learner level unavailable'); return res.status(503).json({ code:'TUTOR_LEVEL_UNAVAILABLE', error: 'Votre niveau ne peut pas être vérifié. Réessayez.' }); }
-  const lexicalReply = !hasMedia && quickAcronymReply(String(message));
-  if (lexicalReply) return tutorJson({reply: lexicalReply, sources: [], provider: 'procurement-glossary'});
+  const lexicalReply = !hasMedia && quickTutorReply(String(message));
+  if (lexicalReply) return tutorJson({reply: lexicalReply, sources: [], provider: 'tutor-lexicon'});
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
   if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);

@@ -58,3 +58,11 @@ export function quickAcronymReply(question: string): string | null {
   if (rest) return null;
   return Object.entries(acronyms).map(([key, value]) => `${key} signifie « ${value} ».`).join('\n\n');
 }
+
+export function quickTutorReply(question: string): string | null {
+  const normalized = normalizeTutorQuestion(question);
+  if (/^(?:bonjour|bonsoir|salut|coucou)(?:[\s,]+(?:a[iï]sha|madame|maman))?[.!?\s]*$/i.test(normalized)) {
+    return `${/^bonsoir/i.test(normalized) ? 'Bonsoir' : 'Bonjour'} ! Quelle notion de la commande publique souhaitez-vous comprendre ?`;
+  }
+  return quickAcronymReply(question);
+}
