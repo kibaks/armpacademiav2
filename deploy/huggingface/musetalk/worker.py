@@ -128,6 +128,10 @@ def main():
             traceback.print_exc()
             status(directory, {'status': 'FAILED', 'error': 'Le rendu vidéo a échoué.'})
         finally:
+            # The exception traceback has left the except block: release cached
+            # failed-render tensors so the separate LLM process can use the GPU.
+            import torch
+            torch.cuda.empty_cache()
             with jobs_lock:
                 pending.discard(identifier)
 
