@@ -1,3 +1,4 @@
+import { tutorRetrievalQuery, quickAcronymReply } from './shared/tutorQuestion.js';
 import { createTutorWarmupRouter } from './backend/tutorWarmup.js';
 import { initiationNotificationsRouter } from './backend/initiationNotifications.js';
 import { createEngineGatewayRouter, createEngineGatewayMiddleware } from './backend/engineGateway.js';
@@ -1815,6 +1816,8 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
 
   const stage = res.locals.verifiedLearningStage || await readLearningStage((req as any).identity.uid).catch(() => null);
   if (!stage) { console.warn('[Tutor LLM] learner level unavailable'); return res.status(503).json({ code:'TUTOR_LEVEL_UNAVAILABLE', error: 'Votre niveau ne peut pas être vérifié. Réessayez.' }); }
+  const lexicalReply = !hasMedia && quickAcronymReply(String(message));
+  if (lexicalReply) return tutorJson({reply: lexicalReply, sources: [], provider: 'procurement-glossary'});
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
   if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
@@ -1826,9 +1829,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
   const arenaAvailable = !!process.env.ARENA_API_KEY;
 
   // RAG — extraits cours pertinents (lecture réelle) — avec mémoire historique pour follow-up court
-  const historyTextForRag = Array.isArray(history) ? history.map((h:any)=> (h.text||'').toLowerCase()).join(' ') : '';
-  const isFollowUpRag = /^(et|et alors|et les|combien|délais|délai|exemple|détaille|précise|pourquoi|comment)\b/i.test(fullMessage.trim()) || fullMessage.trim().length < 12;
-  const ragQuery = (isFollowUpRag && historyTextForRag.length>10) ? (historyTextForRag + ' ' + fullMessage) : fullMessage;
+  const ragQuery = tutorRetrievalQuery(fullMessage, history);
   const ragLessons = findRelevantLessons(ragQuery, courseContext || lc, stage === 'Initiation');
   const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
 
