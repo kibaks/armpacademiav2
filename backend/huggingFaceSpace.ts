@@ -16,7 +16,7 @@ export async function preparePrivateSpace(key: string, request: typeof fetch, si
   const data=await metadata.json();
   const stage=data.runtime?.stage;
   if (stage==='RUNNING' || stage==='RUNNING_BUILDING') {cache.set(cacheKey,Date.now());return true;}
-  if (!['SLEEPING','STOPPED','BUILDING','APP_STARTING','STARTING'].includes(stage)) throw new Error('Private Space unavailable');
+  if (!['SLEEPING','STOPPED','BUILDING','APP_STARTING','RUNNING_APP_STARTING','STARTING'].includes(stage)) throw new Error('Private Space unavailable');
   if (stage==='SLEEPING' || stage==='STOPPED') {
     // One short authenticated visit initiates wakeup; it never keeps the GPU alive.
     await request(`https://${PRIVATE_SPACE_HOST}/health`, {

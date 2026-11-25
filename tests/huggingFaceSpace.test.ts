@@ -16,3 +16,7 @@ test('a healthy Space caches readiness briefly; paused or failed Spaces are not 
  for(const stage of ['PAUSED','RUNTIME_ERROR','BUILD_ERROR']) await assert.rejects(preparePrivateSpace('key',async()=>Response.json({runtime:{stage}})),/unavailable/);
  assert.equal(await preparePrivateSpace('key',async()=>Response.json({runtime:{stage:'APP_STARTING'}})),false);
 });
+
+test('a rolling container restart keeps the question pending instead of reporting a permanent failure',async()=>{
+ assert.equal(await preparePrivateSpace('key',async()=>Response.json({runtime:{stage:'RUNNING_APP_STARTING'}})),false);
+});
