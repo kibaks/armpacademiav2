@@ -1812,7 +1812,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
   const adaptReplyToPersona = (reply: string) => reply;
 
   const stage = res.locals.verifiedLearningStage || await readLearningStage((req as any).identity.uid).catch(() => null);
-  if (!stage) return res.status(503).json({ error: 'Votre niveau ne peut pas être vérifié. Réessayez.' });
+  if (!stage) { console.warn('[Tutor LLM] learner level unavailable'); return res.status(503).json({ code:'TUTOR_LEVEL_UNAVAILABLE', error: 'Votre niveau ne peut pas être vérifié. Réessayez.' }); }
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
   if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
@@ -1835,11 +1835,12 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
       const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage, language });
       return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
     } catch (error) {
+      console.warn('[Tutor LLM] generation failed', {provider:process.env.TUTOR_LLM_PROVIDER || 'gateway', errorCode:error instanceof Error && /^QWEN_[A-Z_0-9]+$/.test(error.message)?error.message:'QWEN_CONNECTION_FAILED', errorType:error instanceof Error?error.name:'Unknown'});
       if (process.env.TUTOR_LLM_PROVIDER === 'huggingface' && error instanceof Error && /^QWEN_HTTP_(503|429)$/.test(error.message)) {
         res.setHeader('Retry-After', '12');
         return res.status(503).json({code:'TUTOR_WARMING', error:'Le moteur IA se prépare. Votre question est conservée pendant le démarrage.', provider:'qwen3-4b-instruct-2507'});
       }
-      return res.status(503).json({ ...tutorUnavailableReply(), provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct' });
+      return res.status(503).json({ ...tutorUnavailableReply(), error:'Le moteur IA n’a pas pu préparer une réponse complète. Réessayez dans quelques instants.', code:'TUTOR_GENERATION_FAILED', provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct' });
     }
   }
 

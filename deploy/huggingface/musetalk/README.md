@@ -62,3 +62,7 @@ GPU validation. The existing endpoint-only token stays server-side. Cold starts
 return TUTOR_WARMING; chat retries every12seconds for at most10minutes. Session
 changes and cancellation stop retries. The four national voice engines remain
 separate and are not installed by this package.
+
+Oversized structured course contexts are measured with the actual tokenizer. Whole
+profile/history/source units are removed until they fit; the system policy and
+the learner question are kept unchanged. Omitted context is explicitly marked.

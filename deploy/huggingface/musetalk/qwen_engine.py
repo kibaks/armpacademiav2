@@ -3,6 +3,7 @@ import atexit
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -20,6 +21,43 @@ def validate_chat(body):
             raise ValueError('Invalid ' + key)
     return [{'role': 'system', 'content': body['system']},
             {'role': 'user', 'content': body['prompt']}]
+
+
+def fit_chat(body, measure, limit=8192):
+    """Retain system/question exactly; remove whole context units, never cut a rule."""
+    messages=validate_chat(body)
+    if measure(messages)<=limit: return messages
+    prompt=body['prompt']
+    start=prompt.find('{')
+    if start<0: raise ValueError('Course context too long')
+    try: data=json.loads(prompt[start:])
+    except (ValueError,TypeError): raise ValueError('Course context too long') from None
+    if not isinstance(data,dict) or not isinstance(data.get('question'),str):
+        raise ValueError('Course context too long')
+    data['contexteReduit']=True
+    data['profil']=''  # server-verified level remains in the unmodified system policy
+    history=data.get('historique')
+    data['historique']=history[-2:] if isinstance(history,list) else []
+    def current():
+        return [messages[0],{'role':'user','content':prompt[:start]+json.dumps(data,ensure_ascii=False)}]
+    def fits(): return measure(current())<=limit
+    if fits(): return current()
+    while data['historique']:
+        data['historique'].pop(0)
+        if fits(): return current()
+    sources=data.get('extraitsDuCours')
+    if isinstance(sources,str):
+        chunks=re.split(r'(?=\n• Cours)',sources)
+        while len(chunks)>1:
+            chunks.pop()
+            data['extraitsDuCours']=''.join(chunks)
+            if fits(): return current()
+    # Prefer the complete active lesson to a partial retrieved legal provision.
+    data['extraitsDuCours']=''
+    if fits(): return current()
+    data['lecon']=''
+    if fits(): return current()
+    raise ValueError('Question and system policy exceed the model context')
 
 
 class QwenClient:
@@ -72,7 +110,10 @@ class QwenEngine:
             self.torch.cuda.empty_cache()
 
     def _chat(self, body):
-        text=self.tokenizer.apply_chat_template(validate_chat(body),tokenize=False,add_generation_prompt=True)
+        def measure(messages):
+            return len(self.tokenizer.apply_chat_template(messages,tokenize=True,add_generation_prompt=True))
+        messages=fit_chat(body,measure)
+        text=self.tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
         inputs=self.tokenizer(text,return_tensors='pt').to('cuda:0')
         length=inputs.input_ids.shape[-1]
         if length>8192: raise ValueError('Course context too long; shorten the supplied extracts')
