@@ -40,6 +40,18 @@ def fitted_text(draw,text,xy,width,height,size=38,color=INK,bold=True):
     for row in rows:
         draw.text((x,y),row,font=face,fill=color);y+=actual*1.4
 
+@lru_cache(maxsize=96)
+def text_plate(text,width,height,size,color,bold):
+    # Typography is immutable within a scene. Shape/rasterize each caption once,
+    # then composite its alpha mask into every animated frame.
+    plate=Image.new('RGBA',(width,height),(0,0,0,0))
+    fitted_text(ImageDraw.Draw(plate),text,(0,0),width,height,size,color,bold)
+    return plate
+
+def blit_text(image,text,xy,width,height,size=38,color=INK,bold=True):
+    plate=text_plate(text,width,height,size,color,bold)
+    image.paste(plate,xy,plate)
+
 def ease(value):return 1-(1-max(0,min(1,value)))**3
 
 def read_story(value):
@@ -121,7 +133,7 @@ def pictogram(draw,kind,cx,cy,scale,t,entry):
         # Visible page-to-page motion, confined to the document illustration.
         scan=-22+((t*.25)%1)*53;line([(-21,scan),(21,scan)],'#BACDDF',1)
 
-def animated_illustration(draw,story,cue,seconds,cue_age):
+def animated_illustration(draw,story,cue,seconds,cue_age,image=None):
     # Labels only from the source; links are associative, never legal process arrows.
     terms=story['terms'] or [story['title']]
     count=len(terms);centers=[439] if count==1 else [245,620] if count==2 else [160,439,718]
@@ -135,13 +147,14 @@ def animated_illustration(draw,story,cue,seconds,cue_age):
         active=term.casefold() in cue['text'].casefold()
         draw.ellipse((cx-58,cy-58,cx+58,cy+58),fill='#FFF3D8' if active else '#F0F5FA')
         pictogram(draw,pictogram_kind(term),cx,cy,.95*(.65+.35*entry),seconds,entry)
-        fitted_text(draw,term,(cx-105,257),210,43,19,NAVY)
+        if image is None: fitted_text(draw,term,(cx-105,257),210,43,19,NAVY)
+        else: blit_text(image,term,(cx-105,257),210,43,19,NAVY)
 
 def frame(story,seconds,duration):
     p=max(0,min(1,seconds/duration));image=Image.new('RGB',(W,H),'#F0F4F8');d=ImageDraw.Draw(image)
     d.rectangle((0,0,W,142),fill=NAVY)
     d.text((44,24),'ARMP  /  ACADEMIA',font=font(17,True),fill='#F2CF88')
-    fitted_text(d,story['chapter'],(44,61),1180,70,31,'#FFFFFF')
+    blit_text(image,story['chapter'],(44,61),1180,70,31,'#FFFFFF')
     d.rounded_rectangle((45,166,331,586),20,fill='#FFFFFF')
     d.rounded_rectangle((57,189,319,557),16,fill=NAVY)
     d.text((77,565),'VOTRE TUTRICE',font=font(13,True),fill='#587088')
@@ -155,9 +168,9 @@ def frame(story,seconds,duration):
     label='LE BON RÉFLEXE' if cue['phase']=='rule' else 'COMPRENDRE'
     ld.rounded_rectangle((27,25,250,62),8,fill='#FFF3D8' if cue['phase']=='rule' else '#EAF3F4')
     ld.text((41,35),label,font=font(15,True),fill='#88601A' if cue['phase']=='rule' else '#286D69')
-    animated_illustration(ld,story,cue,seconds,max(0,seconds-begin))
-    fitted_text(ld,story['title'],(28,77),810,55,25,NAVY)
-    fitted_text(ld,cue['text'],(28,310),806,100,28)
+    animated_illustration(ld,story,cue,seconds,max(0,seconds-begin),image=layer)
+    blit_text(layer,story['title'],(28,77),810,55,25,NAVY)
+    blit_text(layer,cue['text'],(28,310),806,100,28)
     if appear<1:layer.putalpha(layer.getchannel('A').point(lambda a:int(a*appear)))
     image.paste(layer,(356,166+round((1-appear)*12)),layer)
     d=ImageDraw.Draw(image)
@@ -165,8 +178,8 @@ def frame(story,seconds,duration):
         x=45+i*399;entry=ease((p-.05-i*.06)/.15);y=608+round((1-entry)*10)
         d.rounded_rectangle((x,y,x+382,y+49),12,fill='#FFFFFF')
         d.ellipse((x+16,y+19,x+26,y+29),fill=GOLD if entry>.5 else '#C3D4E5')
-        fitted_text(d,term,(x+42,y+11),321,31,20,NAVY)
-    fitted_text(d,story.get('legalRef') or 'Repère pédagogique : vérifier les textes applicables.',(45,675),1050,24,13,'#587088',False)
+        blit_text(image,term,(x+42,y+11),321,31,20,NAVY)
+    blit_text(image,story.get('legalRef') or 'Repère pédagogique : vérifier les textes applicables.',(45,675),1050,24,13,'#587088',False)
     marker=f"{story['sceneIndex']+1:02d} / {story['sceneCount']:02d}"
     d.text((1130,677),marker,font=font(15,True),fill=NAVY)
     d.rectangle((45,710,1235,715),fill='#D7E2ED');d.rectangle((45,710,45+round(1190*p),715),fill=GOLD)

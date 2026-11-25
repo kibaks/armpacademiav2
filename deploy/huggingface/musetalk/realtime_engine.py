@@ -33,6 +33,13 @@ def load_video_models(device):
     return vae, unet, pe
 
 
+# Preserve the original 25fps portrait motion while synthesizing fewer mouth
+# frames. The 720p lesson compositor keeps its own 25fps animations.
+VIDEO_FPS = 20
+
+def avatar_frame_index(index, count):
+    return (index * 25 // VIDEO_FPS) % count
+
 class RealtimeEngine:
     def __init__(self, source):
         import torch
@@ -66,7 +73,7 @@ class RealtimeEngine:
         # Prime CUDA kernels before accepting a user request.
         with torch.inference_mode():
             features, length = rt.audio_processor.get_audio_feature('data/academia/reply.wav', weight_dtype=rt.weight_dtype)
-            chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=25)
+            chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=VIDEO_FPS)
             self._decode(chunks[:2], 0)
             self._decode(chunks[:4], 0)
         torch.cuda.synchronize()
@@ -74,7 +81,7 @@ class RealtimeEngine:
     def _decode(self, chunks, offset):
         import torch
         rt, avatar = self.rt, self.avatar
-        latents = torch.cat([avatar.input_latent_list_cycle[(offset+i) % len(avatar.input_latent_list_cycle)] for i in range(len(chunks))])
+        latents = torch.cat([avatar.input_latent_list_cycle[avatar_frame_index(offset+i, len(avatar.input_latent_list_cycle))] for i in range(len(chunks))])
         audio = rt.pe(chunks.to(device=rt.device, dtype=rt.weight_dtype))
         predicted = rt.unet.model(latents.to(device=rt.device, dtype=rt.weight_dtype), rt.timesteps, encoder_hidden_states=audio).sample
         return rt.vae.decode_latents(predicted.to(dtype=rt.vae.vae.dtype))
@@ -88,13 +95,13 @@ class RealtimeEngine:
         rt, avatar = self.rt, self.avatar
         with torch.inference_mode():
             features, length = rt.audio_processor.get_audio_feature(str(audio), weight_dtype=rt.weight_dtype)
-            chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=25)
+            chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=VIDEO_FPS)
             height, width = avatar.frame_list_cycle[0].shape[:2]
             # The portal displays a small portrait. Encode 480p rather than
             # transporting 720p raw frames through the CPU encoder.
             output_height = min(height, 480)
             output_width = max(2, round(width * output_height / height / 2) * 2)
-            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{output_width}x{output_height}', '-r', '25', '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '4', '-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '12', '-keyint_min', '12', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
+            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{output_width}x{output_height}', '-r', str(VIDEO_FPS), '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '4', '-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '12', '-keyint_min', '12', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
             announced = False
             # stderr goes to a file: never risk a full pipe blocking the encoder.
             with output.with_suffix('.encode.log').open('wb') as log:
@@ -106,7 +113,7 @@ class RealtimeEngine:
                         batch = 2 if offset == 0 else 4
                         frames = self._decode(chunks[offset:offset+batch], offset)
                         for index, face in enumerate(frames, offset):
-                            pos = index % len(avatar.frame_list_cycle)
+                            pos = avatar_frame_index(index, len(avatar.frame_list_cycle))
                             bbox = avatar.coord_list_cycle[pos]
                             x1,y1,x2,y2 = bbox
                             face = cv2.resize(face.astype(np.uint8), (x2-x1,y2-y1))
