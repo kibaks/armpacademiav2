@@ -15,10 +15,14 @@ export async function requestTutorWithWakeup(request: () => Promise<Response>, o
     options.signal?.throwIfAborted();
     if (!options.currentSession()) throw new Error('La session a changé. Reconnectez-vous.');
     const response = await request();
-    if (response.status !== 503 || now() - started >= 600000) return response;
+    if (response.status !== 503) return response;
     const data = await response.clone().json().catch(() => ({}));
-    if (data.code !== 'TUTOR_WARMING') return response;
-    options.onWarming?.();
+    if (data.code !== 'TUTOR_WARMING' && data.code !== 'TUTOR_BUSY') return response;
+    if (now() - started >= 600000) return Response.json({
+      code: 'TUTOR_WAIT_TIMEOUT',
+      error: 'Le moteur reste indisponible. Votre question reste dans la conversation ; réessayez dans un instant.',
+    }, {status:503});
+    if (data.code === 'TUTOR_WARMING') options.onWarming?.();
     await wait(12000, options.signal);
   }
 }

@@ -20,5 +20,13 @@ test('logout, cancellation and a ten minute deadline stop cold-start retries',as
  await assert.rejects(requestTutorWithWakeup(async()=>{calls++;return warming();},{currentSession:()=>true,signal:controller.signal,wait:async()=>{controller.abort();}}),/abort/i);assert.equal(calls,1);
  let elapsed=0;calls=0;
  const result=await requestTutorWithWakeup(async()=>{calls++;return warming();},{currentSession:()=>true,now:()=>elapsed,wait:async()=>{elapsed=600000;}});
- assert.equal(result.status,503);assert.equal(calls,2);
+ assert.equal(result.status,503);assert.equal((await result.json()).code,'TUTOR_WAIT_TIMEOUT');assert.equal(calls,2);
+});
+
+test('a video holding the GPU queues chat without falsely announcing another cold start',async()=>{
+ let calls=0,warmNotices=0;
+ const response=await requestTutorWithWakeup(async()=>++calls===1?Response.json({code:'TUTOR_BUSY'},{status:503}):Response.json({reply:'Texte disponible.'}),{
+  currentSession:()=>true,onWarming:()=>{warmNotices++;},wait:async()=>{},
+ });
+ assert.equal((await response.json()).reply,'Texte disponible.');assert.equal(calls,2);assert.equal(warmNotices,0);
 });

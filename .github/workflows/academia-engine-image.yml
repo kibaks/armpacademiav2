@@ -1,10 +1,5 @@
 name: Build Academia engine image
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'deploy/huggingface/musetalk/**'
-      - '.github/workflows/academia-engine-image.yml'
   workflow_dispatch:
 permissions:
   contents: read

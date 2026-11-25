@@ -72,3 +72,24 @@ avoids the GQA math fallback, which allocates a quadratic attention matrix on T4
 Startup probes the fused memory-efficient kernel. If unavailable, the model uses
 a3072-token input budget with the math kernel. Logits are computed only for the
 last token. A GPU OOM retries once with the smaller context after tensor cleanup.
+
+## Prebuilt image and chat-first startup (2026-11-25)
+
+`Dockerfile` installs both pinned Python/CUDA runtimes, MuseTalk weights, Qwen3
+weights and Piper voices on a CPU builder. `ACADEMIA_PREBUILT=1` makes startup
+require a runtime manifest and skip installation entirely. `HF_HOME` points to
+the image's model cache. The GPU starts Qwen before accepting requests; avatar
+preparation happens lazily, under the shared GPU lock, on the first video job.
+The existing app already displays text before starting its asynchronous video.
+The initial video can therefore take longer than subsequent videos.
+
+`container_server.py` exposes `/health` (503 until chat ready) and `POST /` with
+the existing HF JSON protocol. Keep the endpoint authenticated, port8080,
+healthRoute `/health`, one T4, min0/max1, idle timeout15minutes. No GPU or
+billing control credentials belong in the image or in the browser.
+
+The GitHub image workflow is currently blocked by the account's billing lock.
+Do not claim that its failed job produced an image. A Docker Space can build the
+same public code on CPU; use only a verified, immutable image digest on the
+private endpoint. The build-only Space must expose a static status page, never
+an unauthenticated inference API. Pause its temporary CPU after building.

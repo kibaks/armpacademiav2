@@ -637,7 +637,11 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
       return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct' });
     } catch (error) {
       console.warn('[Tutor LLM] generation failed', {provider:process.env.TUTOR_LLM_PROVIDER || 'gateway', errorCode:error instanceof Error && /^QWEN_[A-Z_0-9]+$/.test(error.message)?error.message:'QWEN_CONNECTION_FAILED', errorType:error instanceof Error?error.name:'Unknown'});
-      if (process.env.TUTOR_LLM_PROVIDER === 'huggingface' && error instanceof Error && /^QWEN_HTTP_(503|429)$/.test(error.message)) {
+      if (process.env.TUTOR_LLM_PROVIDER === 'huggingface' && error instanceof Error && error.message === 'QWEN_HTTP_429') {
+        res.setHeader('Retry-After', '12');
+        return res.status(503).json({code:'TUTOR_BUSY', error:'Le moteur termine une vidéo. Votre question est en attente.', provider:'qwen3-4b-instruct-2507'});
+      }
+      if (process.env.TUTOR_LLM_PROVIDER === 'huggingface' && error instanceof Error && error.message === 'QWEN_HTTP_503') {
         res.setHeader('Retry-After', '12');
         return res.status(503).json({code:'TUTOR_WARMING', error:'Le moteur IA se prépare. Votre question est conservée pendant le démarrage.', provider:'qwen3-4b-instruct-2507'});
       }

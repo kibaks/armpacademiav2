@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     UV_PYTHON_INSTALL_DIR=/opt/academia-runtime/python \
     OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 PORT=8080
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates build-essential git libglib2.0-0 libgomp1 && \
+    ca-certificates build-essential git libglib2.0-0 libgomp1 fonts-dejavu-core && \
     rm -rf /var/lib/apt/lists/* && pip install --no-cache-dir uv==0.9.10 && \
     useradd -m -u 1000 academia && \
     mkdir -p /opt/academia-runtime /opt/academia-models /opt/academia-package && \
