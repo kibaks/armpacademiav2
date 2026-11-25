@@ -94,6 +94,14 @@ class QwenEngine:
     def __init__(self):
         import torch
         from transformers import AutoTokenizer, AutoModelForCausalLM
+        from transformers.integrations import sdpa_attention
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+        # In pinned Transformers 4.56, GQA selects Flash/math only. T4 cannot
+        # use Flash; explicit KV repetition permits the efficient CUDA kernel.
+        sdpa_attention.use_gqa_in_sdpa = lambda *_: False
+        self.sdpa_kernel = sdpa_kernel
+        self.backends = [SDPBackend.EFFICIENT_ATTENTION]
+        self.context_limit = 8192
         torch.set_num_threads(3)
         self.torch = torch
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=REVISION, trust_remote_code=False,local_files_only=True)
@@ -101,26 +109,43 @@ class QwenEngine:
             MODEL, revision=REVISION, trust_remote_code=False,local_files_only=True,
             torch_dtype=torch.float16, device_map={'': 0},attn_implementation='sdpa')
         self.model.eval()
-        print('ACADEMIA_QWEN3_READY', flush=True)
+        probe = self.tokenizer('Bonjour', return_tensors='pt').to('cuda:0')
+        try:
+            with torch.inference_mode(), sdpa_kernel(self.backends):
+                self.model(**probe, use_cache=False, logits_to_keep=1)
+        except RuntimeError as error:
+            if 'kernel' not in str(error).lower(): raise
+            self.backends = [SDPBackend.MATH]
+            self.context_limit = 3072
+        del probe
+        torch.cuda.empty_cache()
+        print('ACADEMIA_QWEN3_READY context_limit=' + str(self.context_limit), flush=True)
 
     def chat(self, body):
         try:
-            return self._chat(body)
+            try:
+                return self._chat(body)
+            except self.torch.OutOfMemoryError:
+                print('QWEN_CONTEXT_MEMORY_RETRY', flush=True)
+            # Leave the except block before retrying so failed tensor frames are released.
+            self.torch.cuda.empty_cache()
+            return self._chat(body, limit=3072)
         finally:
             self.torch.cuda.empty_cache()
 
-    def _chat(self, body):
+    def _chat(self, body, limit=None):
         def measure(messages):
             return len(self.tokenizer.apply_chat_template(messages,tokenize=True,add_generation_prompt=True))
-        messages=fit_chat(body,measure)
+        budget=min(limit or self.context_limit, self.context_limit)
+        messages=fit_chat(body,measure,limit=budget)
         text=self.tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
         inputs=self.tokenizer(text,return_tensors='pt').to('cuda:0')
         length=inputs.input_ids.shape[-1]
-        if length>8192: raise ValueError('Course context too long; shorten the supplied extracts')
-        with self.torch.inference_mode():
+        if length>budget: raise ValueError('Course context too long; shorten the supplied extracts')
+        with self.torch.inference_mode(), self.sdpa_kernel(self.backends):
             output=self.model.generate(**inputs,max_new_tokens=700,max_time=32,
                 do_sample=False,temperature=1.0,top_p=1.0,top_k=0,use_cache=True,
-                pad_token_id=self.tokenizer.eos_token_id)
+                pad_token_id=self.tokenizer.eos_token_id,logits_to_keep=1)
         generated=output[0,length:]
         eos=self.model.generation_config.eos_token_id
         eos=eos if isinstance(eos,list) else [eos]

@@ -66,3 +66,9 @@ separate and are not installed by this package.
 Oversized structured course contexts are measured with the actual tokenizer. Whole
 profile/history/source units are removed until they fit; the system policy and
 the learner question are kept unchanged. Omitted context is explicitly marked.
+
+T4 attention compatibility (Torch2.6 / Transformers4.56.2): explicit KV repetition
+avoids the GQA math fallback, which allocates a quadratic attention matrix on T4.
+Startup probes the fused memory-efficient kernel. If unavailable, the model uses
+a3072-token input budget with the math kernel. Logits are computed only for the
+last token. A GPU OOM retries once with the smaller context after tensor cleanup.
