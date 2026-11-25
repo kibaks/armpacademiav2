@@ -96,7 +96,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
   return <div className="tutor-video-player relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl bg-slate-950 text-white">
     {(state.status === 'ready' && state.url) || presentation ? <>
       <video ref={videoRef} key={presentation ? 'professional-presentation-v4-light' : state.url} src={presentation ? '/assets/tutrice-professionnelle-v4-light.mp4' : state.url}
-        poster="/assets/tutrice-portrait-v1.jpg" muted={Boolean(state.audioUrl)} controls playsInline preload="metadata"
+        poster="/assets/tutrice-portrait-v1.jpg" muted={Boolean(state.audioUrl)} controls playsInline preload={presentation ? 'metadata' : 'auto'}
         className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: fillFrame ? '50% 28%' : '50% 50%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
         onPlay={() => { speechService.stop(); if (!presentation) {onProgress?.(0);checkVideoProgress();} }}
         onWaiting={waitForPlayback} onStalled={waitForPlayback}

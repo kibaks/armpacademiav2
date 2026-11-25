@@ -113,7 +113,7 @@ export function useTutorVideoReply(persona: string, active = true) {
         if (result !== data || failedPolls > 0) {
           await new Promise<void>((resolve, reject) => {
             const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
-            const pollInterval = result.status === 'WARMING' ? 5000 : settings.provider === 'musetalk' ? (Date.now() - pollingStarted < 10000 ? 400 : 1500) : 3500;
+            const pollInterval = result.status === 'WARMING' ? 5000 : settings.provider === 'musetalk' ? (Date.now() - pollingStarted < 10000 ? 400 : 1500) : settings.provider === 'huggingface' ? 1500 : 3500;
             const timer = window.setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, pollInterval);
             signal.addEventListener('abort', onAbort, { once: true });
             if (signal.aborted) onAbort();
@@ -147,10 +147,10 @@ export function useTutorVideoReply(persona: string, active = true) {
     setState(previous => previous.status === 'ready' ? {...previous,manualPlayback:true} : previous);
   };
   const handleAutoplayBlocked = () => {
-    backgroundAudio.current=true;
+    backgroundAudio.current=false;
     deferAutomaticPlayback();
-    const last=lastRequest.current;
-    if (last && !speechService.getState().isPlaying) void speechService.play(last.text, `tutor-video-fallback-${Date.now()}`, {voice:last.voice,language:last.language});
+    // Browser autoplay restrictions require a click on the synchronized player.
+    // Do not replace the video's soundtrack with an automatic audio-only reply.
   };
   return { state, start, stop, listenWithoutVideo, retry, deferAutomaticPlayback, handleAutoplayBlocked };
 }

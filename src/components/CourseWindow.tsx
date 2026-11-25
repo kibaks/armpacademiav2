@@ -514,26 +514,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const speakQaAnswer = async (answerText: string, qaId: string) => {
     if (!answerText) return;
     speechService.unlockAudio();
-    const clean = answerText
-      .replace(/[*#`_>]/g, '')
-      .replace(/\|.*\|/g, ' ')
-      .replace(/💡|✨|⚖️|🏛️|📋|👥|🤝|🎓|📄|📢|🛡️|📦|🔄|🌸|🎯|🧩|🚫|🚦|👣|🔒|🗺️|⚠️|🤗|🇨🇩|📐|🧠/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!clean) return;
-    let audioFallbackTimer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const videoReady = await Promise.race([
-        tutorVideo.start(answerText, courseTutorPersona, true, true, true),
-        new Promise<false>(resolve => { audioFallbackTimer = setTimeout(() => resolve(false), 2000); }),
-      ]);
-      if (videoReady) return;
-    } finally { if (audioFallbackTimer) clearTimeout(audioFallbackTimer); }
-    setActiveSpeakingQaId(qaId);
-    speechService.play(clean, `qa-voice-${qaId}`, {
-      speed: 0.9,
-      voice: courseTutorPersona
-    });
+    await tutorVideo.start(answerText, courseTutorPersona, true, false, true);
+
   };
 
   const askQuestion = async (presetQuestion?: string) => {

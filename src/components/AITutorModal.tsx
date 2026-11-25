@@ -723,16 +723,12 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       // Keep the player visible when a reply starts, including after hiding the portrait.
       if (!isVideoCallActive) setShowStudioStage(true);
       setExplanationVideoProgress(undefined);
-      // Prefer the synchronized video, but bound the wait for slow renderers.
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      const ready = await Promise.race([
-        tutorVideo.start(clean, voiceToUse, true, true, true, spokenLanguage, {question:questionForVideo,lessonTitle:learningContext?.lastCourseTitle}),
-        new Promise<false>(resolve=>{ timeout=setTimeout(()=>resolve(false),2000); }),
-      ]);
-      if (timeout) clearTimeout(timeout);
+      // The MP4 contains the matching voice. Never start a second audio track
+      // while this render is pending; audio-only playback is an explicit choice.
+      const ready = await tutorVideo.start(clean, voiceToUse, true, false, true, spokenLanguage, {question:questionForVideo,lessonTitle:learningContext?.lastCourseTitle});
       if (explanationRun !== explanationRunRef.current || !modalOpenRef.current) return;
-      if (ready) return;
-      // Keep trying automatic video when it arrives after the audio fallback.
+      if (!ready) showNotice('La vidéo est indisponible. Vous pouvez choisir une écoute en audio.');
+      return;
     }
     if (playbackMode === 'audio') tutorVideo.stop();
 
