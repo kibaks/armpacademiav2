@@ -93,3 +93,14 @@ Do not claim that its failed job produced an image. A Docker Space can build the
 same public code on CPU; use only a verified, immutable image digest on the
 private endpoint. The build-only Space must expose a static status page, never
 an unauthenticated inference API. Pause its temporary CPU after building.
+
+
+Managed-image fallback: `../runtime_build` is an explicit build-only PEP517
+dependency for the HF requirements phase. It downloads the pinned public source,
+prepares `/opt/academia-runtime` and `/opt/academia-models` in the managed image,
+then emits a marker wheel. It must not be installed on a workstation. Metadata
+resolution does not install anything. Disable binary/wheel cache for this
+dependency so a cached marker cannot skip image preparation. At runtime set
+ACADEMIA_PREBUILT=1, ACADEMIA_RUNTIME=/opt/academia-runtime,
+ACADEMIA_PACKAGE=/opt/academia-package, HF_HOME=/opt/academia-models. This avoids
+requiring the endpoint platform to pull a Docker Space image.

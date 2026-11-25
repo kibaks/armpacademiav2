@@ -12,7 +12,7 @@ import urllib.request
 
 class EndpointHandler:
     def __init__(self, path=''):
-        self.root = Path(path or __file__).resolve()
+        self.root = Path(os.environ.get('ACADEMIA_PACKAGE') or path or __file__).resolve()
         if self.root.is_file():
             self.root = self.root.parent
         self.lock = threading.Lock()
