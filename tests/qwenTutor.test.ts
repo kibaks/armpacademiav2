@@ -120,6 +120,7 @@ test('the named private Space uses the same authenticated JSON protocol; other S
  assert.ok(qwenTutorConfig(spaceEnv));
  assert.equal(qwenTutorConfig({...spaceEnv,HF_MUSETALK_URL:'https://someone-else.hf.space'}),null);
  const reply=await generateQwenTutor('Qui remet une offre ?', {env:spaceEnv,fetcher:async(url,init)=>{
+  if (String(url)==='https://huggingface.co/api/spaces/kibaks/academia-engine-build') return Response.json({runtime:{stage:'RUNNING'}});
   assert.equal(String(url),'https://kibaks-academia-engine-build.hf.space/');assert.equal((init?.headers as any).authorization,'Bearer private-test-key');
   assert.equal(JSON.parse(String(init?.body)).inputs.operation,'/chat');
   return Response.json({statusCode:200,body:{reply:'Le soumissionnaire remet une offre.',model:'academia-tuteur'}});

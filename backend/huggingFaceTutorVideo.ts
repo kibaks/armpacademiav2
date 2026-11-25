@@ -1,3 +1,4 @@
+import { preparePrivateSpace, PRIVATE_SPACE_HOST } from './huggingFaceSpace.js';
 import { trustedHuggingFaceEndpoint } from './huggingFaceEndpoint.js';
 /** Private HF JSON transport and durable, owner-checked cache used by MuseTalk routes. */
 const PART_BYTES = 450_000;
@@ -6,6 +7,7 @@ export const isHuggingFaceVideo = (env: NodeJS.ProcessEnv) => env.MUSETALK_PROVI
 
 export async function huggingFaceVideoRequest(endpoint: URL, key: string, path: string, init: RequestInit, request: typeof fetch): Promise<Response> {
   if (!trustedHuggingFaceEndpoint(endpoint)) throw new Error('Invalid private HF endpoint');
+  if (endpoint.hostname===PRIVATE_SPACE_HOST && !await preparePrivateSpace(key,request,init.signal)) return Response.json({error:'Private Space warming'}, {status:503});
   const response = await request(endpoint.href, {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ inputs: { operation: path, method: init.method || 'GET', ...(init.body ? {body: JSON.parse(String(init.body))} : {}) } }),
