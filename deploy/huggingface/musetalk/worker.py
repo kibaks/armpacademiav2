@@ -47,17 +47,27 @@ def main():
         '-preset', 'fast', str(source)], check=True, timeout=60)
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
         'anullsrc=r=16000:cl=mono', '-t', '2', 'data/academia/reply.wav'], check=True, timeout=30)
-    from realtime_engine import RealtimeEngine
     from course_motion import read_story, compose, assemble
-    engine = RealtimeEngine(source)
-    import torch
-    torch.cuda.empty_cache()
     from qwen_engine import QwenClient
     qwen = QwenClient(package, work)
     from piper import PiperVoice, SynthesisConfig
     voices={name:PiperVoice.load(str(work / 'voices' / file)) for name,file in [('vivienne','fr_FR-siwis-medium.onnx'),('henri','fr_FR-tom-medium.onnx')]}
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     render_lock, jobs_lock = threading.Lock(), threading.Lock()
+    engine = None
+
+    def video_engine():
+        # Called only under render_lock. Chat readiness never waits for avatar
+        # landmarks, masks, latents or CUDA video priming.
+        nonlocal engine
+        if engine is None:
+            from realtime_engine import RealtimeEngine
+            print('ACADEMIA_VIDEO_LOADING', flush=True)
+            engine = RealtimeEngine(source)
+            print('ACADEMIA_VIDEO_READY', flush=True)
+        return engine
+
+    print('ACADEMIA_CHAT_READY video=lazy', flush=True)
     jobs = work / 'jobs'
     jobs.mkdir(exist_ok=True)
     pending = set()
@@ -89,8 +99,9 @@ def main():
         avatar = directory / ('avatar.mp4' if lesson else 'result.mp4')
         with render_lock:
             try:
-                engine.render(wav, avatar, lambda _: None)
+                video_engine().render(wav, avatar, lambda _: None)
             finally:
+                import torch
                 torch.cuda.empty_cache()
         if lesson:
             compose(avatar, directory / 'result.mp4', lesson, duration)
