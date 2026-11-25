@@ -52,6 +52,15 @@ def main():
     voices=work / 'voices'
     voices.mkdir(exist_ok=True)
     subprocess.run([str(python), '-m', 'piper.download_voices', 'fr_FR-siwis-medium', 'fr_FR-tom-medium'], cwd=voices, check=True)
+    llm_python=work / 'venv-llm/bin/python'
+    if not llm_python.exists():
+        subprocess.run([uvbin,'venv','--python','3.10',str(work/'venv-llm')],check=True)
+    subprocess.run([uvbin,'pip','install','--python',str(llm_python),'torch==2.6.0',
+        '--index-url','https://download.pytorch.org/whl/cu118'],check=True)
+    subprocess.run([uvbin,'pip','install','--python',str(llm_python),
+        'transformers==4.56.2','accelerate==1.10.1','numpy==1.26.4'],check=True)
+    subprocess.run([str(llm_python),'-c',
+        "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-Instruct-2507', revision='cdbee75f17c01a7cc42f958dc650907174af0554', allow_patterns=['*.json','*.safetensors','*.txt','*.model','*.tiktoken'])"],check=True)
     print('MUSETALK_RUNTIME_INSTALLED', flush=True)
 
 

@@ -8,7 +8,7 @@ export async function huggingFaceVideoRequest(endpoint: URL, key: string, path: 
   const response = await request(endpoint.href, {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ inputs: { operation: path, method: init.method || 'GET', ...(init.body ? {body: JSON.parse(String(init.body))} : {}) } }),
-    redirect: 'error', signal: AbortSignal.timeout(40000),
+    redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(40000), ...(init.signal ? [init.signal] : [])]),
   });
   // 503 is returned while HF allocates a GPU/loads the model. No control-plane key is needed.
   if (!response.ok) return response;

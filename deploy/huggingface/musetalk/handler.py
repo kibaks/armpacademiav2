@@ -31,7 +31,7 @@ class EndpointHandler:
             str(self.root), str(self.work)], env=env,
             stderr=subprocess.STDOUT)
         atexit.register(self.process.terminate)
-        deadline = time.monotonic() + 300
+        deadline = time.monotonic() + 600
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
                 raise RuntimeError('MuseTalk worker exited; inspect endpoint logs')

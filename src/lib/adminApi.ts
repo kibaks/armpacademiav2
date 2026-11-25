@@ -1,6 +1,7 @@
+import { requestTutorWithWakeup } from '../utils/tutorWakeup';
 import { auth } from '../firebase';
 
-export async function authenticatedFetch(url: string, options: RequestInit = {}) {
+async function authenticatedFetchOnce(url: string, options: RequestInit = {}) {
   await auth.authStateReady();
   const user = auth.currentUser;
   if (!user) throw new Error('Connectez-vous avec votre compte.');
@@ -16,6 +17,14 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
     }
   }
   return response;
+}
+export async function authenticatedFetch(url: string, options: RequestInit = {}) {
+  if (url !== '/api/ai/tutor') return authenticatedFetchOnce(url, options);
+  await auth.authStateReady();
+  const owner = auth.currentUser?.uid;
+  return requestTutorWithWakeup(() => authenticatedFetchOnce(url, options), {
+    signal: options.signal, currentSession: () => auth.currentUser?.uid === owner,
+  });
 }
 export async function adminApi(path: string, method = 'GET', body?: unknown) {
   const res = await authenticatedFetch(`/api/admin${path}`, { method, headers: { 'Content-Type': 'application/json' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });

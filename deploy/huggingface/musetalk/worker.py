@@ -50,6 +50,10 @@ def main():
     from realtime_engine import RealtimeEngine
     from course_motion import read_story, compose, assemble
     engine = RealtimeEngine(source)
+    import torch
+    torch.cuda.empty_cache()
+    from qwen_engine import QwenClient
+    qwen = QwenClient(package, work)
     from piper import PiperVoice, SynthesisConfig
     voices={name:PiperVoice.load(str(work / 'voices' / file)) for name,file in [('vivienne','fr_FR-siwis-medium.onnx'),('henri','fr_FR-tom-medium.onnx')]}
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -84,7 +88,10 @@ def main():
             '-vn', '-ac', '1', '-ar', '16000', str(wav)], check=True, timeout=30)
         avatar = directory / ('avatar.mp4' if lesson else 'result.mp4')
         with render_lock:
-            engine.render(wav, avatar, lambda _: None)
+            try:
+                engine.render(wav, avatar, lambda _: None)
+            finally:
+                torch.cuda.empty_cache()
         if lesson:
             compose(avatar, directory / 'result.mp4', lesson, duration)
         if (directory / 'result.mp4').stat().st_size > 24000000:
@@ -174,6 +181,15 @@ def main():
                         return self.reply(200, {'videoData': base64.b64encode(output).decode(),
                             'mimeType': 'video/mp4', 'durationSeconds': duration,
                             'provider': 'musetalk-huggingface'})
+                if operation == '/chat' and method == 'POST':
+                    # Serialize GPU work with lip-sync to bound memory and contention.
+                    if not render_lock.acquire(blocking=False):
+                        return self.reply(200, {'statusCode': 429, 'body': {'error': 'GPU busy'}})
+                    try:
+                        result = qwen.chat(body.get('body', {}))
+                        return self.reply(200, {'statusCode': 200, 'body': result})
+                    finally:
+                        render_lock.release()
                 if operation == '/speech' and method == 'POST':
                     speech=body.get('body', {})
                     text=speech.get('text')

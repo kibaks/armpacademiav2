@@ -634,9 +634,13 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
   if (qwenTutorConfig()) {
     try {
       const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage, language });
-      return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: 'qwen2.5-7b-instruct' });
-    } catch {
-      return res.status(503).json({ ...tutorUnavailableReply(), provider: 'qwen2.5-7b-instruct' });
+      return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct' });
+    } catch (error) {
+      if (process.env.TUTOR_LLM_PROVIDER === 'huggingface' && error instanceof Error && /^QWEN_HTTP_(503|429)$/.test(error.message)) {
+        res.setHeader('Retry-After', '12');
+        return res.status(503).json({code:'TUTOR_WARMING', error:'Le moteur IA se prépare. Votre question est conservée pendant le démarrage.', provider:'qwen3-4b-instruct-2507'});
+      }
+      return res.status(503).json({ ...tutorUnavailableReply(), provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct' });
     }
   }
 

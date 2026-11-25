@@ -101,3 +101,16 @@ test('simple-language retries stay within the installed gateway system limit', a
   assert.equal(calls, 2);
  }
 });
+
+test('HF tutor reuses endpoint credentials and rejects foreign hosts and cold-start errors', async () => {
+ const hfEnv={TUTOR_LLM_PROVIDER:'huggingface',HF_MUSETALK_URL:'https://example.endpoints.huggingface.cloud',HF_MUSETALK_TOKEN:'hf-private'};
+ const result=await generateQwenTutor('Définis le soumissionnaire.',{env:hfEnv,fetcher:async(url,init)=>{
+  assert.equal(url,hfEnv.HF_MUSETALK_URL+'/');
+  assert.equal((init!.headers as any).authorization,'Bearer hf-private');
+  const data=JSON.parse(String(init!.body));assert.equal(data.inputs.operation,'/chat');assert.equal(data.inputs.method,'POST');
+  assert.equal(data.inputs.body.prompt,'Définis le soumissionnaire.');assert.ok(!String(init!.body).includes('hf-private'));
+  return Response.json({statusCode:200,body:{reply:'Le soumissionnaire remet une offre.',model:'academia-tuteur'}});
+ }});assert.equal(result,'Le soumissionnaire remet une offre.');
+ for(const url of ['http://example.endpoints.huggingface.cloud','https://other.example','https://x:y@example.endpoints.huggingface.cloud'])assert.equal(qwenTutorConfig({...hfEnv,HF_MUSETALK_URL:url}),null);
+ await assert.rejects(generateQwenTutor('Question',{env:hfEnv,fetcher:async()=>new Response('',{status:503})}),/QWEN_HTTP_503/);
+});

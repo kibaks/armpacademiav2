@@ -49,3 +49,16 @@ are cached in 450 KB chunks, served only after app authentication and ownership
 checks, and no longer require a running GPU. Cache lifetime is 24 h; one expired
 cache is purged on each new video request. Firestore reads, writes and storage
 quotas still apply. The browser never receives the HF token.
+
+
+## LLM on the same T4
+Official Qwen/Qwen3-4B-Instruct-2507 revision
+`cdbee75f17c01a7cc42f958dc650907174af0554`, FP16, SDPA, no 4-bit compression.
+`qwen_engine.py` runs in a separate modern Python/PyTorch runtime, loopback only.
+MuseTalk keeps its tested legacy stack. Both processes share the GPU render lock.
+No second endpoint. Remote model code disabled. Input8192tokens, output700tokens,
+32seconds; truncated replies rejected. Set TUTOR_LLM_PROVIDER=huggingface after
+GPU validation. The existing endpoint-only token stays server-side. Cold starts
+return TUTOR_WARMING; chat retries every12seconds for at most10minutes. Session
+changes and cancellation stop retries. The four national voice engines remain
+separate and are not installed by this package.

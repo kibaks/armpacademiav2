@@ -48,8 +48,8 @@ class RealtimeEngine:
         with torch.inference_mode():
             features, length = rt.audio_processor.get_audio_feature('data/academia/reply.wav', weight_dtype=rt.weight_dtype)
             chunks = rt.audio_processor.get_whisper_chunk(features, rt.device, rt.weight_dtype, rt.whisper, length, fps=25)
-            self._decode(chunks[:12], 0)
-            self._decode(chunks[:20], 0)
+            self._decode(chunks[:2], 0)
+            self._decode(chunks[:4], 0)
         torch.cuda.synchronize()
 
     def _decode(self, chunks, offset):
@@ -84,7 +84,7 @@ class RealtimeEngine:
                     offset = 0
                     while offset < len(chunks):
                         # Emit the first GOP sooner, then retain efficient GPU batches.
-                        batch = 12 if offset == 0 else 20
+                        batch = 2 if offset == 0 else 4
                         frames = self._decode(chunks[offset:offset+batch], offset)
                         for index, face in enumerate(frames, offset):
                             pos = index % len(avatar.frame_list_cycle)
