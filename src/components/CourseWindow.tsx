@@ -510,7 +510,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   const [tutorQaError, setTutorQaError] = useState<string | null>(null);
   const [activeSpeakingQaId, setActiveSpeakingQaId] = useState<string | null>(null);
 
-  const tutorVideo = useTutorVideoReply(courseTutorPersona, mode === 'qa');
+  const tutorVideo = useTutorVideoReply(courseTutorPersona, mode === 'qa', currentProfile.id);
   const speakQaAnswer = async (answerText: string, qaId: string) => {
     if (!answerText) return;
     speechService.unlockAudio();

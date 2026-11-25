@@ -1,3 +1,4 @@
+import { createTutorVideoReplayCache } from './tutorVideoReplayCache';
 import {tutorReplyStoryboard,type TutorVideoContext} from './tutorReplyStoryboard';
 import { type TutorLanguage } from '../../shared/tutorLanguages';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -7,7 +8,7 @@ import { speechService } from './speechService';
 
 export type TutorVideoState = { status: 'idle' | 'loading' | 'ready' | 'error'; url?: string; error?: string; stage?: 'voice' | 'warming' | 'render'; progressive?: boolean; manualPlayback?: boolean; durationSeconds?: number; audioUrl?: string };
 type Config = { enabled: boolean; personas: string[]; provider?: string; maxTextLength?: number; progressiveStreaming?: boolean };
-export function useTutorVideoReply(persona: string, active = true) {
+export function useTutorVideoReply(persona: string, active = true, owner = '') {
   const [state, setState] = useState<TutorVideoState>({ status: 'idle' });
   const config = useRef<Promise<Config> | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -16,8 +17,10 @@ export function useTutorVideoReply(persona: string, active = true) {
   const deferPlayback = useRef(false);
   const lastRequest = useRef<{ text: string; voice: string; language: TutorLanguage; context: TutorVideoContext } | null>(null);
   const activeRef = useRef(active);
+  const replay = useRef<ReturnType<typeof createTutorVideoReplayCache> | null>(null);
+  if (!replay.current) replay.current = createTutorVideoReplayCache(url => URL.revokeObjectURL(url));
   const objectUrl = useRef<string | null>(null);
-  const releaseMedia = () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); objectUrl.current = null; };
+  const releaseMedia = () => { if (objectUrl.current && !replay.current?.owns(objectUrl.current)) URL.revokeObjectURL(objectUrl.current); objectUrl.current = null; };
   activeRef.current = active;
   const stop = useCallback(() => {
     releaseMedia();
@@ -29,6 +32,7 @@ export function useTutorVideoReply(persona: string, active = true) {
   }, []);
   useEffect(() => {
     stop();
+    replay.current?.clear();
     config.current = null;
     if (!active) return;
     void speechService.refreshPronunciation();
@@ -37,8 +41,8 @@ export function useTutorVideoReply(persona: string, active = true) {
     config.current = authenticatedFetch('/api/ai/tutor-video/config', { signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]) })
       .then(async response => response.ok ? await response.json() as Config : { enabled: false, personas: [] })
       .catch(() => ({ enabled: false, personas: [] }));
-    return () => { generation.current++; controller.current?.abort(); request.abort(); releaseMedia(); };
-  }, [persona, active, stop]);
+    return () => { generation.current++; controller.current?.abort(); request.abort(); releaseMedia(); replay.current?.clear(); };
+  }, [persona, active, owner, stop]);
   useEffect(() => speechService.subscribe(value => {
     if (value.isPlaying && !backgroundAudio.current) {
       generation.current++;
@@ -62,6 +66,13 @@ export function useTutorVideoReply(persona: string, active = true) {
     // Veo is an eight-second excerpt, never silently truncate a full answer.
     if (settings.provider === 'veo' && (text.length > (settings.maxTextLength || 140) || text.trim().split(/\s+/).length > 22)) return false;
     lastRequest.current = { text, voice, language, context };
+    const replayKey = JSON.stringify([owner,text,voice,language,context]);
+    const cached = owner ? replay.current?.get(replayKey) : undefined;
+    if (cached) {
+      objectUrl.current = cached;
+      setState({status:'ready',url:cached,manualPlayback:alongsideAudio && deferPlayback.current});
+      return true;
+    }
     const abort = new AbortController();
     controller.current = abort;
     const deadline = AbortSignal.timeout(10 * 60 * 1000);
@@ -102,8 +113,10 @@ export function useTutorVideoReply(persona: string, active = true) {
             const media = await authenticatedFetch(url, { signal });
             if (!media.ok || !media.headers.get('content-type')?.includes('video/mp4')) throw new Error('Vidéo indisponible.');
             const blob = await media.blob();
+            if (blob.size > 24_000_000) throw new Error('Vidéo trop volumineuse.');
             if (!current()) return true;
             objectUrl.current = URL.createObjectURL(blob);
+            if (owner) replay.current?.remember(replayKey,objectUrl.current);
             url = objectUrl.current;
           } else if (!url.startsWith('https://')) throw new Error('Vidéo indisponible.');
           setState({ status: 'ready', url, audioUrl: result.audioUrl, manualPlayback: alongsideAudio && deferPlayback.current });
