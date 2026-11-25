@@ -1,3 +1,4 @@
+import { trustedHuggingFaceEndpoint } from './huggingFaceEndpoint.js';
 import { huggingFaceVideoRequest } from './huggingFaceTutorVideo.js';
 import { tutorPlainLanguagePolicy } from '../shared/tutorPlainLanguage.js';
 import { explanationReview, EXPLANATION_REVISION_POLICY } from '../shared/tutorExplanationContract.js';
@@ -10,7 +11,7 @@ export function qwenTutorConfig(env: NodeJS.ProcessEnv = process.env) {
   if (env.TUTOR_LLM_PROVIDER === 'huggingface') {
     try {
       const url = new URL(env.HF_MUSETALK_URL || '');
-      if (url.protocol !== 'https:' || !url.hostname.endsWith('.endpoints.huggingface.cloud') || url.username || url.password || url.search || url.hash || !env.HF_MUSETALK_TOKEN) return null;
+      if (!trustedHuggingFaceEndpoint(url) || !env.HF_MUSETALK_TOKEN) return null;
       return {url: url.href, key: env.HF_MUSETALK_TOKEN, provider: 'huggingface' as const};
     } catch { return null; }
   }

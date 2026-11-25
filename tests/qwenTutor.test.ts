@@ -114,3 +114,15 @@ test('HF tutor reuses endpoint credentials and rejects foreign hosts and cold-st
  for(const url of ['http://example.endpoints.huggingface.cloud','https://other.example','https://x:y@example.endpoints.huggingface.cloud'])assert.equal(qwenTutorConfig({...hfEnv,HF_MUSETALK_URL:url}),null);
  await assert.rejects(generateQwenTutor('Question',{env:hfEnv,fetcher:async()=>new Response('',{status:503})}),/QWEN_HTTP_503/);
 });
+
+test('the named private Space uses the same authenticated JSON protocol; other Spaces remain rejected',async()=>{
+ const spaceEnv={TUTOR_LLM_PROVIDER:'huggingface',HF_MUSETALK_URL:'https://kibaks-academia-engine-build.hf.space',HF_MUSETALK_TOKEN:'private-test-key'};
+ assert.ok(qwenTutorConfig(spaceEnv));
+ assert.equal(qwenTutorConfig({...spaceEnv,HF_MUSETALK_URL:'https://someone-else.hf.space'}),null);
+ const reply=await generateQwenTutor('Qui remet une offre ?', {env:spaceEnv,fetcher:async(url,init)=>{
+  assert.equal(String(url),'https://kibaks-academia-engine-build.hf.space/');assert.equal((init?.headers as any).authorization,'Bearer private-test-key');
+  assert.equal(JSON.parse(String(init?.body)).inputs.operation,'/chat');
+  return Response.json({statusCode:200,body:{reply:'Le soumissionnaire remet une offre.',model:'academia-tuteur'}});
+ }});
+ assert.equal(reply,'Le soumissionnaire remet une offre.');
+});

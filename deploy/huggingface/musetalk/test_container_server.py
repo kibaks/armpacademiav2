@@ -52,6 +52,7 @@ class ContainerHTTPTest(unittest.TestCase):
                 deadline=time.monotonic()+3
                 while request('/health')[0]!=200 and time.monotonic()<deadline: time.sleep(.01)
                 self.assertEqual(request('/health'),(200,{'ready':True,'failed':False}))
+                self.assertEqual(request('/'),(200,{'ready':True,'failed':False}))
                 self.assertEqual(request(body=b'{')[0],400)
                 self.assertEqual(request(body=b'')[0],413)
                 self.assertEqual(request('/unknown',body=b'{}')[0],404)

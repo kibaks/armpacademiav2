@@ -32,7 +32,7 @@ def main():
             self.wfile.write(payload)
 
         def do_GET(self):
-            if self.path != '/health':
+            if self.path not in ('/health', '/'):
                 return self.reply(404, {'error': 'Not found'})
             ready = state['handler'] is not None
             self.reply(200 if ready else 503, {'ready': ready, 'failed': state['failed']})

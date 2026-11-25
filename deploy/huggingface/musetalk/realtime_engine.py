@@ -11,21 +11,40 @@ import time
 from types import SimpleNamespace
 
 
+def load_video_models(device):
+    """Avoid a full-precision GPU copy while Qwen occupies the shared T4."""
+    import json
+    import torch
+    from diffusers import UNet2DConditionModel
+    from musetalk.models.vae import VAE
+    from musetalk.models.unet import PositionalEncoding
+
+    vae = VAE(model_path='models/sd-vae', use_float16=True)
+    with Path('models/musetalkV15/musetalk.json').open() as file:
+        model = UNet2DConditionModel(**json.load(file))
+    weights = torch.load('models/musetalkV15/unet.pth', map_location='cpu')
+    model.load_state_dict(weights)
+    del weights
+    # Cast on CPU before transfer: the upstream wrapper first copies FP32 to
+    # CUDA, temporarily doubling the UNet's GPU footprint and causing OOM.
+    model = model.half().to(device).eval()
+    unet = SimpleNamespace(model=model, device=device)
+    pe = PositionalEncoding(d_model=384).half().to(device)
+    return vae, unet, pe
+
+
 class RealtimeEngine:
     def __init__(self, source):
         import torch
         from transformers import WhisperModel
         import scripts.realtime_inference as rt
-        from musetalk.utils.utils import load_all_model
         from musetalk.utils.audio_processor import AudioProcessor
         from musetalk.utils.face_parsing import FaceParsing
 
         torch.set_num_threads(4)
         rt.args = SimpleNamespace(version='v15', extra_margin=10, parsing_mode='jaw')
         rt.device = torch.device('cuda:0')
-        rt.vae, rt.unet, rt.pe = load_all_model(
-            unet_model_path='models/musetalkV15/unet.pth', vae_type='sd-vae',
-            unet_config='models/musetalkV15/musetalk.json', device=rt.device)
+        rt.vae, rt.unet, rt.pe = load_video_models(rt.device)
         rt.pe = rt.pe.half().to(rt.device)
         rt.vae.vae = rt.vae.vae.half().to(rt.device).eval()
         rt.unet.model = rt.unet.model.half().to(rt.device).eval()

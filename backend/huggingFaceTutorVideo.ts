@@ -1,10 +1,11 @@
+import { trustedHuggingFaceEndpoint } from './huggingFaceEndpoint.js';
 /** Private HF JSON transport and durable, owner-checked cache used by MuseTalk routes. */
 const PART_BYTES = 450_000;
 const MAX_BYTES = 24_000_000;
 export const isHuggingFaceVideo = (env: NodeJS.ProcessEnv) => env.MUSETALK_PROVIDER === 'huggingface';
 
 export async function huggingFaceVideoRequest(endpoint: URL, key: string, path: string, init: RequestInit, request: typeof fetch): Promise<Response> {
-  if (!/^https:$/.test(endpoint.protocol) || !endpoint.hostname.endsWith('.endpoints.huggingface.cloud') || endpoint.username || endpoint.password) throw new Error('Invalid private HF endpoint');
+  if (!trustedHuggingFaceEndpoint(endpoint)) throw new Error('Invalid private HF endpoint');
   const response = await request(endpoint.href, {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ inputs: { operation: path, method: init.method || 'GET', ...(init.body ? {body: JSON.parse(String(init.body))} : {}) } }),
