@@ -27,10 +27,10 @@ class NationalTest(unittest.TestCase):
    self.assertEqual(worker.request('speech',{'text':'x','language':'xx'})[0],422)
 
 class TerminologyTest(unittest.TestCase):
- def test_official_terms_are_protected_without_losing_text_or_diacritics(self):
-  from national_engine import protected_segments
-  text="Les marchés publics incluent les prestations intellectuelles. L’ARMP contrôle le DAO."
-  pieces=protected_segments(text)
-  self.assertEqual(''.join(part for _,part in pieces),text)
-  self.assertEqual([part for keep,part in pieces if keep],['marchés publics','prestations intellectuelles','ARMP','DAO'])
-  self.assertEqual(protected_segments('Mbɔ́tɛ.'),[(False,'Mbɔ́tɛ.')])
+ def test_context_keeps_the_full_sentence_and_official_terms_for_review(self):
+  from national_engine import legal_context
+  text="Nous apprenons les marchés publics. Le marché de fournitures porte sur 15 tables, le 26 novembre."
+  context,terms=legal_context(text)
+  self.assertEqual(context,"Nous apprenons les contrats d’achat de l’État. Le contrat d’achat de biens porte sur 15 tables, le 26 novembre.")
+  self.assertEqual(terms,['marchés publics','marché de fournitures'])
+  self.assertEqual(legal_context('L’ARMP contrôle le DAO.')[0],'L’ARMP contrôle le DAO.')
