@@ -20,3 +20,12 @@ test('a healthy Space caches readiness briefly; paused or failed Spaces are not 
 test('a rolling container restart keeps the question pending instead of reporting a permanent failure',async()=>{
  assert.equal(await preparePrivateSpace('key',async()=>Response.json({runtime:{stage:'RUNNING_APP_STARTING'}})),false);
 });
+
+
+test('transient metadata outages remain retryable while denied access and cancellation still fail',async()=>{
+ for(const status of [429,502,503,504])assert.equal(await preparePrivateSpace('key',async()=>new Response('',{status})),false);
+ assert.equal(await preparePrivateSpace('key',async()=>{throw new TypeError('fetch failed');}),false);
+ await assert.rejects(preparePrivateSpace('key',async()=>new Response('',{status:403})),/unavailable/);
+ const abort=new AbortController();abort.abort();
+ await assert.rejects(preparePrivateSpace('key',async()=>{throw new DOMException('cancelled','AbortError');},abort.signal),/cancelled/);
+});

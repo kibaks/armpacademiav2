@@ -33,9 +33,10 @@ async function harness(workerStatus = 'COMPLETED', progressive = false, consiste
       assert.equal(options.headers.authorization, 'Bearer private-key');
       if(huggingface && String(url).includes('.endpoints.huggingface.cloud')){
         const input=JSON.parse(options.body).inputs;
+        if(workerStatus==='NETWORK_ONCE'){workerStatus='COMPLETED';throw new TypeError('fetch failed');}
         if(workerStatus==='WARMING')return Response.json({error:'loading'},{status:503});
         if(input.operation==='/speech')return Response.json({statusCode:200,body:{mimeType:'audio/mpeg',audioData:Buffer.alloc(100,1).toString('base64')}});
-        if(input.operation==='/jobs'){submissions++;hfAccepted=true;return Response.json({statusCode:202,body:{id:input.body.id}});}
+        if(input.operation==='/jobs'){submissions++;hfAccepted=true;if(workerStatus==='DROP_SUBMISSION_REPLY'){workerStatus='COMPLETED';throw new TypeError('connection closed after acceptance');}return Response.json({statusCode:202,body:{id:input.body.id}});}
         polls++;
         if(input.operation.endsWith('/media'))return Response.json({statusCode:200,videoData:Buffer.alloc(700000,7).toString('base64')});
         return Response.json({statusCode:hfAccepted?200:404,body:hfAccepted?{status:workerStatus}: {}});
@@ -232,4 +233,25 @@ test('HF cold start keeps an idempotent pending job, then cached video survives 
  assert.equal(range.status,206);assert.equal(range.headers.get('content-range'),'bytes 449999-450001/700000');
  assert.equal((await range.arrayBuffer()).byteLength,3);
  assert.equal((await h.request(`${h.base}/${id}/media`,{headers:{authorization:'owner',range:'bytes=999999-'}})).status,416);
+});
+
+
+test('a transient HF connection failure preserves the same video job and recovers without duplicate generation',async()=>{
+ const h=await harness('NETWORK_ONCE',false,false,true);
+ const response=await h.post();assert.equal(response.status,202);
+ const {id,status}=await response.json();assert.equal(status,'WARMING');
+ assert.equal(h.records.get(`musetalkTutorJobs/${id}`).status,'PENDING');
+ const owner={headers:{authorization:'owner'}};
+ assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'PENDING');
+ assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'COMPLETED');
+ assert.equal(h.counts().submissions,1);
+});
+
+
+test('a lost submission reply polls the accepted worker job instead of generating twice',async()=>{
+ const h=await harness('DROP_SUBMISSION_REPLY',false,false,true);
+ const response=await h.post();assert.equal(response.status,202);
+ const {id,status}=await response.json();assert.equal(status,'WARMING');
+ const ready=await(await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}})).json();
+ assert.equal(ready.status,'COMPLETED');assert.equal(h.counts().submissions,1);
 });

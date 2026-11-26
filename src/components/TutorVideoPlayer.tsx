@@ -148,7 +148,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
           <p className="tutor-video-loading-detail font-medium">{state.stage === 'voice' ? 'La tutrice prépare sa voix…' : state.stage === 'warming' ? 'Le moteur vidéo se réveille…' : 'La tutrice prépare sa vidéo…'}</p>
           <p className="tutor-video-loading-detail mt-1 text-xs text-slate-300" aria-live="off">{waitingSeconds > 0 ? `${waitingSeconds} s d’attente · ` : ''}La lecture démarre dès que possible.</p>
           {waitingSeconds >= 8 && <p className="tutor-video-loading-detail mt-2 text-xs text-blue-200">Vous pouvez écouter la réponse sans attendre la vidéo.</p>}
-        </> : state.error}
+        </> : <><p>{state.error}</p>{onRetry && <button type="button" onClick={onRetry} className="min-h-11 px-3 underline">Réessayer la vidéo</button>}</>}
         <button type="button" onClick={onAudioOnly} title="Écouter sans vidéo" aria-label="Écouter sans vidéo" className="inline-flex min-h-10 items-center gap-2 px-2 underline underline-offset-4"><Volume2 size={16} /><span className="tutor-video-action-label">Écouter sans vidéo</span></button>
         <button type="button" onClick={onStop} aria-label={state.status === 'loading' ? 'Annuler l’attente' : 'Revenir au tuteur'} title="Fermer" className="inline-flex min-h-10 items-center gap-2 px-2 underline underline-offset-4"><X size={16} /><span className="tutor-video-action-label">{state.status === 'loading' ? 'Annuler l’attente' : 'Revenir au tuteur'}</span></button>
       </div>

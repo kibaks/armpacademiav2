@@ -40,7 +40,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: hf?'huggingface':'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: hf?120:null, automaticWakeup:hf, progressiveStreaming: !hf && env.MUSETALK_PROGRESSIVE === 'true' }));
   router.post('/', async (req: any, res) => {
-    let ref: any, reserved = false;
+    let ref: any, reserved = false, phase = 'validation';
     try {
       if (!configured()) return res.status(503).json({ error: 'La vidéo MuseTalk n’est pas encore activée.' });
       const { text: raw, persona } = req.body || {};
@@ -50,13 +50,16 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const language=tutorLanguage(req.body?.language);
       if (req.body?.language && req.body.language!==language) return res.status(400).json({error:'Langue invalide.'});
       if (!nationalVoiceAvailable(language,raw)) return res.status(422).json({error:'Aucune voix installée ne peut lire ce passage dans la langue demandée.'});
+      phase='pronunciation';
       const text = language==='fr' ? normalizeSpeechPronunciation(normalizeVideoText(raw), await readSpeechPronunciation(false, deps.db?.())) : normalizeNationalSpeech(raw);
       if (!text || text.length > 3000) return res.status(400).json({ error: 'Le passage vocal doit contenir entre 1 et 3 000 caractères. Vous pouvez poursuivre dans une nouvelle réponse.' });
       const uid = req.identity.uid;
       const id = createHash('sha256').update(JSON.stringify([uid, text, persona, language, hf?'musetalk-hf-durable-v1':env.MUSETALK_PROGRESSIVE === 'true' ? 'musetalk-v15-mse-main31-v8-480p-low-latency' : 'musetalk-v15-realtime-fragments-v8-480p-low-latency', ...(env.TUTOR_CONSISTENT_VOICE === 'true' ? ['consistent-voice-v1'] : []), ...(['ln', 'kg', 'lua'].includes(language) ? ['omnivoice-native32-v1'] : []), ...(lesson ? ['course-motion-v2-vector',lesson] : [])])).digest('hex');
+      phase='cache';
       if(hf)await purgeExpiredVideoCache(db()).catch(()=>undefined);
       ref = db().collection('musetalkTutorJobs').doc(id);
       // Self-hosted use has no daily quota. The transaction only deduplicates jobs.
+      phase='reservation';
       const reservation = await db().runTransaction(async (tx: any) => {
         const existing = await tx.get(ref);
         if (existing.exists) {
@@ -70,6 +73,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', ...playbackMedia(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
       if (reservation === 'retry') {
+        phase='retry';
         const retried = await remote(`/jobs/${id}/retry`, {method:'POST'});
         if (retried.ok) { await ref.update({status:'PENDING'}); return res.status(202).json({id}); }
         if (retried.status!==404) throw new Error('RETRY_FAILED');
@@ -77,6 +81,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       reserved = true;
       if(hf && language==='fr'){
         await ref.update({hfSpeech:{text,voice:persona},hfLesson:lesson,status:'PENDING'});
+        phase='speech';
         const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({text,voice:persona,language})});
         if(voiced.status===503 || voiced.status===429)return res.status(202).json({id,status:'WARMING'});
         if(!voiced.ok)throw new Error('NO_AUDIO');
@@ -84,7 +89,9 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         if(speech.mimeType!=='audio/mpeg'||typeof speech.audioData!=='string'||speech.audioData.length>5333336)throw new Error('NO_AUDIO');
         const bytes=Buffer.from(speech.audioData,'base64');
         if(bytes.length<=44 || bytes.length>4000000)throw new Error('NO_AUDIO');
+        phase='audio-cache';
         await saveVideoPayload(ref,'audio',bytes);
+        phase='submission';
         const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id,audio:speech.audioData,...(lesson?{lesson}:{})})});
         if(!submitted.ok && submitted.status!==503 && submitted.status!==429)throw new Error('SUBMISSION_FAILED');
         return res.status(202).json({id,status:submitted.ok?'PENDING':'WARMING'});
@@ -102,6 +109,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       await ref.update({ status: 'PENDING' });
       return res.status(202).json({ id });
     } catch (error) {
+      console.warn('[Tutor video] preparation failed', {phase,provider:hf?'huggingface':'gateway',errorType:error instanceof Error?error.name:'Unknown',errorCode:error && typeof error==='object' && 'code' in error && /^(?:[A-Z_0-9]+|[0-9]+)$/i.test(String(error.code))?String(error.code):error instanceof Error && /^[A-Z_]+$/.test(error.message)?error.message:'UPSTREAM_UNAVAILABLE'});
       // Keep the reservation after an uncertain submission, avoiding duplicate GPU work.
       if (reserved) await ref.update({ status: 'FAILED' }).catch(() => undefined);
       if (error instanceof NationalLanguageError) return res.status(error.status).json({error:error.message});

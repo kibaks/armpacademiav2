@@ -1,4 +1,4 @@
-import { preparePrivateSpace, PRIVATE_SPACE_HOST } from './huggingFaceSpace.js';
+import { preparePrivateSpace, PRIVATE_SPACE_HOST, transientHuggingFaceError } from './huggingFaceSpace.js';
 import { trustedHuggingFaceEndpoint } from './huggingFaceEndpoint.js';
 /** Private HF JSON transport and durable, owner-checked cache used by MuseTalk routes. */
 const PART_BYTES = 450_000;
@@ -8,11 +8,18 @@ export const isHuggingFaceVideo = (env: NodeJS.ProcessEnv) => env.MUSETALK_PROVI
 export async function huggingFaceVideoRequest(endpoint: URL, key: string, path: string, init: RequestInit, request: typeof fetch): Promise<Response> {
   if (!trustedHuggingFaceEndpoint(endpoint)) throw new Error('Invalid private HF endpoint');
   if (endpoint.hostname===PRIVATE_SPACE_HOST && !await preparePrivateSpace(key,request,init.signal)) return Response.json({error:'Private Space warming'}, {status:503});
-  const response = await request(endpoint.href, {
+  let response: Response;
+  try { response = await request(endpoint.href, {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ inputs: { operation: path, method: init.method || 'GET', ...(init.body ? {body: JSON.parse(String(init.body))} : {}) } }),
     redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(40000), ...(init.signal ? [init.signal] : [])]),
-  });
+  }); } catch (error) {
+    // A timed-out POST may already have reached the idempotent worker job.
+    // Keep the reservation and poll the same ID instead of marking it failed.
+    if (!init.signal?.aborted && transientHuggingFaceError(error)) return Response.json({error:'Engine connection pending'},{status:503});
+    throw error;
+  }
+  if ([502,504].includes(response.status)) return Response.json({error:'Engine connection pending'},{status:503});
   // 503 is returned while HF allocates a GPU/loads the model. No control-plane key is needed.
   if (!response.ok) return response;
   const result = await response.json();
