@@ -37,3 +37,11 @@ export function openTutorVideoStream(url: string, signal: AbortSignal, onError: 
   }, { once: true });
   return objectUrl;
 }
+
+/** Empty/growing buffers are waiting for generation, not a decoder failure. */
+export function hasTutorVideoBuffer(video:Pick<HTMLVideoElement,'readyState'|'currentTime'|'buffered'>) {
+  if(video.readyState<2)return false;
+  for(let i=0;i<video.buffered.length;i++)
+    if(video.buffered.start(i)<=video.currentTime+0.1 && video.buffered.end(i)>video.currentTime+0.2)return true;
+  return false;
+}

@@ -86,6 +86,15 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         if (retried.status!==404) throw new Error('RETRY_FAILED');
       }
       reserved = true;
+      if(hf && language!=='fr' && req.body?.progressive===true && !lesson){
+        const speech={text,language,voice:persona==='henri'?'male':'female',voiceMode:env.TUTOR_CONSISTENT_VOICE==='true'?'consistent':'native'};
+        await ref.update({hfSpeech:speech,hfLesson:null,status:'PENDING'});
+        const direct=await remote('/jobs',{method:'POST',body:JSON.stringify({id,speech})});
+        if(direct.ok)return res.status(202).json({id,status:'STREAMING',videoUrl:`/api/ai/tutor-video/${id}/stream`});
+        if(direct.status===503||direct.status===429)return res.status(202).json({id,status:'WARMING'});
+        if(direct.status!==400)throw new Error('SUBMISSION_FAILED');
+        // Older workers still support the existing national audio submission.
+      }
       if(hf && language==='fr'){
         await ref.update({hfSpeech:{text,voice:persona},hfLesson:lesson,status:'PENDING'});
         if (req.body?.progressive === true && !lesson) {
@@ -168,6 +177,14 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const entry = await owned(req); if (!entry) return res.sendStatus(404);
       // Completed jobs are immutable: issue a fresh playback ticket without another worker round trip.
       if (entry.job.status === 'COMPLETED') return res.json({ status: 'COMPLETED', ...playbackMedia(req.params.id) });
+      const resumeNational=async()=>{
+        const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id:req.params.id,speech:entry.job.hfSpeech})});
+        if(submitted.status===503||submitted.status===429)return res.json({status:'WARMING'});
+        if(!submitted.ok)throw new Error('SUBMISSION_FAILED');
+        await entry.ref.update({status:'PENDING',hfResubmit:false});return res.json({status:'PENDING'});
+      };
+      const queuedNational=hf && !entry.job.audioParts && entry.job.hfSpeech?.language && entry.job.hfSpeech.language!=='fr';
+      if(queuedNational && entry.job.hfResubmit)return await resumeNational();
       if (hf && entry.job.hfResubmit) {
         let audio: string;
         if (entry.job.audioParts) {
@@ -191,6 +208,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       }
       const response = await remote(`/jobs/${req.params.id}`);
       if(hf && (response.status===503 || response.status===429))return res.json({status:'WARMING'});
+      if(queuedNational && response.status===404)return await resumeNational();
       if(hf && response.status===404 && !entry.job.audioParts && entry.job.hfSpeech){
         const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({...entry.job.hfSpeech,language:'fr'})});
         if(voiced.status===503 || voiced.status===429)return res.json({status:'WARMING'});

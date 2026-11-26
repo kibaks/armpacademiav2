@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { openTutorVideoStream, supportsTutorVideoStream } from '../src/utils/tutorVideoStream';
+import { openTutorVideoStream, supportsTutorVideoStream, hasTutorVideoBuffer } from '../src/utils/tutorVideoStream';
 
 test('MSE stream appends every chunk and closes only when the response finishes', { timeout: 5000 }, async t => {
   const appended: number[] = [];
@@ -42,4 +42,12 @@ test('a failed or expired playback request invokes ordinary-playback fallback', 
   const failed = new Promise<void>(resolve => { openTutorVideoStream('https://worker.example/play', new AbortController().signal, resolve); });
   source!.dispatchEvent(new Event('sourceopen'));
   await failed;
+});
+
+test('generation gaps never look like a stuck decoder; buffered playback is monitored',()=>{
+ const media=(readyState:number,currentTime:number,ranges:number[][])=>({readyState,currentTime,buffered:{length:ranges.length,start:(i:number)=>ranges[i][0],end:(i:number)=>ranges[i][1]}});
+ assert.equal(hasTutorVideoBuffer(media(0,0,[])),false);
+ assert.equal(hasTutorVideoBuffer(media(2,2,[[0,2]])),false);
+ assert.equal(hasTutorVideoBuffer(media(4,2,[[0,1],[3,5]])),false);
+ assert.equal(hasTutorVideoBuffer(media(4,2,[[0,4]])),true);
 });

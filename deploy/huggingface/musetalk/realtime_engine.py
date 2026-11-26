@@ -82,6 +82,18 @@ class RealtimeEngine:
             self._decode(chunks[:4], 0)
         torch.cuda.synchronize()
 
+    def park(self):
+        # Caller owns the shared GPU gate; no decode is in flight.
+        self.parked = True
+        for model in (self.rt.unet.model,self.rt.vae.vae,self.rt.pe,self.rt.whisper):
+            model.to('cpu')
+
+    def resume(self):
+        if not getattr(self,'parked',False):return
+        for model in (self.rt.unet.model,self.rt.vae.vae,self.rt.pe,self.rt.whisper):
+            model.to(self.rt.device)
+        self.parked = False
+
     def _decode(self, chunks, offset):
         import torch
         rt, avatar = self.rt, self.avatar

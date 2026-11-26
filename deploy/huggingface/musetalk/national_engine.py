@@ -11,6 +11,11 @@ import sys
 import unicodedata
 
 LANGUAGES={'fr':'fra_Latn','ln':'lin_Latn','sw':'swh_Latn','kg':'kon_Latn','lua':'lua_Latn'}
+def inference_device():
+    device=os.environ.get('NATIONAL_DEVICE','cpu')
+    if device not in ('cpu','cuda:0'):raise ValueError('Invalid inference device')
+    return device
+
 ROOT=Path(os.environ.get('ACADEMIA_RUNTIME','/opt/academia-runtime'))/'national'
 
 def validate(operation, body):
@@ -53,7 +58,8 @@ def translate(body,text):
     if source==target:return {'text':text,'language':target,'provider':'nllb-200','reviewRequired':True}
     folder=ROOT/'translation'
     tokenizer=AutoTokenizer.from_pretrained(folder,src_lang=LANGUAGES[source],local_files_only=True,trust_remote_code=False)
-    model=AutoModelForSeq2SeqLM.from_pretrained(folder,local_files_only=True,trust_remote_code=False).eval()
+    device=inference_device()
+    model=AutoModelForSeq2SeqLM.from_pretrained(folder,local_files_only=True,trust_remote_code=False,dtype=torch.float16 if device=='cuda:0' else torch.float32).eval().to(device)
     out=[];official=[]
     for paragraph in text.split('\n'):
         if not paragraph.strip():out.append(paragraph);continue
@@ -63,7 +69,7 @@ def translate(body,text):
         contextual,terms=legal_context(paragraph) if source=='fr' else (paragraph,[])
         for term in terms:
             if term not in official:official.append(term)
-        inputs=tokenizer(contextual,return_tensors='pt',truncation=False)
+        inputs=tokenizer(contextual,return_tensors='pt',truncation=False).to(device)
         if inputs.input_ids.shape[1]>480:raise ValueError('Paragraph too long for complete translation')
         with torch.inference_mode():
             tokens=model.generate(**inputs,forced_bos_token_id=tokenizer.convert_tokens_to_ids(LANGUAGES[target]),max_new_tokens=768,num_beams=3)
@@ -94,7 +100,8 @@ def speech(body,text):
         rate=model.config.sampling_rate;provider='national-vits'
     else:
         from omnivoice import OmniVoice
-        model=OmniVoice.from_pretrained(str(ROOT/'omnivoice'),device_map='cpu',dtype=torch.float32)
+        device=inference_device()
+        model=OmniVoice.from_pretrained(str(ROOT/'omnivoice'),device_map=device,dtype=torch.float16 if device=='cuda:0' else torch.float32)
         reference=json.loads((ROOT/'references'/((voice if consistent else language)+'.json')).read_text())
         data,rate=sf.read(ROOT/'references'/reference['file'],dtype='float32',always_2d=True)
         prompt=model.create_voice_clone_prompt(ref_audio=(torch.from_numpy(data.T),rate),ref_text=reference['text'])

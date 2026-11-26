@@ -1,3 +1,4 @@
+import {hasTutorVideoBuffer} from '../utils/tutorVideoStream';
 import { connectVideoAudio } from '../utils/videoAudioCompatibility';
 import './TutorVideoPlayer.css';
 import { Maximize2, Minimize2, Volume2, X } from 'lucide-react';
@@ -54,7 +55,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
     const position=video.currentTime;
     progressTimer.current=setTimeout(()=>{
       if(video.paused || video.ended || video.currentTime>position+0.1 || compatibilityController.current)return;
-      if(state.progressive){onRetry?.();return;}
+      if(state.progressive){if(hasTutorVideoBuffer(video))onRetry?.();return;}
       void startCompatiblePlayback();
     },3000);
   };
@@ -81,7 +82,10 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
   const clearStall = () => { if (stallTimer.current) clearTimeout(stallTimer.current); stallTimer.current = null; };
   const waitForPlayback = () => {
     clearStall();
-    stallTimer.current = setTimeout(() => setStalled(true), 12000);
+    stallTimer.current = setTimeout(() => {
+      if(state.progressive && videoRef.current && !hasTutorVideoBuffer(videoRef.current))return;
+      setStalled(true);
+    }, 12000);
   };
   useEffect(() => {
     setVideoStarted(false); setMediaError(false); setStalled(false); resumeAt.current = 0; retryPosition.current = 0;
@@ -100,7 +104,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
         className="absolute inset-0 h-full w-full" style={{ objectFit: fillFrame ? 'cover' : 'contain', objectPosition: fillFrame ? '50% 28%' : '50% 50%' }} aria-label={presentation ? 'Extrait de présentation de la tutrice : comparer les offres' : 'Réponse vidéo de la tutrice avec sa voix synchronisée'}
         onPlay={() => { if(!presentation)onPlaybackStart?.(); speechService.stop(); if (!presentation) {onProgress?.(state.progressOffset||0);checkVideoProgress();} }}
         onWaiting={waitForPlayback} onStalled={waitForPlayback}
-        onPlaying={() => { setVideoStarted(true); clearStall(); setStalled(false); setMediaError(false); }}
+        onPlaying={() => { if(!presentation)checkVideoProgress(); setVideoStarted(true); clearStall(); setStalled(false); setMediaError(false); }}
         onTimeUpdate={event => {
           const position = event.currentTarget.currentTime;
           const duration = state.durationSeconds || event.currentTarget.duration;
@@ -120,6 +124,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
         <button type="button" onClick={() => setFillFrame(value => !value)} title={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} aria-label={fillFrame ? 'Voir le cadre entier' : 'Remplir la zone vidéo'} className="absolute left-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/65 text-white">{fillFrame ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
         {!presentation && state.manualPlayback && !videoStarted && !mediaError && <button type="button" className="absolute inset-x-4 top-1/2 z-30 -translate-y-1/2 rounded-xl bg-blue-700 px-4 py-4 text-sm font-bold text-white shadow-lg" onClick={()=>{if(state.audioUrl){void startCompatiblePlayback();return;}void videoRef.current?.play().catch(()=>setMediaError(true));}}>Lancer la vidéo avec le son</button>}
         {!presentation && (state.segmentCount||0)>1 && <p className="pointer-events-none absolute bottom-14 left-2 z-10 rounded-lg bg-slate-950/75 px-2 py-1 text-xs">Séquence {(state.segmentIndex||0)+1} / {state.segmentCount}</p>}
+        {!presentation && state.progressive && !videoStarted && !mediaError && <p role="status" className="absolute inset-x-3 bottom-16 z-20 rounded-lg bg-slate-950/80 p-3 text-center text-xs">La tutrice prépare sa voix et sa vidéo…</p>}
         {!presentation && state.progressive && <p className="tutor-video-label pointer-events-none absolute left-14 right-14 top-3 z-10 rounded-lg bg-slate-950/65 px-2 py-1 text-center text-[10px] text-blue-100">Lecture progressive · voix et visage synchronisés</p>}
         {presentation ? <p className="tutor-video-label pointer-events-none absolute left-14 right-3 top-3 z-10 rounded-lg bg-slate-950/65 p-1 text-center text-[10px] text-slate-100">Extrait de présentation · Comparer les offres</p> : <>
           {(mediaError || stalled) && <div role="status" className="absolute inset-2 z-30 flex flex-col items-center justify-center rounded-xl bg-slate-950/90 p-2 text-center text-sm">

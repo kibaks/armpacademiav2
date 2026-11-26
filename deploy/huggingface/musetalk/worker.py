@@ -1,6 +1,7 @@
 """Loopback-only, idempotent MuseTalk jobs behind HF's private endpoint."""
 import base64
 import concurrent.futures
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import io
@@ -40,6 +41,15 @@ def validate_speech(speech):
     return speech
 
 
+def validate_job_speech(speech):
+    if isinstance(speech,dict) and speech.get('language')=='fr':return validate_speech(speech)
+    from national_engine import validate
+    validate('speech',speech)
+    if speech.get('voice') not in ('female','male','vivienne','henri') or speech.get('voiceMode','native') not in ('native','consistent'):
+        raise ValueError('Invalid national voice profile')
+    return speech
+
+
 def main():
     package, work = map(Path, sys.argv[1:])
     root = work / 'MuseTalk'
@@ -59,7 +69,6 @@ def main():
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
         'anullsrc=r=16000:cl=mono', '-t', '2', 'data/academia/reply.wav'], check=True, timeout=30)
     from national_worker import NationalWorker
-    national = NationalWorker(package, work, ffmpeg)
     from course_motion import read_story, compose, assemble
     from qwen_engine import QwenClient
     qwen = QwenClient(package, work)
@@ -93,7 +102,23 @@ def main():
             print('ACADEMIA_VIDEO_LOADING', flush=True)
             engine = RealtimeEngine(source)
             print('ACADEMIA_VIDEO_READY', flush=True)
+        engine.resume()
         return engine
+
+    @contextmanager
+    def national_gpu_session():
+        import torch
+        with render_gate.hold(chat=True,timeout=5):
+            try:
+                if engine is not None:engine.park()
+                torch.cuda.empty_cache()
+                free,_=torch.cuda.mem_get_info()
+                yield free >= 4*1024**3
+            finally:
+                if engine is not None:engine.resume()
+                torch.cuda.empty_cache()
+
+    national = NationalWorker(package, work, ffmpeg, gpu_session=national_gpu_session)
 
     print('ACADEMIA_CHAT_READY video=lazy', flush=True)
     jobs = work / 'jobs'
@@ -156,8 +181,21 @@ def main():
                     raise ValueError('Film exceeds 24 MB transport limit')
             else:
                 lesson = read_story(body['lesson']) if body.get('lesson') else None
-                audio = synthesize(body['speech']) if 'speech' in body else validate_audio(body)
+                speech_stats={}
+                if 'speech' in body:
+                    tick=time.monotonic();speech=body['speech']
+                    if speech['language']=='fr':audio=synthesize(speech)
+                    else:
+                        code,result=national.request('speech',speech)
+                        if code!=200:raise RuntimeError('National speech unavailable')
+                        audio=validate_audio({'audio':result['audioData']})
+                        speech_stats={'speechDevice':result.get('device'),'speechCacheHit':result.get('cacheHit')}
+                    speech_stats['speechPrepareMs']=round((time.monotonic()-tick)*1000)
+                else:audio=validate_audio(body)
                 duration = render_audio(audio, directory, 120, lesson)
+                if speech_stats and (directory/'timing.json').exists():
+                    timings=json.loads((directory/'timing.json').read_text());timings.update(speech_stats)
+                    (directory/'timing.json').write_text(json.dumps(timings))
             status(directory, {'status': 'COMPLETED', 'durationSeconds': duration, 'timings': json.loads((directory / 'timing.json').read_text()) if (directory / 'timing.json').exists() else None})
         except Exception:
             import traceback
@@ -182,7 +220,7 @@ def main():
                 return 409, {'error': 'Film scenes unavailable; regenerate the scenes'}
         else:
             if 'speech' in body:
-                validate_speech(body['speech'])
+                validate_job_speech(body['speech'])
             else:
                 validate_audio(body)
             if body.get('lesson'):

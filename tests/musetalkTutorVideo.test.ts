@@ -321,3 +321,15 @@ test('progressive French queues speech and video in one request without copying 
  const job=h.records.get(`musetalkTutorJobs/${result.id}`);
  assert.equal(job.audioParts,undefined);assert.equal(job.hfSpeech.text,'Un contrat écrit.');
 });
+
+test('national progressive video queues its original language and speaker, with restart-safe recovery',async()=>{
+ const h=await harness('STREAMING',false,true,true);
+ for(const language of ['ln','sw','kg','lua']){
+  const response=await h.request(h.base,{method:'POST',headers:{authorization:'owner','content-type':'application/json'},body:JSON.stringify({text:'Mbote. Tokoyekola elongo.',persona:'vivienne',language,progressive:true})});
+  assert.equal(response.status,202);const result=await response.json();assert.equal(result.status,'STREAMING');
+  const job=h.records.get(`musetalkTutorJobs/${result.id}`);
+  assert.equal(job.hfSpeech.language,language);assert.equal(job.hfSpeech.voice,'female');assert.equal(job.hfSpeech.voiceMode,'consistent');assert.equal(job.audioParts,undefined);
+  h.setWorkerStatus('STREAMING');
+  const status=await h.request(`${h.base}/${result.id}`,{headers:{authorization:'owner'}});assert.equal(status.status,200);
+ }
+});
