@@ -31,3 +31,14 @@ test('stable course context precedes changing questions and the current question
  assert.ok(first.indexOf('extraitsDuCours') < first.indexOf('historique'));
  assert.equal(first.slice(0, first.indexOf('"question"')), second.slice(0, second.indexOf('"question"')));
 });
+
+test('redundant course text is omitted while the complete legal extracts and current question stay intact',()=>{
+ const legal='Article : condition intégrale, exception et conséquence. '.repeat(100);
+ const question='Expliquez toutes les conditions et exceptions.';
+ const prompt=tutorConversationData(question,[], 'Agent | Leçon en cours: '+ 'copie du cours '.repeat(500), 'Cours actif | Leçon active : '+ 'copie du cours '.repeat(500),legal);
+ const data=JSON.parse(prompt.slice(prompt.indexOf('{')));
+ assert.equal(data.extraitsDuCours,legal);
+ assert.equal(data.question,question);
+ assert.equal(data.profil,'Agent');assert.equal(data.lecon,'Cours actif');
+ assert.doesNotMatch(prompt,/copie du cours/);
+});
