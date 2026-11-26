@@ -110,7 +110,7 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
   // Navigation & Mode
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [mode, setMode] = useState<Mode>('reading');
-  useEffect(() => { if (mode === 'qa') void prewarmTutor().catch(() => {}); }, [mode]);
+  useEffect(() => { void prewarmTutor().catch(() => {}); }, [course.id, currentProfile.id]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileChaptersOpen, setIsMobileChaptersOpen] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
@@ -1614,7 +1614,8 @@ export const CourseWindow: React.FC<CourseWindowProps> = ({
                   <div className="flex gap-2">
                     <input
                       value={questionInput}
-                      onChange={(e) => setQuestionInput(e.target.value)}
+                      onFocus={() => { void prewarmTutor().catch(() => {}); }}
+                      onChange={(e) => { setQuestionInput(e.target.value); void prewarmTutor().catch(() => {}); }}
                       onKeyDown={(e) => e.key === 'Enter' && askQuestion()}
                       disabled={isAskingTutorQA}
                       placeholder="Posez une question juridique à Aïsha sur ce chapitre..."

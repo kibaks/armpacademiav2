@@ -4,7 +4,7 @@ import express from 'express';
 import {createTutorPrewarm} from '../src/utils/tutorPrewarm';
 import {createTutorWarmupRouter} from '../backend/tutorWarmup';
 
-test('opening chat wakes once, deduplicates repeated mounts, and never runs as an interval',async()=>{
+test('login, course opening and typing share one wakeup per learner per minute without an interval',async()=>{
  let time=0,calls=0;const wake=createTutorPrewarm(()=>time);const request=async()=>{calls++;};
  await Promise.all([wake('user-a',request),wake('user-a',request)]);assert.equal(calls,1);
  time=59999;await wake('user-a',request);assert.equal(calls,1);

@@ -3,7 +3,7 @@ import { downloadOperation } from './lib/operationsApi';
 import { InitiationPathway } from './components/InitiationPathway';
 import type { LearningStage } from '../shared/learnerProgression';
 import { getLearnerOnboarding } from './utils/learnerOnboarding';
-import { authenticatedFetch } from './lib/adminApi';
+import { authenticatedFetch, prewarmTutor } from './lib/adminApi';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Header 
@@ -344,6 +344,9 @@ export default function App() {
   }, []);
 
   const storedProfile = profiles[currentRole] || profiles['cgpmp_member'];
+  useEffect(() => {
+    if (isAuthenticated && auth.currentUser?.uid === storedProfile.id) void prewarmTutor().catch(() => {});
+  }, [isAuthenticated, storedProfile.id]);
   const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
   const [initiationDeadline, setInitiationDeadline] = useState<{ uid: string; expiresAt: number; enforced: boolean } | null>(null);
   useEffect(() => {

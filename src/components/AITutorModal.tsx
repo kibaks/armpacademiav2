@@ -1870,7 +1870,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     type="text"
                     value={inputText}
                     disabled={isRecordingVoice}
-                    onChange={(e) => setInputText(e.target.value)}
+                    onFocus={() => { void prewarmTutor().catch(() => {}); }}
+                    onChange={(e) => { setInputText(e.target.value); void prewarmTutor().catch(() => {}); }}
                     placeholder={
                       isListening
                         ? `Parlez maintenant, ${activeTutor.name} transcrit votre question…`
