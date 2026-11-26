@@ -64,15 +64,21 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         const existing = await tx.get(ref);
         if (existing.exists) {
           const job = existing.data();
-          if (job?.status === 'COMPLETED' && Date.now() - job.createdAt < 86400000) return 'completed';
-          if (lesson && job?.status === 'FAILED' && req.body?.retry === true) return 'retry';
-          if (!lesson || Date.now()-job.createdAt<86400000) return 'existing';
+          const fresh=typeof job?.createdAt==='number' && Date.now()-job.createdAt<86400000;
+          if (fresh && job?.status === 'COMPLETED') return 'completed';
+          if (fresh && (lesson || hf) && job?.status === 'FAILED' && req.body?.retry === true) return 'retry';
+          if (fresh) return 'existing';
         }
         tx.set(ref, { uid, status: 'SUBMITTING', createdAt: Date.now(), ...(lesson ? {kind:'motion-scene'} : {}) }); return 'new';
       });
       if (reservation === 'completed') return res.json({ id, status: 'COMPLETED', ...playbackMedia(id) });
       if (reservation === 'existing') return res.status(202).json({ id });
-      if (reservation === 'retry') {
+      if (reservation === 'retry' && hf) {
+        // The HF worker resubmits FAILED jobs through the idempotent /jobs API.
+        // Persist this intent so a sleeping worker can resume it during polling.
+        await ref.update({hfResubmit:true,hfLesson:lesson,...(language==='fr'?{hfSpeech:{text,voice:persona}}:{})});
+      }
+      if (reservation === 'retry' && !hf) {
         phase='retry';
         const retried = await remote(`/jobs/${id}/retry`, {method:'POST'});
         if (retried.ok) { await ref.update({status:'PENDING'}); return res.status(202).json({id}); }
@@ -94,6 +100,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         phase='submission';
         const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id,audio:speech.audioData,...(lesson?{lesson}:{})})});
         if(!submitted.ok && submitted.status!==503 && submitted.status!==429)throw new Error('SUBMISSION_FAILED');
+        if(submitted.ok)await ref.update({hfResubmit:false});
         return res.status(202).json({id,status:submitted.ok?'PENDING':'WARMING'});
       }
       const national = language==='fr' && env.TUTOR_CONSISTENT_VOICE !== 'true' ? null : await nationalSpeechPayload(text,language,{env,fetcher:request,voice:persona});
@@ -106,7 +113,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const submitted = await remote('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: audio.audioBuffer.toString('base64'), ...(lesson ? {lesson} : {}) }) });
       if(hf && (submitted.status===503 || submitted.status===429))return res.status(202).json({id,status:'WARMING'});
       if (!submitted.ok || (await submitted.json()).id !== id) throw new Error('SUBMISSION_FAILED');
-      await ref.update({ status: 'PENDING' });
+      await ref.update({ status: 'PENDING',...(hf?{hfResubmit:false}:{}) });
       return res.status(202).json({ id });
     } catch (error) {
       console.warn('[Tutor video] preparation failed', {phase,provider:hf?'huggingface':'gateway',errorType:error instanceof Error?error.name:'Unknown',errorCode:error && typeof error==='object' && 'code' in error && /^(?:[A-Z_0-9]+|[0-9]+)$/i.test(String(error.code))?String(error.code):error instanceof Error && /^[A-Z_]+$/.test(error.message)?error.message:'UPSTREAM_UNAVAILABLE'});
@@ -152,6 +159,27 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const entry = await owned(req); if (!entry) return res.sendStatus(404);
       // Completed jobs are immutable: issue a fresh playback ticket without another worker round trip.
       if (entry.job.status === 'COMPLETED') return res.json({ status: 'COMPLETED', ...playbackMedia(req.params.id) });
+      if (hf && entry.job.hfResubmit) {
+        let audio: string;
+        if (entry.job.audioParts) {
+          audio=(await loadVideoPayload(entry.ref,entry.job,'audio')).toString('base64');
+        } else {
+          if(!entry.job.hfSpeech)throw new Error('MISSING_SPEECH');
+          const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({...entry.job.hfSpeech,language:'fr'})});
+          if(voiced.status===503 || voiced.status===429)return res.json({status:'WARMING'});
+          if(!voiced.ok)throw new Error('NO_AUDIO');
+          const speech=await voiced.json();
+          if(speech.mimeType!=='audio/mpeg'||typeof speech.audioData!=='string'||speech.audioData.length>5333336)throw new Error('NO_AUDIO');
+          const bytes=Buffer.from(speech.audioData,'base64');
+          if(bytes.length<=44||bytes.length>4000000)throw new Error('NO_AUDIO');
+          await saveVideoPayload(entry.ref,'audio',bytes);audio=speech.audioData;
+        }
+        const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id:req.params.id,audio,...(entry.job.hfLesson?{lesson:entry.job.hfLesson}:{})})});
+        if(submitted.status===503 || submitted.status===429)return res.json({status:'WARMING'});
+        if(!submitted.ok)throw new Error('SUBMISSION_FAILED');
+        await entry.ref.update({status:'PENDING',hfResubmit:false});
+        return res.json({status:'PENDING'});
+      }
       const response = await remote(`/jobs/${req.params.id}`);
       if(hf && (response.status===503 || response.status===429))return res.json({status:'WARMING'});
       if(hf && response.status===404 && !entry.job.audioParts && entry.job.hfSpeech){

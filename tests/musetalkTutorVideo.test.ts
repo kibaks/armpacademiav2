@@ -255,3 +255,37 @@ test('a lost submission reply polls the accepted worker job instead of generatin
  const ready=await(await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}})).json();
  assert.equal(ready.status,'COMPLETED');assert.equal(h.counts().submissions,1);
 });
+
+
+test('retrying a failed HF video while the GPU sleeps resumes the same job after wakeup',async()=>{
+ for(const lesson of [undefined,motionStory]){
+  const h=await harness('FAILED',false,false,true);
+  const {id}=await(await h.post('Une explication à reprendre.','fr',lesson)).json();
+  const owner={headers:{authorization:'owner'}};
+  assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'FAILED');
+  h.setWorkerStatus('WARMING');
+  const retry=await h.request(h.base,{method:'POST',headers:{authorization:'owner','content-type':'application/json'},body:JSON.stringify({text:'Une explication à reprendre.',persona:'vivienne',language:'fr',retry:true,...(lesson?{lesson}:{})})});
+  assert.equal(retry.status,202);assert.equal((await retry.json()).status,'WARMING');
+  assert.equal(h.records.get(`musetalkTutorJobs/${id}`).hfResubmit,true);
+  assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'WARMING');
+  h.setWorkerStatus('COMPLETED');
+  assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'PENDING');
+  assert.equal(h.records.get(`musetalkTutorJobs/${id}`).hfResubmit,false);
+  assert.equal((await(await h.request(`${h.base}/${id}`,owner)).json()).status,'COMPLETED');
+  assert.equal(h.counts().submissions,2,'only the original failed generation and its explicit retry are submitted');
+ }
+});
+
+
+test('expired video reservations get a fresh lifetime instead of becoming unpollable jobs',async()=>{
+ for(const state of ['COMPLETED','FAILED','PENDING']){
+  const h=await harness('COMPLETED',false,false,true);
+  const {id}=await(await h.post('Une ancienne réponse.')).json();
+  const record=h.records.get(`musetalkTutorJobs/${id}`);
+  record.status=state;record.createdAt=Date.now()-86400001;
+  const renewed=await h.post('Une ancienne réponse.');assert.equal(renewed.status,202);
+  assert.ok(Date.now()-h.records.get(`musetalkTutorJobs/${id}`).createdAt<5000);
+  const status=await h.request(`${h.base}/${id}`,{headers:{authorization:'owner'}});
+  assert.equal(status.status,200);assert.equal((await status.json()).status,'COMPLETED');
+ }
+});
