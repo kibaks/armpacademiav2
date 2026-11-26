@@ -25,3 +25,12 @@ class NationalTest(unittest.TestCase):
    self.assertEqual(worker.request('speech',{'text':'Mbote.','language':'ln'})[0],429)
    worker.gate.release()
    self.assertEqual(worker.request('speech',{'text':'x','language':'xx'})[0],422)
+
+class TerminologyTest(unittest.TestCase):
+ def test_official_terms_are_protected_without_losing_text_or_diacritics(self):
+  from national_engine import protected_segments
+  text="Les marchés publics incluent les prestations intellectuelles. L’ARMP contrôle le DAO."
+  pieces=protected_segments(text)
+  self.assertEqual(''.join(part for _,part in pieces),text)
+  self.assertEqual([part for keep,part in pieces if keep],['marchés publics','prestations intellectuelles','ARMP','DAO'])
+  self.assertEqual(protected_segments('Mbɔ́tɛ.'),[(False,'Mbɔ́tɛ.')])

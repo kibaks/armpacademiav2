@@ -4,6 +4,7 @@ import gc
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -23,6 +24,18 @@ def validate(operation, body):
     if operation not in ('translate','speech'):raise ValueError('Unsupported operation')
     return unicodedata.normalize('NFC',text)
 
+# Keep official procurement terms intact rather than turning "marchés" into
+# shops or advertising. These French terms are already taught in the course.
+LEGAL_TERMS=re.compile(r"\b(?:marchés? (?:publics?|de (?:travaux|fournitures|services|prestations intellectuelles))|prestations? intellectuelles?|autorités? contractantes?|soumissionnaires?|attributaires?|appels? d[’']offres|DAO|PPM|DPAO|ANO|ARMP|DGCMP|CGPMP)\b",re.IGNORECASE)
+
+def protected_segments(text):
+    parts=[];offset=0
+    for match in LEGAL_TERMS.finditer(text):
+        if match.start()>offset:parts.append((False,text[offset:match.start()]))
+        parts.append((True,match.group()));offset=match.end()
+    if offset<len(text):parts.append((False,text[offset:]))
+    return parts
+
 def translate(body,text):
     import torch
     from transformers import AutoTokenizer,AutoModelForSeq2SeqLM
@@ -31,21 +44,27 @@ def translate(body,text):
     folder=ROOT/'translation'
     tokenizer=AutoTokenizer.from_pretrained(folder,src_lang=LANGUAGES[source],local_files_only=True,trust_remote_code=False)
     model=AutoModelForSeq2SeqLM.from_pretrained(folder,local_files_only=True,trust_remote_code=False).eval()
-    # Keep every paragraph and reject overlong/incomplete output, never truncate.
     paragraphs=text.split('\n');out=[]
     for paragraph in paragraphs:
-        if not paragraph.strip():out.append(paragraph);continue
-        inputs=tokenizer(paragraph,return_tensors='pt',truncation=False)
-        if inputs.input_ids.shape[1]>480:raise ValueError('Paragraph too long for complete translation')
-        with torch.inference_mode():
-            tokens=model.generate(**inputs,forced_bos_token_id=tokenizer.convert_tokens_to_ids(LANGUAGES[target]),max_new_tokens=768,num_beams=3)
-        ids=tokens[0].tolist()
-        while ids and ids[-1]==tokenizer.pad_token_id:ids.pop()
-        if not ids or ids[-1]!=tokenizer.eos_token_id:raise RuntimeError('Incomplete translation')
-        result=tokenizer.decode(tokens[0],skip_special_tokens=True).strip()
-        if not result:raise RuntimeError('Empty translation')
-        out.append(unicodedata.normalize('NFC',result))
-    return {'text':'\n'.join(out),'language':target,'provider':'nllb-200','reviewRequired':True}
+        segments=protected_segments(paragraph)
+        translated=[value for _,value in segments]
+        active=[(i,value) for i,(protected,value) in enumerate(segments) if not protected and any(c.isalpha() for c in value)]
+        for start in range(0,len(active),4):
+            batch=active[start:start+4]
+            inputs=tokenizer([value.strip() for _,value in batch],return_tensors='pt',padding=True,truncation=False)
+            if inputs.input_ids.shape[1]>480:raise ValueError('Paragraph too long for complete translation')
+            with torch.inference_mode():
+                tokens=model.generate(**inputs,forced_bos_token_id=tokenizer.convert_tokens_to_ids(LANGUAGES[target]),max_new_tokens=768,num_beams=3)
+            for (index,original),row in zip(batch,tokens):
+                ids=row.tolist()
+                while ids and ids[-1]==tokenizer.pad_token_id:ids.pop()
+                if not ids or ids[-1]!=tokenizer.eos_token_id:raise RuntimeError('Incomplete translation')
+                result=tokenizer.decode(row,skip_special_tokens=True).strip()
+                if not result:raise RuntimeError('Empty translation')
+                leading=re.match(r'^\s*',original).group();trailing=re.search(r'\s*$',original).group()
+                translated[index]=leading+unicodedata.normalize('NFC',result)+trailing
+        out.append(''.join(translated))
+    return {'text':'\n'.join(out),'language':target,'provider':'nllb-200','reviewRequired':True,'officialTermsPreserved':True}
 
 def speech(body,text):
     import numpy as np
