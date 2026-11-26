@@ -6,6 +6,7 @@ import { tutorLanguage, type TutorLanguage } from '../shared/tutorLanguages.js';
 export function nationalLanguageConfig(env: NodeJS.ProcessEnv = process.env) {
   // The new worker lives with the active dialogue gateway, which can differ from
   // an older video endpoint still configured on the project.
+  if (isHuggingFaceVideo(env) && env.HF_MUSETALK_URL && env.HF_MUSETALK_TOKEN) return {url:env.HF_MUSETALK_URL,key:env.HF_MUSETALK_TOKEN,transport:'huggingface' as const};
   const dialogue = qwenTutorConfig({ ...env, TUTOR_LLM_PROVIDER: undefined });
   if (dialogue) {
     const url = new URL(dialogue.url);
@@ -31,7 +32,13 @@ export class NationalLanguageError extends Error {
 async function callNational(path: string, body?: unknown, options: { env?: NodeJS.ProcessEnv; fetcher?: typeof fetch } = {}) {
   const config = nationalLanguageConfig(options.env);
   if (!config) throw new NationalLanguageError('Les moteurs des langues nationales ne sont pas disponibles.');
-  const response = await (options.fetcher || fetch)(config.url + path, {
+  const init:RequestInit={
+    method:body===undefined?'GET':'POST',
+    ...(body===undefined?{}:{body:JSON.stringify(body)}),
+  };
+  const response = config.transport==='huggingface'
+    ? await huggingFaceVideoRequest(new URL(config.url),config.key,'/national'+path,init,options.fetcher||fetch)
+    : await (options.fetcher || fetch)(config.url + path, {
     method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(path === '/speech' ? 180000 : 65000),
     headers: { 'content-type': 'application/json', authorization: `Bearer ${config.key}` },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

@@ -12,7 +12,7 @@ export async function huggingFaceVideoRequest(endpoint: URL, key: string, path: 
   try { response = await request(endpoint.href, {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ inputs: { operation: path, method: init.method || 'GET', ...(init.body ? {body: JSON.parse(String(init.body))} : {}) } }),
-    redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(40000), ...(init.signal ? [init.signal] : [])]),
+    redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(path==='/national/speech'?175000:path==='/national/translate'?65000:40000), ...(init.signal ? [init.signal] : [])]),
   }); } catch (error) {
     // A timed-out POST may already have reached the idempotent worker job.
     // Keep the reservation and poll the same ID instead of marking it failed.

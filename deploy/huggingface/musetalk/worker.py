@@ -58,6 +58,8 @@ def main():
         '-preset', 'fast', str(source)], check=True, timeout=60)
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
         'anullsrc=r=16000:cl=mono', '-t', '2', 'data/academia/reply.wav'], check=True, timeout=30)
+    from national_worker import NationalWorker
+    national = NationalWorker(package, work, ffmpeg)
     from course_motion import read_story, compose, assemble
     from qwen_engine import QwenClient
     qwen = QwenClient(package, work)
@@ -247,6 +249,11 @@ def main():
                 if operation == '/speech' and method == 'POST':
                     audio=synthesize(body.get('body', {}))
                     return self.reply(200,{'statusCode':200,'body':{'audioData':base64.b64encode(audio).decode(),'mimeType':'audio/mpeg','language':'fr','provider':'huggingface-piper'}})
+                if operation == '/national/capabilities' and method == 'GET':
+                    return self.reply(200, {'statusCode': 200, 'body': national.capabilities()})
+                if operation in ('/national/translate','/national/speech') and method == 'POST':
+                    code, result = national.request(operation.rsplit('/',1)[-1], body.get('body', {}))
+                    return self.reply(200, {'statusCode': code, 'body': result})
                 if operation in ('/jobs', '/films') and method == 'POST':
                     code, result = submit(body.get('body', {}), operation == '/films')
                     return self.reply(200, {'statusCode': code, 'body': result})

@@ -90,3 +90,14 @@ test('HF French speech uses only the scoped inference endpoint and reports cold 
  assert.equal(voice.provider,'huggingface-piper');assert.equal(voice.language,'fr');
  await assert.rejects(()=>nationalSpeechPayload('Bonjour.','fr',{env:hfEnv,fetcher:(async()=>Response.json({error:'loading'},{status:503})) as typeof fetch}),/réveille/);
 });
+
+test('HF national translation uses the active private endpoint instead of the retired gateway',async()=>{
+ const hf={...env,MUSETALK_PROVIDER:'huggingface',HF_MUSETALK_URL:'https://video.endpoints.huggingface.cloud',HF_MUSETALK_TOKEN:'limited-key'};
+ for(const language of ['ln','sw','kg','lua'] as const){
+  const result=await translateTutorReply('Bonjour.',language,{env:hf,fetcher:(async(url:any,init:any)=>{
+   assert.equal(String(url),hf.HF_MUSETALK_URL+'/');assert.equal(init.headers.authorization,'Bearer limited-key');
+   const input=JSON.parse(init.body).inputs;assert.equal(input.operation,'/national/translate');assert.equal(input.body.language,language);
+   return Response.json({statusCode:200,body:{text:'Texte ɛ́ ɔ́',language}});
+  }) as typeof fetch});assert.equal(result,'Texte ɛ́ ɔ́');
+ }
+});
