@@ -1,7 +1,7 @@
 """Loopback-only, idempotent MuseTalk jobs behind HF's private endpoint."""
 import base64
 import concurrent.futures
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import io
 import wave
@@ -53,11 +53,14 @@ def main():
     from piper import PiperVoice, SynthesisConfig
     voices={name:PiperVoice.load(str(work / 'voices' / file)) for name,file in [('vivienne','fr_FR-siwis-medium.onnx'),('henri','fr_FR-tom-medium.onnx')]}
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    render_lock, jobs_lock = threading.Lock(), threading.Lock()
+    from video_pipeline import GpuGate
+    render_gate, jobs_lock = GpuGate(), threading.Lock()
+    speech_locks = {name: threading.Lock() for name in voices}
+    video_lock = threading.Lock()
     engine = None
 
     def video_engine():
-        # Called only under render_lock. Chat readiness never waits for avatar
+        # Called only under the GPU gate. Chat readiness never waits for avatar
         # landmarks, masks, latents or CUDA video priming.
         nonlocal engine
         if engine is None:
@@ -97,12 +100,16 @@ def main():
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(raw),
             '-vn', '-ac', '1', '-ar', '16000', str(wav)], check=True, timeout=30)
         avatar = directory / ('avatar.mp4' if lesson else 'result.mp4')
-        with render_lock:
+        with video_lock:
+            with render_gate.hold():
+                renderer = video_engine()
             try:
-                video_engine().render(wav, avatar, lambda _: None)
+                timings = renderer.render(wav, avatar, lambda _: None, gpu_gate=render_gate)
+                (directory / 'timing.json').write_text(json.dumps(timings))
             finally:
-                import torch
-                torch.cuda.empty_cache()
+                with render_gate.hold():
+                    import torch
+                    torch.cuda.empty_cache()
         if lesson:
             compose(avatar, directory / 'result.mp4', lesson, duration)
         if (directory / 'result.mp4').stat().st_size > 24000000:
@@ -122,7 +129,7 @@ def main():
             else:
                 lesson = read_story(body['lesson']) if body.get('lesson') else None
                 duration = render_audio(validate_audio(body), directory, 120, lesson)
-            status(directory, {'status': 'COMPLETED', 'durationSeconds': duration})
+            status(directory, {'status': 'COMPLETED', 'durationSeconds': duration, 'timings': json.loads((directory / 'timing.json').read_text()) if (directory / 'timing.json').exists() else None})
         except Exception:
             import traceback
             traceback.print_exc()
@@ -197,14 +204,16 @@ def main():
                             'mimeType': 'video/mp4', 'durationSeconds': duration,
                             'provider': 'musetalk-huggingface'})
                 if operation == '/chat' and method == 'POST':
-                    # Serialize GPU work with lip-sync to bound memory and contention.
-                    if not render_lock.acquire(blocking=False):
-                        return self.reply(200, {'statusCode': 429, 'body': {'error': 'GPU busy'}})
+                    # Give chat a turn between video batches, never simultaneous GPU inference.
                     try:
-                        result = qwen.chat(body.get('body', {}))
+                        with render_gate.hold(chat=True, timeout=1.5):
+                            # Release video allocator reservations before the separate LLM process runs.
+                            import torch
+                            torch.cuda.empty_cache()
+                            result = qwen.chat(body.get('body', {}))
                         return self.reply(200, {'statusCode': 200, 'body': result})
-                    finally:
-                        render_lock.release()
+                    except TimeoutError:
+                        return self.reply(200, {'statusCode': 429, 'body': {'error': 'GPU busy'}})
                 if operation == '/speech' and method == 'POST':
                     speech=body.get('body', {})
                     text=speech.get('text')
@@ -213,7 +222,7 @@ def main():
                     voice_name='henri' if speech.get('voice') == 'henri' else 'vivienne'
                     with tempfile.TemporaryDirectory(prefix='musetalk-speech-') as tmp:
                         wav,mp3=Path(tmp)/'speech.wav',Path(tmp)/'speech.mp3'
-                        with wave.open(str(wav),'wb') as output:
+                        with speech_locks[voice_name], wave.open(str(wav),'wb') as output:
                             voices[voice_name].synthesize_wav(text,output,syn_config=SynthesisConfig(length_scale=1.03,noise_scale=0.55,noise_w_scale=0.65))
                         subprocess.run(['ffmpeg','-v','error','-y','-i',str(wav),'-ac','1','-b:a','64k',str(mp3)],check=True,timeout=30)
                         audio=mp3.read_bytes()
@@ -243,7 +252,7 @@ def main():
                 traceback.print_exc()
                 self.reply(500, {'error': 'MuseTalk request failed; inspect endpoint logs'})
 
-    HTTPServer(('127.0.0.1', 18061), Handler).serve_forever()
+    ThreadingHTTPServer(('127.0.0.1', 18061), Handler).serve_forever()
 
 
 if __name__ == '__main__':

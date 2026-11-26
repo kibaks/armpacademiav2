@@ -15,7 +15,7 @@ class EndpointHandler:
         self.root = Path(os.environ.get('ACADEMIA_PACKAGE') or path or __file__).resolve()
         if self.root.is_file():
             self.root = self.root.parent
-        self.lock = threading.Lock()
+        self.slots = threading.BoundedSemaphore(4)
         self.work = Path(os.environ.get('ACADEMIA_RUNTIME', '/tmp/academia-musetalk'))
         self.work.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
@@ -56,7 +56,7 @@ class EndpointHandler:
         body = data.get('inputs', data)
         if not isinstance(body, dict):
             raise ValueError('inputs must contain audioData')
-        with self.lock:
+        with self.slots:
             request = urllib.request.Request('http://127.0.0.1:18061/predict',
                 data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
             with urllib.request.urlopen(request, timeout=180) as response:
