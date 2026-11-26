@@ -150,7 +150,7 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
           <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 space-y-1">
             <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 font-mono">NIVEAU 3</span>
             <p className="font-bold text-slate-900 dark:text-white">Dossiers Types (DAO)</p>
-            <p className="text-[11px] text-slate-600 dark:text-slate-400">Standards obligatoires de Travaux, Fournitures et Services.</p>
+            <p className="text-[11px] text-slate-600 dark:text-slate-400">Modèles de dossiers selon la nature de la prestation.</p>
           </div>
 
           <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 space-y-1">
@@ -251,7 +251,7 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
 
                 <div className="flex items-center space-x-2 flex-shrink-0 pt-1">
                   <span className="text-xs text-slate-400 hidden sm:inline">
-                    {doc.articles ? `${doc.articles.length} extraits indexés` : 'Document officiel'}
+                    {doc.articlesCount ? `${doc.articlesCount} passages disponibles pour le tuteur` : 'Document officiel intégral'}
                   </span>
                   <div className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -264,7 +264,7 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
                 <div className="p-5 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Extraits pédagogiques indexés
+                      Texte source et accès intégral
                     </span>
                     <a href={doc.downloadUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-blue-700 underline">Ouvrir le document officiel intégral</a>
                     <button
