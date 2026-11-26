@@ -25,3 +25,10 @@ class ChunksTest(unittest.TestCase):
                 with self.assertRaises(ValueError):read_chunk(p,offset)
             (p/'status.json').write_text(json.dumps({'status':'FAILED'}))
             with self.assertRaises(ValueError):read_chunk(p,0)
+
+class SpeechInputTest(unittest.TestCase):
+    def test_queued_speech_is_bounded_and_uses_installed_voice(self):
+        from worker import validate_speech
+        self.assertEqual(validate_speech({'text':'Bonjour !','language':'fr','voice':'vivienne'})['text'],'Bonjour !')
+        for value in [None,{}, {'text':'x','language':'ln','voice':'vivienne'}, {'text':'x','language':'fr','voice':'unknown'}, {'text':' '*8,'language':'fr','voice':'vivienne'}, {'text':'x'*3001,'language':'fr','voice':'vivienne'}]:
+            with self.assertRaises(ValueError):validate_speech(value)

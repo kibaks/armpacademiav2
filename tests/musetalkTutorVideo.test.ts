@@ -312,3 +312,12 @@ test('private HF progressive stream is owner-only and leaves the credential on t
  assert.equal(response.status,200);assert.equal(await response.text(),'fragment');
  assert.equal(response.headers.get('content-type'),'video/mp4');
 });
+
+test('progressive French queues speech and video in one request without copying audio through Firestore',async()=>{
+ const h=await harness('STREAMING',false,false,true);
+ const response=await h.request(h.base,{method:'POST',headers:{authorization:'owner','content-type':'application/json'},body:JSON.stringify({text:'Un contrat écrit.',persona:'vivienne',language:'fr',progressive:true})});
+ const result=await response.json();assert.equal(result.status,'STREAMING');
+ assert.equal(h.counts().submissions,1);
+ const job=h.records.get(`musetalkTutorJobs/${result.id}`);
+ assert.equal(job.audioParts,undefined);assert.equal(job.hfSpeech.text,'Un contrat écrit.');
+});

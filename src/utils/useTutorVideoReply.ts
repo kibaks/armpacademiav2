@@ -87,7 +87,7 @@ export function useTutorVideoReply(persona: string, active = true, owner = '') {
       if(cached)return {url:cached};
       stage('voice',index);
       const response=await authenticatedFetch('/api/ai/tutor-video',{
-        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,persona:voice,language,retry:true}),signal,
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,persona:voice,language,retry:true,progressive:stream}),signal,
       });
       const data=await response.json();
       if(!response.ok)throw Error(data.error||'La vidéo est indisponible.');

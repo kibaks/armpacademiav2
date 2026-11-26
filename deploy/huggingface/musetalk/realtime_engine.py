@@ -109,7 +109,7 @@ class RealtimeEngine:
             # transporting 720p raw frames through the CPU encoder.
             output_height = min(height, 480)
             output_width = max(2, round(width * output_height / height / 2) * 2)
-            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{output_width}x{output_height}', '-r', str(VIDEO_FPS), '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '2', '-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '12', '-keyint_min', '12', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
+            command = ['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{output_width}x{output_height}', '-r', str(VIDEO_FPS), '-i', 'pipe:0', '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-threads', '2', '-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'main', '-level:v', '3.1', '-crf', '24', '-maxrate', '850k', '-bufsize', '1700k', '-g', '6', '-keyint_min', '6', '-sc_threshold', '0', '-bf', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-shortest', '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-flush_packets', '1', str(output)]
             announced = False
             # stderr goes to a file: never risk a full pipe blocking the encoder.
             with output.with_suffix('.encode.log').open('wb') as log:

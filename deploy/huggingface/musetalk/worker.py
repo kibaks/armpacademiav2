@@ -29,6 +29,17 @@ def validate_audio(body):
     return audio
 
 
+def validate_speech(speech):
+    if not isinstance(speech, dict) or speech.get('language') != 'fr':
+        raise ValueError('French speech required')
+    text = speech.get('text')
+    if not isinstance(text, str) or not 1 <= len(text.strip()) <= 3000:
+        raise ValueError('French speech requires 1 to 3000 characters')
+    if speech.get('voice') not in ('vivienne', 'henri'):
+        raise ValueError('Invalid voice')
+    return speech
+
+
 def main():
     package, work = map(Path, sys.argv[1:])
     root = work / 'MuseTalk'
@@ -58,6 +69,18 @@ def main():
     speech_locks = {name: threading.Lock() for name in voices}
     video_lock = threading.Lock()
     engine = None
+
+    def synthesize(speech):
+        speech = validate_speech(speech)
+        text, voice_name = speech['text'], speech['voice']
+        with tempfile.TemporaryDirectory(prefix='musetalk-speech-') as tmp:
+            wav,mp3=Path(tmp)/'speech.wav',Path(tmp)/'speech.mp3'
+            with speech_locks[voice_name], wave.open(str(wav),'wb') as output:
+                voices[voice_name].synthesize_wav(text,output,syn_config=SynthesisConfig(length_scale=1.03,noise_scale=0.55,noise_w_scale=0.65))
+            subprocess.run(['ffmpeg','-v','error','-y','-i',str(wav),'-ac','1','-b:a','64k',str(mp3)],check=True,timeout=30)
+            audio=mp3.read_bytes()
+            if len(audio)>4000000:raise ValueError('Speech audio too large')
+            return audio
 
     def video_engine():
         # Called only under the GPU gate. Chat readiness never waits for avatar
@@ -131,7 +154,8 @@ def main():
                     raise ValueError('Film exceeds 24 MB transport limit')
             else:
                 lesson = read_story(body['lesson']) if body.get('lesson') else None
-                duration = render_audio(validate_audio(body), directory, 120, lesson)
+                audio = synthesize(body['speech']) if 'speech' in body else validate_audio(body)
+                duration = render_audio(audio, directory, 120, lesson)
             status(directory, {'status': 'COMPLETED', 'durationSeconds': duration, 'timings': json.loads((directory / 'timing.json').read_text()) if (directory / 'timing.json').exists() else None})
         except Exception:
             import traceback
@@ -155,7 +179,10 @@ def main():
             if not all((folder(part) / 'status.json').exists() and json.loads((folder(part) / 'status.json').read_text()).get('status') == 'COMPLETED' for part in parts):
                 return 409, {'error': 'Film scenes unavailable; regenerate the scenes'}
         else:
-            validate_audio(body)
+            if 'speech' in body:
+                validate_speech(body['speech'])
+            else:
+                validate_audio(body)
             if body.get('lesson'):
                 read_story(body['lesson'])
         with jobs_lock:
@@ -218,19 +245,8 @@ def main():
                     except TimeoutError:
                         return self.reply(200, {'statusCode': 429, 'body': {'error': 'GPU busy'}})
                 if operation == '/speech' and method == 'POST':
-                    speech=body.get('body', {})
-                    text=speech.get('text')
-                    if speech.get('language') != 'fr' or not isinstance(text,str) or not 1 <= len(text.strip()) <= 3000:
-                        raise ValueError('French speech requires 1 to 3000 characters')
-                    voice_name='henri' if speech.get('voice') == 'henri' else 'vivienne'
-                    with tempfile.TemporaryDirectory(prefix='musetalk-speech-') as tmp:
-                        wav,mp3=Path(tmp)/'speech.wav',Path(tmp)/'speech.mp3'
-                        with speech_locks[voice_name], wave.open(str(wav),'wb') as output:
-                            voices[voice_name].synthesize_wav(text,output,syn_config=SynthesisConfig(length_scale=1.03,noise_scale=0.55,noise_w_scale=0.65))
-                        subprocess.run(['ffmpeg','-v','error','-y','-i',str(wav),'-ac','1','-b:a','64k',str(mp3)],check=True,timeout=30)
-                        audio=mp3.read_bytes()
-                        if len(audio)>4000000:raise ValueError('Speech audio too large')
-                        return self.reply(200,{'statusCode':200,'body':{'audioData':base64.b64encode(audio).decode(),'mimeType':'audio/mpeg','language':'fr','provider':'huggingface-piper'}})
+                    audio=synthesize(body.get('body', {}))
+                    return self.reply(200,{'statusCode':200,'body':{'audioData':base64.b64encode(audio).decode(),'mimeType':'audio/mpeg','language':'fr','provider':'huggingface-piper'}})
                 if operation in ('/jobs', '/films') and method == 'POST':
                     code, result = submit(body.get('body', {}), operation == '/films')
                     return self.reply(200, {'statusCode': code, 'body': result})

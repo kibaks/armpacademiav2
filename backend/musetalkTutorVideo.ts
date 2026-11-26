@@ -88,6 +88,14 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       reserved = true;
       if(hf && language==='fr'){
         await ref.update({hfSpeech:{text,voice:persona},hfLesson:lesson,status:'PENDING'});
+        if (req.body?.progressive === true && !lesson) {
+          // Queue voice and video together: no round trip or Firestore audio
+          // transfer between synthesis and rendering. Older workers fall back.
+          const direct=await remote('/jobs',{method:'POST',body:JSON.stringify({id,speech:{text,voice:persona,language}})});
+          if(direct.ok)return res.status(202).json({id,status:'STREAMING',videoUrl:`/api/ai/tutor-video/${id}/stream`});
+          if(direct.status===503||direct.status===429)return res.status(202).json({id,status:'WARMING'});
+          if(direct.status!==400)throw new Error('SUBMISSION_FAILED');
+        }
         phase='speech';
         const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({text,voice:persona,language})});
         if(voiced.status===503 || voiced.status===429)return res.status(202).json({id,status:'WARMING'});
