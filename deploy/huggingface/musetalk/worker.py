@@ -104,7 +104,10 @@ def main():
             with render_gate.hold():
                 renderer = video_engine()
             try:
-                timings = renderer.render(wav, avatar, lambda _: None, gpu_gate=render_gate)
+                def playable(elapsed):
+                    if not lesson:
+                        status(directory, {'status': 'STREAMING', 'durationSeconds': duration, 'firstPlayableMs': elapsed})
+                timings = renderer.render(wav, avatar, playable, gpu_gate=render_gate)
                 (directory / 'timing.json').write_text(json.dumps(timings))
             finally:
                 with render_gate.hold():
@@ -231,12 +234,16 @@ def main():
                 if operation in ('/jobs', '/films') and method == 'POST':
                     code, result = submit(body.get('body', {}), operation == '/films')
                     return self.reply(200, {'statusCode': code, 'body': result})
-                match = re.fullmatch(r'/jobs/([a-f0-9]{64})(/media|/retry)?', operation or '')
+                match = re.fullmatch(r'/jobs/([a-f0-9]{64})(/media|/retry|/chunk)?', operation or '')
                 if match:
                     identifier, action = match.groups()
                     directory = folder(identifier)
                     if not (directory / 'status.json').exists():
                         return self.reply(200, {'statusCode': 404, 'body': {}})
+                    if action == '/chunk' and method == 'POST':
+                        from video_chunks import read_chunk
+                        result = read_chunk(directory, body.get('body', {}).get('offset'))
+                        return self.reply(200, {'statusCode': 200, 'body': result})
                     if action == '/media' and method == 'GET':
                         path = directory / 'result.mp4'
                         if not path.exists() or json.loads((directory / 'status.json').read_text()).get('status') != 'COMPLETED':

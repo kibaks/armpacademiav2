@@ -38,6 +38,7 @@ async function harness(workerStatus = 'COMPLETED', progressive = false, consiste
         if(input.operation==='/speech')return Response.json({statusCode:200,body:{mimeType:'audio/mpeg',audioData:Buffer.alloc(100,1).toString('base64')}});
         if(input.operation==='/jobs'){submissions++;hfAccepted=true;if(workerStatus==='DROP_SUBMISSION_REPLY'){workerStatus='COMPLETED';throw new TypeError('connection closed after acceptance');}return Response.json({statusCode:202,body:{id:input.body.id}});}
         polls++;
+        if(input.operation.endsWith('/chunk'))return Response.json({statusCode:200,body:{data:Buffer.from('fragment').toString('base64'),offset:8,complete:true}});
         if(input.operation.endsWith('/media'))return Response.json({statusCode:200,videoData:Buffer.alloc(700000,7).toString('base64')});
         return Response.json({statusCode:hfAccepted?200:404,body:hfAccepted?{status:workerStatus}: {}});
       }
@@ -298,4 +299,16 @@ test('a tutor portrait and an illustrated lesson use distinct jobs for the same 
  const lesson=await(await h.post('Voici la réponse de la tutrice.','fr',motionStory)).json();
  assert.notEqual(portrait.id,lesson.id);
  assert.deepEqual(h.records.get('last-worker-submission').lesson,motionStory);
+});
+
+test('private HF progressive stream is owner-only and leaves the credential on the server',async()=>{
+ const h=await harness('STREAMING',false,false,true);
+ const {id}=await (await h.post()).json();
+ const ready=await (await h.request(`${h.base}/${id}?progressive=1`,{headers:{authorization:'owner'}})).json();
+ assert.equal(ready.status,'STREAMING');assert.equal(ready.videoUrl,`/api/ai/tutor-video/${id}/stream`);
+ assert.equal((await h.request(`${h.base}/${id}/stream`,{headers:{authorization:'other'}})).status,404);
+ assert.equal((await h.request(`${h.base}/${id}/stream`)).status,401);
+ const response=await h.request(`${h.base}/${id}/stream`,{headers:{authorization:'owner'}});
+ assert.equal(response.status,200);assert.equal(await response.text(),'fragment');
+ assert.equal(response.headers.get('content-type'),'video/mp4');
 });

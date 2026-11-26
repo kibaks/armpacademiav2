@@ -6,12 +6,12 @@ export function supportsTutorVideoStream() {
   return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(TUTOR_STREAM_TYPE);
 }
 
-export function openTutorVideoStream(url: string, signal: AbortSignal, onError: () => void) {
+export function openTutorVideoStream(url: string, signal: AbortSignal, onError: () => void, request: (url:string, init:RequestInit) => Promise<Response> = fetch) {
   const source = new MediaSource();
   const objectUrl = URL.createObjectURL(source);
   source.addEventListener('sourceopen', () => {
     void (async () => {
-      const response = await fetch(url, { signal, credentials: 'omit', redirect: 'error' });
+      const response = await request(url, { signal, credentials: 'omit', redirect: 'error' });
       if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('video/mp4')) throw new Error('Invalid stream');
       const reader = response.body.getReader();
       try {

@@ -81,7 +81,7 @@ export function useTutorVideoReply(persona: string, active = true, owner = '') {
     const stage=(value:'voice'|'warming'|'render',index:number)=>{
       if(current() && index===queue.index) setState(previous=>previous.status==='ready'?previous:{status:'loading',stage:value,segmentIndex:index,segmentCount:parts.length});
     };
-    const stream=parts.length===1 && progressive && settings.progressiveStreaming && supportsTutorVideoStream();
+    const stream=progressive && settings.progressiveStreaming && supportsTutorVideoStream();
     const prepare=async(part:string,index:number):Promise<PreparedTutorVideo>=>{
       const cached=owner?replay.current?.get(key(index)):undefined;
       if(cached)return {url:cached};
@@ -98,7 +98,7 @@ export function useTutorVideoReply(persona: string, active = true, owner = '') {
         if(result.status==='COMPLETED'||result.status==='STREAMING') {
           if(typeof result.videoUrl!=='string')throw Error('Vidéo indisponible.');
           if(result.status==='STREAMING'&&stream) {
-            const url=openTutorVideoStream(result.videoUrl,signal,()=>{if(current())void start(text,voice,false,alongsideAudio,automaticPlayback,language,context);});
+            const url=openTutorVideoStream(result.videoUrl,signal,()=>{if(current())void start(text,voice,false,alongsideAudio,automaticPlayback,language,context);}, result.videoUrl.startsWith('/api/') ? authenticatedFetch : fetch);
             pendingUrls.current.add(url);
             return {url,progressive:true,audioUrl:result.audioUrl,durationSeconds:result.durationSeconds};
           }

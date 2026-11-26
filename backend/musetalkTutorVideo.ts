@@ -1,3 +1,4 @@
+import { streamHuggingFaceVideo } from './huggingFaceVideoStream.js';
 import { readCourseMotionStoryboard } from '../shared/courseMotionVideo.js';
 import { nationalSpeechPayload, NationalLanguageError } from './nationalLanguages.js';
 import { tutorLanguage, nationalVoiceAvailable, normalizeNationalSpeech } from '../shared/tutorLanguages.js';
@@ -38,7 +39,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
   const remote = (suffix: string, init: RequestInit = {}) => { refreshEndpoint(); if(hf)return huggingFaceVideoRequest(endpoint!,env.HF_MUSETALK_TOKEN!,suffix,init,request); return request(`${endpoint!.href.replace(/\/$/, '')}${suffix}`, { ...init, headers: { ...init.headers, authorization: `Bearer ${env.MUSETALK_API_KEY}` }, redirect: 'error', signal: AbortSignal.timeout(45000) }); };
   router.use(deps.authenticate || authenticate);
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: hf?'huggingface':'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: hf?120:null, automaticWakeup:hf, progressiveStreaming: !hf && env.MUSETALK_PROGRESSIVE === 'true' }));
+  router.get('/config', (_req, res) => res.json({ enabled: configured(), provider: hf?'huggingface':'musetalk', personas, maxTextLength: 3000, dailyLimit: null, maxDurationSeconds: hf?120:null, automaticWakeup:hf, progressiveStreaming: hf || env.MUSETALK_PROGRESSIVE === 'true' }));
   router.post('/', async (req: any, res) => {
     let ref: any, reserved = false, phase = 'validation';
     try {
@@ -207,7 +208,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       // A growing MP4 has no stable length/range contract. Native players may
       // treat its current end as EOF. Only opted-in MSE clients consume fragments.
       if (result.status === 'STREAMING') {
-        if (env.MUSETALK_PROGRESSIVE === 'true' && req.query?.progressive === '1') return res.json({ status: 'STREAMING', ...playbackMedia(req.params.id), ...(Number.isFinite(result.durationSeconds) && result.durationSeconds > 0 ? {durationSeconds:result.durationSeconds} : {}) });
+        if ((hf || env.MUSETALK_PROGRESSIVE === 'true') && req.query?.progressive === '1') return res.json({ status: 'STREAMING', ...(hf ? {videoUrl:`/api/ai/tutor-video/${req.params.id}/stream`} : playbackMedia(req.params.id)), ...(Number.isFinite(result.durationSeconds) && result.durationSeconds > 0 ? {durationSeconds:result.durationSeconds} : {}) });
         return res.json({ status: 'PENDING' });
       }
       if (result.status === 'COMPLETED') {
@@ -224,6 +225,29 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       if (result.status === 'FAILED') { await entry.ref.update({ status: 'FAILED' }); return res.json({ status: 'FAILED', error: 'La vidéo a échoué. Écoutez la réponse en audio.' }); }
       return res.json({ status: 'PENDING' });
     } catch { return res.status(503).json({ error: 'Le serveur vidéo est momentanément indisponible.' }); }
+  });
+  router.get('/:id/stream', async (req: any, res) => {
+    const abort = new AbortController();
+    const close = () => abort.abort();
+    res.once('close', close);
+    try {
+      if (!hf || !configured()) return res.sendStatus(404);
+      const entry = await owned(req); if (!entry) return res.sendStatus(404);
+      res.type('video/mp4').set('X-Accel-Buffering', 'no');
+      // Authentication and ownership stay on our API; HF credentials never leave it.
+      await streamHuggingFaceVideo(req.params.id, remote, async bytes => {
+        if (res.destroyed) throw new Error('Playback closed');
+        if (!res.headersSent) res.flushHeaders();
+        if (!res.write(bytes)) await new Promise<void>(resolve => {
+          const done = () => {res.off('drain', done);res.off('close', done);resolve();};
+          res.once('drain', done);res.once('close', done);
+        });
+      }, abort.signal);
+      // Leave completion caching to the ordinary status/media route. A failed
+      // stream falls back to that same idempotent job, never a different answer.
+      return res.end();
+    } catch { if (res.headersSent) return res.destroy(); return res.sendStatus(503); }
+    finally {res.off('close', close);}
   });
   router.get('/:id/media', async (req: any, res) => {
     try {
