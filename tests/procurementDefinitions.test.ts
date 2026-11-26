@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {procurementDefinition} from '../backend/procurementDefinitions';
 
 test('reviewed basic definitions include all four statutory types without GPU inference',()=>{
-  for(const q of ['C’est quoi le marché public ?', 'Quels sont les types de marchés publics ?', 'Les catégories des marchés publics', 'La prestation intellectuelle', 'Qu’est-ce que les marchés de prestations intellectuelles ?']) {
+  for(const q of ['C’est quoi le marché public ?', 'Quels sont les types de marchés publics ?', 'Les catégories des marchés publics', 'La prestation intellectuelle', 'Expliquer moi la préstation intellectuelle', 'Qu’est-ce que les marchés de prestations intellectuelles ?']) {
     const r=procurementDefinition(q);
     assert.ok(r,q);
     assert.match(r.reply,/prestations intellectuelles/);

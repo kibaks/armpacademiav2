@@ -5,7 +5,7 @@ const law = 'https://armp-rdc.cd/wp-content/uploads/2021/12/Lois-relative-aux-ma
 export function procurementDefinition(question: string) {
   const q = normalizeTutorQuestion(question).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[’']/g, ' ').replace(/[?.!,;:]/g, '').replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
-  const prefix = '(?:(?:bonjour|bonsoir|salut) )?(?:(?:c est quoi|qu est ce que|definis|definissez|definition de|que signifie) )?';
+  const prefix = '(?:(?:bonjour|bonsoir|salut) )?(?:(?:c est quoi|qu est ce que|definis|definissez|expliquer moi|explique moi|expliquez moi|definition de|que signifie) )?';
   let reply: string | undefined, articles: string | undefined;
   if (new RegExp('^' + prefix + '(?:un |le |les |une |la |des |du |de la )?(?:marche|marches) public(?:s)?$').test(q)) {
     reply = 'Un marché public est un contrat écrit conclu, moyennant un prix, entre une autorité contractante apportant une contribution ou une garantie financière et un entrepreneur, fournisseur ou prestataire. Il porte sur des travaux, des fournitures, des services ou des prestations intellectuelles.';
