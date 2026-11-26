@@ -1,4 +1,3 @@
-import { downloadOperation } from '../lib/operationsApi';
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BookMarked, 
@@ -33,8 +32,6 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
   onSelectSubCategoryForBreadcrumb,
   onSelectSubDetailForBreadcrumb
 }) => {
-  const [downloadError,setDownloadError] = useState<string | null>(null);
-  const download = async (id:string) => {try {setDownloadError(null);await downloadOperation(`/legal/${id}/document`,`extraits-${id}.pdf`);}catch(e){setDownloadError(e instanceof Error?e.message:'Document indisponible.');}};
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
   const [expandedDocId, setExpandedDocId] = useState<string | null>('DOC-001');
@@ -96,7 +93,6 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
 
   return (
     <div className="space-y-6">
-      {downloadError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{downloadError}</p>}
       
       {/* Header Institutional Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white p-5 sm:p-6 rounded-2xl shadow-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -113,7 +109,7 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
             Classification Normative de la Commande Publique (Loi n° 10/010)
           </h3>
           <p className="text-xs sm:text-sm text-slate-300">
-            Consultez les extraits pédagogiques indexés, téléchargez leur version PDF et analysez les obligations de la commande publique en République Démocratique du Congo.
+            Consultez les textes sources du catalogue ARMP, leur état de lecture et les documents intégraux pour analyser les règles de la commande publique en République Démocratique du Congo.
           </p>
         </div>
 
@@ -148,7 +144,7 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
           <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 space-y-1">
             <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 font-mono">NIVEAU 2</span>
             <p className="font-bold text-slate-900 dark:text-white">Décrets Primature</p>
-            <p className="text-[11px] text-slate-600 dark:text-slate-400">Décrets 10/21 (ARMP), 10/22 (Manuel), 10/23 (DGCMP).</p>
+            <p className="text-[11px] text-slate-600 dark:text-slate-400">Décrets 10/21 (ARMP), 23/12 (Manuel), 10/27 (DGCMP).</p>
           </div>
 
           <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 space-y-1">
@@ -270,7 +266,7 @@ export const LegalDocsViewer: React.FC<LegalDocsViewerProps> = ({
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Extraits pédagogiques indexés
                     </span>
-                    <button onClick={()=>void download(doc.id)} className="text-xs font-bold text-blue-700 underline">Télécharger les extraits PDF</button>
+                    <a href={doc.downloadUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-blue-700 underline">Ouvrir le document officiel intégral</a>
                     <button
                       onClick={() => onAskTutorAboutDoc(`Pouvez-vous m'expliquer les implications opérationnelles du document : ${doc.title} ?`)}
                       className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-1"

@@ -111,7 +111,7 @@ export const Footer: React.FC<FooterProps> = ({
             </li>
             <li>
               <button onClick={onOpenLegalDocs} className="hover:text-blue-600 dark:hover:text-amber-400 transition text-left">
-                Décret n° 10/22 portant manuel des procédures
+                Décret n° 23/12 portant manuel des procédures
               </button>
             </li>
             <li>
@@ -121,7 +121,7 @@ export const Footer: React.FC<FooterProps> = ({
             </li>
             <li>
               <button onClick={onOpenLegalDocs} className="hover:text-blue-600 dark:hover:text-amber-400 transition text-left">
-                Décret n° 10/23 portant création de la DGCMP
+                Décret n° 10/27 portant création de la DGCMP
               </button>
             </li>
             <li>

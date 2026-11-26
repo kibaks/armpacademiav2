@@ -128,7 +128,7 @@ export function buildStructuredChapterContent(
   const keyArts: string[] =
     Array.isArray(lesson?.keyArticles) && lesson.keyArticles.length > 0
       ? lesson.keyArticles
-      : [legalRef, 'Art. 17 Loi 10/010', 'Décret n° 10/22'];
+      : [legalRef, 'Loi n° 10/010', 'Manuel des procédures — décret n° 23/12'];
 
   const { sceneData } = buildSynchronizedLessonScreens(
     lessonTitle,

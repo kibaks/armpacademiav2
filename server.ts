@@ -1,3 +1,5 @@
+import { retrieveProcurementKnowledge } from './backend/procurementKnowledge.js';
+import { procurementDefinition } from './backend/procurementDefinitions.js';
 import { tutorRetrievalQuery, quickTutorReply } from './shared/tutorQuestion.js';
 import { createTutorWarmupRouter } from './backend/tutorWarmup.js';
 import { initiationNotificationsRouter } from './backend/initiationNotifications.js';
@@ -370,7 +372,7 @@ function findRelevantLessons(query: string, learningContext?: any, initiationOnl
   const lcTitle = learningContext ? (typeof learningContext==='string' ? learningContext.split(' | ')[0].replace(/\s*\(.*/, '').toLowerCase() : (learningContext.lastCourseTitle||'').toLowerCase()) : '';
   const lcCode = learningContext && typeof learningContext!=='string' && learningContext.lastCourseCode ? learningContext.lastCourseCode.toLowerCase() : '';
   const scored: any[]=[] ;
-  for (const course of (initiationOnly ? initiationKnowledge : [...initiationKnowledge, ...COURSES_KB])) {
+  for (const course of initiationKnowledge) {
     const isLastCourse = lcTitle && course.title.toLowerCase()===lcTitle || (lcCode && course.code.toLowerCase()===lcCode);
     for (const lesson of course.lessons) {
       const courseHay = (course.title+' '+course.code).toLowerCase();
@@ -1818,6 +1820,8 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
   if (!stage) { console.warn('[Tutor LLM] learner level unavailable'); return res.status(503).json({ code:'TUTOR_LEVEL_UNAVAILABLE', error: 'Votre niveau ne peut pas être vérifié. Réessayez.' }); }
   const lexicalReply = !hasMedia && quickTutorReply(String(message));
   if (lexicalReply) return tutorJson({reply: lexicalReply, sources: [], provider: 'tutor-lexicon'});
+  const definition = !hasMedia && procurementDefinition(String(message));
+  if (definition) return tutorJson(definition);
   const learningRedirect = beginnerAdvancedRedirect(stage, String(message));
   if (learningRedirect) return tutorJson({ reply: learningRedirect, sources: [], provider: 'learning-pathway' });
   const verifiedTutorPolicy = LEGAL_KNOWLEDGE_CONTEXT + '\n' + learnerLevelGuidance(stage);
@@ -1831,12 +1835,16 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
   // RAG — extraits cours pertinents (lecture réelle) — avec mémoire historique pour follow-up court
   const ragQuery = tutorRetrievalQuery(fullMessage, history);
   const ragLessons = findRelevantLessons(ragQuery, courseContext || lc, stage === 'Initiation');
-  const ragBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
+  const official = retrieveProcurementKnowledge(ragQuery);
+  const tutorSources = official.sources;
+  const pedagogicalBlock = ragLessons.length ? `\n\n=== EXTRAITS PERTINENTS DE TES COURS ACADEMIA (DOCUMENTATION PÉDAGOGIQUE FOURNIE) ===\n${ragLessons.map(r=> `• Cours ${r.course.code} — ${r.course.title} | Leçon : ${r.lesson.title} (${r.lesson.keyArticles.join(', ')})\n  Contenu : ${r.lesson.content}`).join('\n')}\n=== FIN EXTRAITS ===\n` : '';
+
+  const ragBlock = official.block || (pedagogicalBlock + '\nCes extraits sont pédagogiques et ne constituent pas des textes juridiques vérifiés. Ne pas en déduire un article, un seuil, une nullité ou un délai. Consulter les pièces officielles manquantes.');
 
   if (qwenTutorConfig()) {
     try {
       const reply = await generateQwenTutor(tutorConversationData(fullMessage, history, context, lc, ragBlock + '\n' + learnerLevelGuidance(stage)), { stage, language });
-      return tutorJson({ reply, sources: ragLessons.map(r => formatCourseCitation(r)), provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
+      return tutorJson({ reply, sources: tutorSources, provider: process.env.TUTOR_LLM_PROVIDER==='huggingface'?'qwen3-4b-instruct-2507':'qwen2.5-7b-instruct', ...(typeof transcription !== 'undefined' && transcription ? { transcription } : {}) });
     } catch (error) {
       console.warn('[Tutor LLM] generation failed', {provider:process.env.TUTOR_LLM_PROVIDER || 'gateway', errorCode:error instanceof Error && /^QWEN_[A-Z_0-9]+$/.test(error.message)?error.message:'QWEN_CONNECTION_FAILED', errorType:error instanceof Error?error.name:'Unknown'});
       if (process.env.TUTOR_LLM_PROVIDER === 'huggingface' && error instanceof Error && error.message === 'QWEN_HTTP_429') {
@@ -1871,7 +1879,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
       return tutorJson({
         reply: adaptReplyToPersona(arenaReply),
         ...(transcription ? { transcription } : {}),
-        sources: ragLessons.map(r => formatCourseCitation(r))
+        sources: tutorSources
       });
     }
   }
@@ -1896,7 +1904,7 @@ app.post('/api/ai/tutor', createTutorVoiceInput(), createTutorLanguageInput(), a
     return tutorJson({
       reply: replyText,
       ...(transcription ? { transcription } : {}),
-      sources: ragLessons.map(r => formatCourseCitation(r)),
+      sources: tutorSources,
     });
   } catch (error: any) {
     console.warn('[AI Tutor] Model high demand or unavailable, serving RAG fallback:', error?.message);

@@ -258,7 +258,7 @@ const QA_CATEGORIES: Array<{
       'Quand dois-je demander une autorisation avant de signer un grand marché ?',
       "Comment contester une décision si je m'estime lésé ?",
       'Que doit contenir le dossier que je donne aux entreprises ?',
-      'Quelles sont les 8 étapes clés de la passation d’un marché public ?',
+      'Quelles sont les étapes clés de la passation d’un marché public ?',
       'Quelle est la différence des rôles entre CGPMP, DGCMP et ARMP ?'
     ]
   },
@@ -267,10 +267,10 @@ const QA_CATEGORIES: Array<{
     label: 'PPM & Seuils',
     badge: '📋',
     questions: [
-      'Que se passe-t-il si un marché est lancé sans figurer dans le PPM publié (Art. 14) ?',
-      'Comment éviter le piège du fractionnement ou saucissonnage (Art. 13) ?',
+      'Quelles sont les règles de préparation et de publication du PPM dans le manuel de 2023 ?',
+      'Comment éviter le piège du fractionnement ou saucissonnage ?',
       'Quelle est la différence entre allotissement régulier et fractionnement illicite ?',
-      'Quels sont les 4 grands principes fondamentaux de la Loi n° 10/010 (Art. 5) ?'
+      'Quels sont les principes fondamentaux de la Loi n° 10/010 ?'
     ]
   },
   {
@@ -278,9 +278,9 @@ const QA_CATEGORIES: Array<{
     label: 'DAO & Évaluation',
     badge: '📄',
     questions: [
-      'Quelles sont les 5 pièces constitutives d’un Dossier d’Appel d’Offres (DAO Type) ?',
-      'Comment se déroule la séance publique d’ouverture des plis (Art. 46) ?',
-      'Comment traiter une offre financière jugée anormalement basse (Art. 49) ?',
+      'Quelles sont les pièces constitutives d’un Dossier d’Appel d’Offres (DAO Type) ?',
+      'Comment se déroule la séance publique d’ouverture des plis ?',
+      'Comment traiter une offre financière jugée anormalement basse ?',
       'Comment recruter un consultant pour des prestations intellectuelles (TDR et DP) ?'
     ]
   },
@@ -290,7 +290,7 @@ const QA_CATEGORIES: Array<{
     badge: '🚦',
     questions: [
       'Dans quels cas l’Avis de Non-Objection (ANO) de la DGCMP est-il obligatoire ?',
-      'Quelles sont les 3 conditions strictes pour passer un marché de gré à gré (Art. 42) ?',
+      'Quelles sont les conditions légales pour passer un marché de gré à gré ?',
       'Quelles sont les règles et plafonds à respecter avant de signer un avenant ?',
       'Quelles sont les différentes garanties et cautions bancaires exigées ?'
     ]
@@ -300,9 +300,9 @@ const QA_CATEGORIES: Array<{
     label: 'Recours & Contentieux',
     badge: '⚖️',
     questions: [
-      'Quels sont les délais exacts du recours gracieux préalable (Art. 77) ?',
+      'Quels sont les délais exacts du recours gracieux préalable ?',
       'Comment saisir le Comité de Règlement des Différends (CRD) et quel est son effet suspensif ?',
-      'Quelles sanctions l’ARMP peut-elle infliger en cas de fraude ou conflit d’intérêts (Art. 84 & 88) ?'
+      'Quelles sanctions l’ARMP peut-elle infliger en cas de fraude ou conflit d’intérêts ?'
     ]
   },
   {
@@ -310,7 +310,7 @@ const QA_CATEGORIES: Array<{
     label: 'Contenu Local & Exécution',
     badge: '🇨🇩',
     questions: [
-      'Comment appliquer la préférence nationale (Art. 36) et le contenu local (51% ARSP) ?',
+      'Comment distinguer la préférence nationale et les règles de contenu local applicables ?',
       'Que faire face à un fournisseur en retard ou défaillant pendant l’exécution ?',
       'Comment fonctionnent les pénalités de retard et la réception provisoire/définitive ?'
     ]

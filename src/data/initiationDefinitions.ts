@@ -1,6 +1,6 @@
 // Reformulations pédagogiques, distinctes des citations littérales des textes publics.
 export const PROCUREMENT_LAW_URL = 'https://armp-rdc.cd/wp-content/uploads/2021/12/Lois-relative-aux-marchs-publicsx.pdf';
-export const PROCUREMENT_MANUAL_URL = 'https://armp-rdc.cd/wp-content/uploads/2022/03/DECRET_10-22_Manuel_de_procedures.pdf';
+export const PROCUREMENT_MANUAL_URL = 'https://armp-rdc.cd/wp-content/uploads/2023/08/DECRET-N%C2%B023-12-DU-03-MARS-2023-PORTANT-MANUEL-DE-PROCEDURES-DES-MARCHES-PUBLICS-1.pdf';
 export const INITIATION_DEFINITIONS = [
   [
     [
@@ -16,7 +16,7 @@ export const INITIATION_DEFINITIONS = [
     [
       "Égalité et transparence",
       "La liberté d’accès permet aux candidats remplissant les conditions de participer. L’égalité commande un traitement impartial ; la transparence rend les règles et les décisions compréhensibles et contrôlables.",
-      "Décret n° 10/22 · articles 4 à 8"
+      "Décret n° 23/12 · articles 3 à 7"
     ]
   ],
   [
@@ -40,7 +40,7 @@ export const INITIATION_DEFINITIONS = [
     [
       "Identification du besoin",
       "La préparation commence par le projet et son utilité. Décrire le besoin consiste à préciser le résultat recherché, les bénéficiaires et les prestations nécessaires avant d’organiser la concurrence.",
-      "Loi n° 10/010 · article 6 ; décret n° 10/22 · article 5"
+      "Loi n° 10/010 · article 6 ; décret n° 23/12 · article 4"
     ],
     [
       "Estimation de l’achat",
@@ -113,12 +113,12 @@ export const INITIATION_DEFINITIONS = [
     [
       "Information commune",
       "La transparence suppose que les candidats puissent connaître les règles effectivement appliquées. Les éclaircissements touchant la préparation des offres doivent être traités dans le cadre de l’égalité d’accès à l’information.",
-      "Décret n° 10/22 · articles 6 et 7"
+      "Décret n° 23/12 · articles 5 et 6"
     ],
     [
       "Ouverture et évaluation",
       "L’ouverture rend publics les éléments prévus de la remise des offres. L’évaluation est l’examen des propositions avec les critères annoncés : le constat d’un prix à l’ouverture ne désigne pas à lui seul le titulaire.",
-      "Décret n° 10/22 · article 7 ; loi n° 10/010 · article 20"
+      "Décret n° 23/12 · article 6 ; loi n° 10/010 · article 20"
     ]
   ],
   [
@@ -135,7 +135,7 @@ export const INITIATION_DEFINITIONS = [
     [
       "Justification de l’analyse",
       "Le raisonnement d’évaluation doit pouvoir être compris et contrôlé. Une conclusion doit donc être reliée au critère appliqué et aux éléments examinés, plutôt qu’à une préférence personnelle.",
-      "Loi n° 10/010 · article 20 ; décret n° 10/22 · article 7"
+      "Loi n° 10/010 · article 20 ; décret n° 23/12 · article 6"
     ]
   ],
   [
@@ -147,7 +147,7 @@ export const INITIATION_DEFINITIONS = [
     [
       "Information sur le résultat",
       "La publicité des résultats participe à la transparence et au contrôle de l’impartialité de la procédure. L’information diffusée doit correspondre à la décision et respecter le circuit prévu.",
-      "Décret n° 10/22 · article 7"
+      "Décret n° 23/12 · article 6"
     ],
     [
       "Réclamation",
@@ -198,7 +198,7 @@ export const INITIATION_DEFINITIONS = [
     [
       "Traçabilité",
       "Conserver les écrits et les versions permet de comprendre les règles suivies et les décisions prises. Cette organisation soutient la transparence et les contrôles ; elle se prépare au fil du marché.",
-      "Décret n° 10/22 · articles 4 et 7"
+      "Décret n° 23/12 · articles 3 et 6"
     ],
     [
       "Cycle de la commande publique",

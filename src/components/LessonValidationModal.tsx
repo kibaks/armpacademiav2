@@ -60,7 +60,7 @@ export function generateLessonValidationQuestions(
 
   const title = lesson?.title || 'Marchés Publics';
   const keyArticle = lesson?.keyArticles?.[0] || 'Art. 1er Loi 10/010';
-  const secondArticle = lesson?.keyArticles?.[1] || 'Art. 14 Loi 10/010';
+  const secondArticle = lesson?.keyArticles?.[1] || 'Référence à vérifier dans le texte officiel';
   const lowTitle = title.toLowerCase();
 
   if (lowTitle.includes('architecture') || lowTitle.includes('piliers') || lowTitle.includes('fondament') || lessonIndex === 0) {
@@ -191,7 +191,7 @@ export function generateLessonValidationQuestions(
         ],
         correctIndex: 0,
         explanation: `Conformément à la réglementation congolaise, la modification par avenant ne peut en aucun cas dépasser 15 % du montant initial du marché, sous peine de constituer un nouveau marché déguisé.`,
-        legalReference: 'Décret n° 10/22 d’application'
+        legalReference: 'Manuel des procédures — décret n° 23/12'
       },
       {
         id: `q-${lessonIndex}-2`,
