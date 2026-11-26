@@ -289,3 +289,13 @@ test('expired video reservations get a fresh lifetime instead of becoming unpoll
   assert.equal(status.status,200);assert.equal((await status.json()).status,'COMPLETED');
  }
 });
+
+
+test('a tutor portrait and an illustrated lesson use distinct jobs for the same spoken text',async()=>{
+ const h=await harness();
+ const portrait=await(await h.post('Voici la réponse de la tutrice.')).json();
+ assert.equal('lesson' in h.records.get('last-worker-submission'),false);
+ const lesson=await(await h.post('Voici la réponse de la tutrice.','fr',motionStory)).json();
+ assert.notEqual(portrait.id,lesson.id);
+ assert.deepEqual(h.records.get('last-worker-submission').lesson,motionStory);
+});

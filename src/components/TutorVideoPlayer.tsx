@@ -9,7 +9,7 @@ export function TutorVideoPlayer({ state, onStop, onAudioOnly, onRetry, persona,
   state: TutorVideoState; onStop: () => void; onAudioOnly: () => void; onRetry?: () => void; persona: string; active?: boolean; showPresentation?: boolean; children: React.ReactNode; onProgress?: (progress: number | undefined) => void; onAutoplayBlocked?: () => void;
 }) {
   // Calls show the complete portrait; the framing button remains available.
-  const [fillFrame, setFillFrame] = useState(showPresentation);
+  const [fillFrame, setFillFrame] = useState(false);
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   useEffect(() => {
     setWaitingSeconds(0);

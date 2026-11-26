@@ -1,5 +1,5 @@
 import { createTutorVideoReplayCache } from './tutorVideoReplayCache';
-import {tutorReplyStoryboard,type TutorVideoContext} from './tutorReplyStoryboard';
+import type {TutorVideoContext} from './tutorReplyStoryboard';
 import { type TutorLanguage } from '../../shared/tutorLanguages';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../lib/adminApi';
@@ -84,7 +84,7 @@ export function useTutorVideoReply(persona: string, active = true, owner = '') {
     try {
       const response = await authenticatedFetch('/api/ai/tutor-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, persona: voice, language, lesson: tutorReplyStoryboard(text,context) ?? undefined, retry:true }), signal,
+        body: JSON.stringify({ text, persona: voice, language, retry:true }), signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'La vidéo est indisponible.');
