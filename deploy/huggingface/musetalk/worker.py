@@ -120,7 +120,7 @@ def main():
 
     national = NationalWorker(package, work, ffmpeg, gpu_session=national_gpu_session)
 
-    print('ACADEMIA_CHAT_READY video=lazy', flush=True)
+    print('ACADEMIA_CHAT_READY video=prewarming', flush=True)
     jobs = work / 'jobs'
     jobs.mkdir(exist_ok=True)
     pending = set()
@@ -320,7 +320,24 @@ def main():
                 traceback.print_exc()
                 self.reply(500, {'error': 'MuseTalk request failed; inspect endpoint logs'})
 
-    ThreadingHTTPServer(('127.0.0.1', 18061), Handler).serve_forever()
+    # Bind health before preloading; the platform may probe while CUDA warms.
+    server = ThreadingHTTPServer(('127.0.0.1', 18061), Handler)
+    def prepare_media():
+        try:
+            for voice in ('vivienne', 'henri'):
+                synthesize({'text': 'Bonjour.', 'language': 'fr', 'voice': voice})
+            # Same ordering as render_audio: never create a second renderer.
+            with video_lock:
+                with render_gate.hold():
+                    video_engine()
+            print('ACADEMIA_MEDIA_READY', flush=True)
+        except Exception:
+            # A failed warmup must not kill chat; a real job can retry loading.
+            import traceback
+            print('ACADEMIA_MEDIA_PREWARM_FAILED', flush=True)
+            traceback.print_exc()
+    pool.submit(prepare_media)
+    server.serve_forever()
 
 
 if __name__ == '__main__':
