@@ -66,7 +66,7 @@ export async function nationalSpeechPayload(text: string, language: TutorLanguag
   const env=options.env||process.env;
   if(language==='fr' && isHuggingFaceVideo(env) && env.HF_MUSETALK_URL && env.HF_MUSETALK_TOKEN){
     const response=await huggingFaceVideoRequest(new URL(env.HF_MUSETALK_URL),env.HF_MUSETALK_TOKEN,'/speech',{method:'POST',body:JSON.stringify({text,language,voice:options.voice})},options.fetcher||fetch);
-    if(!response.ok)throw new NationalLanguageError(response.status===503?'Le moteur vocal se réveille. La vidéo et sa voix arriveront dès que le chargement sera terminé.':'La voix est momentanément indisponible.');
+    if(!response.ok)throw Object.assign(new NationalLanguageError(response.status===503?'Le moteur vocal se réveille. La vidéo et sa voix arriveront dès que le chargement sera terminé.':'La voix est momentanément indisponible.'), {upstreamStatus:response.status});
     const data=await response.json();
     if(data.mimeType!=='audio/mpeg'||typeof data.audioData!=='string'||data.audioData.length>5333336||!/^[A-Za-z0-9+/]+={0,2}$/.test(data.audioData))throw new NationalLanguageError('La voix reçue est invalide.');
     const audio=Buffer.from(data.audioData,'base64');
@@ -87,7 +87,7 @@ export async function handleNationalSpeech(req: any, res: ExpressResponse) {
     if (typeof req.body?.text !== 'string' || !req.body.text.trim() || req.body.text.length > 3000) return res.status(400).json({ error: 'Choisissez un passage de 3000 caractères maximum.' });
     return res.json(await nationalSpeechPayload(req.body.text, tutorLanguage(req.body.language), { voice: req.body.voice }));
   } catch (error) {
-    return res.status(error instanceof NationalLanguageError ? error.status : 503).json({ error: error instanceof NationalLanguageError ? error.message : 'La voix est momentanément indisponible.' });
+    return res.status(error instanceof NationalLanguageError ? error.status : 503).json({ ...((error as any)?.upstreamStatus === 503 ? {code:'TUTOR_WARMING'} : {}), error: error instanceof NationalLanguageError ? error.message : 'La voix est momentanément indisponible.' });
   }
 }
 export async function getNationalCapabilities(_req: any, res: ExpressResponse) {
