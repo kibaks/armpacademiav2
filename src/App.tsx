@@ -368,7 +368,7 @@ export default function App() {
   useEffect(() => {
     if (!isAuthenticated || auth.currentUser?.uid !== storedProfile.id) return;
     const controller = new AbortController();
-    void preloadCourseVideos(courses, controller.signal);
+    void preloadCourseVideos(courses, controller.signal, storedProfile.id);
     return () => controller.abort();
   }, [isAuthenticated, storedProfile.id, courses]);
   useEffect(() => () => clearCourseVideoPreload(), [isAuthenticated, storedProfile.id]);
