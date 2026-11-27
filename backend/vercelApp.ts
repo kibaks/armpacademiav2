@@ -1,3 +1,4 @@
+import { createInitiationVideoPlansRouter } from './initiationVideoPlans.js';
 import { retrieveProcurementKnowledge } from './procurementKnowledge.js';
 import { procurementDefinition } from './procurementDefinitions.js';
 import { tutorRetrievalQuery, quickTutorReply } from '../shared/tutorQuestion.js';
@@ -86,6 +87,7 @@ app.use(['/api/tts/settings', '/api/cgpmp/send-credentials-email'], (req, res, n
 app.use('/api/ai/tutor-video', createTutorVideoRouter());
 app.use(['/api/ai', '/ai'], authenticate);
 app.use('/api/ai', createTutorWarmupRouter());
+app.use('/api/ai', createInitiationVideoPlansRouter());
 app.use('/api/ai/tutor-voice', createTutorVoiceMediaRouter());
 // Lazy initialize Gemini AI client — fallback to curated RDC legal base if no key (used on Vercel without env)
 let aiClient: GoogleGenAI | null = null;

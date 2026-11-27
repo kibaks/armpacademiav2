@@ -1,3 +1,5 @@
+import { publishedInitiationVideo } from '../utils/publishedInitiationVideos';
+import { generatedInitiationVideo, subscribeInitiationVideos } from '../utils/initiationVideoBackground';
 import { cachedCourseVideo } from '../utils/courseVideoPreload';
 import publishedTutorSource from '../assets/courses/init-01-chapitre-01-tutrice-v1.json';
 import publishedTutorFilm from '../assets/courses/init-01-chapitre-01-tutrice-v1.mp4';
@@ -7,7 +9,7 @@ import { lessonDisplayHeading } from '../utils/lessonEssentialSummary';
 import { CartoonLessonStage } from './CartoonLessonStage';
 import { InitiationMotionStage } from './InitiationMotionStage';
 import './CartoonLesson.css';
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useSyncExternalStore } from 'react';
 import {
   Play,
   Pause,
@@ -139,7 +141,8 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const safeTitle = lesson?.title || course.title || 'Module Marchés Publics RDC';
   const safeContent = lesson?.content || course.description || '';
   const hasPublishedTutorFilm = course.id === publishedTutorSource.courseId && lessonIndex === publishedTutorSource.lessonIndex && safeContent === publishedTutorSource.content;
-  const originalVideoUrl = hasPublishedTutorFilm ? publishedTutorFilm : lesson?.mediaUrl;
+  const generatedFilm = useSyncExternalStore(subscribeInitiationVideos, () => generatedInitiationVideo(course.id, lessonIndex, safeContent), () => undefined);
+  const originalVideoUrl = generatedFilm || publishedInitiationVideo(course.id, lessonIndex, safeContent) || (hasPublishedTutorFilm ? publishedTutorFilm : lesson?.mediaUrl);
   // Keep the chosen source stable during playback; use the downloaded film on entry.
   const uploadedVideoUrl = useMemo(() => cachedCourseVideo(originalVideoUrl), [originalVideoUrl]);
 

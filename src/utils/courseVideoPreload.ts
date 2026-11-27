@@ -1,3 +1,4 @@
+import { publishedInitiationVideo } from './publishedInitiationVideos';
 import publishedSource from '../assets/courses/init-01-chapitre-01-tutrice-v1.json';
 import publishedFilm from '../assets/courses/init-01-chapitre-01-tutrice-v1.mp4';
 import type { CourseModule } from '../types';
@@ -13,7 +14,7 @@ export function clearCourseVideoPreload() {
 export function courseVideoSources(courses: CourseModule[]) {
   const urls: string[] = [];
   for (const course of courses) for (const [index,lesson] of (course.lessons || []).entries()) {
-    const url = course.id === publishedSource.courseId && index === publishedSource.lessonIndex && lesson.content === publishedSource.content ? publishedFilm : lesson.mediaUrl;
+    const url = publishedInitiationVideo(course.id, index, lesson.content) || (course.id === publishedSource.courseId && index === publishedSource.lessonIndex && lesson.content === publishedSource.content ? publishedFilm : lesson.mediaUrl);
     if (url && !urls.includes(url)) urls.push(url);
   }
   return urls;

@@ -1,3 +1,4 @@
+import { prepareInitiationVideos, clearGeneratedInitiationVideos } from './utils/initiationVideoBackground';
 import { preloadCourseVideos, clearCourseVideoPreload } from './utils/courseVideoPreload';
 import { watchSessionIdle } from './utils/sessionIdle';
 import { operationsApi } from './lib/operationsApi';
@@ -372,6 +373,13 @@ export default function App() {
     return () => controller.abort();
   }, [isAuthenticated, storedProfile.id, courses]);
   useEffect(() => () => clearCourseVideoPreload(), [isAuthenticated, storedProfile.id]);
+  useEffect(() => {
+    if (!isAuthenticated || auth.currentUser?.uid !== storedProfile.id) return;
+    const controller = new AbortController();
+    void prepareInitiationVideos(courses, storedProfile.id, controller.signal).catch(() => {});
+    return () => controller.abort();
+  }, [isAuthenticated, storedProfile.id, courses]);
+  useEffect(() => () => clearGeneratedInitiationVideos(), [isAuthenticated, storedProfile.id]);
   const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
   const [initiationDeadline, setInitiationDeadline] = useState<{ uid: string; expiresAt: number; enforced: boolean } | null>(null);
   useEffect(() => {

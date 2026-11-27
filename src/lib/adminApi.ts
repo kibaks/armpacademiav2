@@ -21,7 +21,7 @@ async function authenticatedFetchOnce(url: string, options: RequestInit = {}) {
 }
 export async function authenticatedFetch(url: string, options: RequestInit & {onTutorWarming?: (warming:boolean) => void} = {}) {
   const {onTutorWarming,...requestOptions}=options;
-  if (url !== '/api/ai/tutor' && url !== '/api/ai/tts') return authenticatedFetchOnce(url, requestOptions);
+  if (url !== '/api/ai/tutor' && url !== '/api/ai/tts' && url !== '/api/ai/initiation/video-plan') return authenticatedFetchOnce(url, requestOptions);
   await auth.authStateReady();
   const owner = auth.currentUser?.uid;
   try {
