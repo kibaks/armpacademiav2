@@ -139,7 +139,7 @@ export default function App() {
   const sessionGeneration = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isSessionLocked, setIsSessionLocked] = useState(() => sessionStorage.getItem('academia-session-locked') === '1');
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => sessionStorage.getItem('academia-session-locked') === '1' || new URLSearchParams(window.location.search).get('reactivate') === '1');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => new URLSearchParams(window.location.search).get('reactivate') === '1');
   const [pendingCourseForAuth, setPendingCourseForAuth] = useState<CourseModule | null>(null);
 
   // App Features State
@@ -333,7 +333,7 @@ export default function App() {
         sessionStorage.setItem('academia-session-locked', '1');
         setIsSessionLocked(true);
       }
-      setAuthModalMode('login'); setIsAuthModalOpen(true);
+      setAuthModalMode('login'); setIsAuthModalOpen(detail.code === 'MFA_REQUIRED');
       if (detail.code !== 'MFA_REQUIRED') void firebaseLogout().catch(() => {});
     };
     const refreshed = () => { void restore(); };
@@ -1390,6 +1390,17 @@ export default function App() {
         </div>
       )}
 
+      {isSessionLocked && !isAuthModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950 p-6 text-white" role="dialog" aria-modal="true" aria-labelledby="session-lock-title">
+          <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-900 p-8 text-center shadow-2xl">
+            <Lock className="mx-auto mb-5 h-12 w-12 text-amber-400" aria-hidden="true" />
+            <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">ARMP Academia</p>
+            <h1 id="session-lock-title" className="mb-3 text-2xl font-bold">Session verrouillée</h1>
+            <p className="mb-8 text-slate-300">Votre session a expiré après une période d’inactivité. Reconnectez-vous pour reprendre votre parcours.</p>
+            <button autoFocus type="button" onClick={() => { setAuthModalMode('login'); setIsAuthModalOpen(true); }} className="w-full rounded-xl bg-amber-400 px-6 py-3 font-bold text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Se reconnecter</button>
+          </div>
+        </div>
+      )}
       {/* Authentication & Registration Full-Window Two-Column Portal with Firebase Auth */}
       <AuthModal
         isOpen={isAuthModalOpen}
