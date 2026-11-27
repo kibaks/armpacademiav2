@@ -24,8 +24,6 @@ export async function authenticatedFetch(url: string, options: RequestInit & {on
   if (url !== '/api/ai/tutor') return authenticatedFetchOnce(url, requestOptions);
   await auth.authStateReady();
   const owner = auth.currentUser?.uid;
-  // A bounded, deduplicated wake probe is initiated before sending a question.
-  await prewarmTutor();
   try {
     return await requestTutorWithWakeup(() => authenticatedFetchOnce(url, requestOptions), {
       signal: requestOptions.signal, currentSession: () => auth.currentUser?.uid === owner,

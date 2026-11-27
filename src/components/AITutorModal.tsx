@@ -4,7 +4,7 @@ import { synthesizeVoiceNote } from '../utils/synthesizeVoiceNote';
 import { tutorHistoryForStorage, tutorAudioMime } from '../../shared/tutorVoice';
 import { DEFAULT_TUTOR_PRESENTATION, normalizeTutorPresentation } from '../../shared/tutorPresentation';
 import './TutorStudio.css';
-import { authenticatedFetch, prewarmTutor } from '../lib/adminApi';
+import { authenticatedFetch } from '../lib/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import { peekLevelSettings, levelLabel } from '../utils/levelSettings';
 import {
@@ -461,7 +461,6 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const userChangedAutoSpeak = useRef(false);
   useEffect(() => {
     if (!isOpen) return;
-    void prewarmTutor().catch(() => {});
     let active = true;
     const controller = new AbortController();
     fetch('/api/tutor/languages', { signal: controller.signal }).then(response => response.ok ? response.json() : null).then(data => { if (active && data) setNationalCapabilities({ consistentVoice: data.consistentVoice === true, translation: Array.isArray(data.translation) ? data.translation : [], speech: Array.isArray(data.speech) ? data.speech : [] }); }).catch(() => {});
@@ -1870,8 +1869,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
                     type="text"
                     value={inputText}
                     disabled={isRecordingVoice}
-                    onFocus={() => { void prewarmTutor().catch(() => {}); }}
-                    onChange={(e) => { setInputText(e.target.value); void prewarmTutor().catch(() => {}); }}
+                    onChange={(e) => { setInputText(e.target.value); }}
                     placeholder={
                       isListening
                         ? `Parlez maintenant, ${activeTutor.name} transcrit votre question…`
