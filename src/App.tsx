@@ -138,7 +138,8 @@ export default function App() {
   const pendingMedia = useRef<{ uid: string; patch: Partial<UserProfile> } | null>(null);
   const sessionGeneration = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => new URLSearchParams(window.location.search).get('reactivate') === '1');
+  const [isSessionLocked, setIsSessionLocked] = useState(() => sessionStorage.getItem('academia-session-locked') === '1');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => sessionStorage.getItem('academia-session-locked') === '1' || new URLSearchParams(window.location.search).get('reactivate') === '1');
   const [pendingCourseForAuth, setPendingCourseForAuth] = useState<CourseModule | null>(null);
 
   // App Features State
@@ -328,6 +329,10 @@ export default function App() {
       if (detail?.uid !== auth.currentUser?.uid) return;
       ++sessionGeneration.current;
       reset();
+      if (detail.code !== 'MFA_REQUIRED') {
+        sessionStorage.setItem('academia-session-locked', '1');
+        setIsSessionLocked(true);
+      }
       setAuthModalMode('login'); setIsAuthModalOpen(true);
       if (detail.code !== 'MFA_REQUIRED') void firebaseLogout().catch(() => {});
     };
@@ -494,6 +499,8 @@ export default function App() {
     try { profile = await getOrInitUserProfile(user); }
     catch (error) { showToast(error instanceof Error ? error.message : 'Profil Firebase indisponible.'); return false; }
     if (auth.currentUser !== user || generation !== sessionGeneration.current) return false;
+    sessionStorage.removeItem('academia-session-locked');
+    setIsSessionLocked(false);
     window.dispatchEvent(new Event('academia-session-verified'));
     setIsAuthModalOpen(false);
 
@@ -1386,8 +1393,9 @@ export default function App() {
       {/* Authentication & Registration Full-Window Two-Column Portal with Firebase Auth */}
       <AuthModal
         isOpen={isAuthModalOpen}
-        canClose={true}
+        canClose={!isSessionLocked}
         onClose={() => {
+          if (isSessionLocked) return;
           setIsAuthModalOpen(false);
           setPendingCourseForAuth(null);
           setPendingTutorAfterAuth(false);
