@@ -1,3 +1,4 @@
+import { sessionIdleExpired } from './sessionIdle.js';
 import type { Request, Response } from 'express';
 import { SignJWT, jwtVerify } from 'jose';
 import { randomBytes, createHash, scrypt, timingSafeEqual } from 'node:crypto';
@@ -45,7 +46,7 @@ export async function issueSession(uid: string, provider: 'password' | 'google',
   if (!user.customClaims?.role && ['super_admin', 'dfat_admin', 'formateur', 'armp_agent', 'dgcmp_agent'].includes(profile?.role)) throw new Error('Privileged claims must be configured by the administrator');
   const role = user.customClaims?.role || (['cgpmp_member', 'ac_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier'].includes(profile?.role) ? profile!.role : 'particulier');
   if (!user.customClaims?.role) await auth.setCustomUserClaims(uid, { ...user.customClaims, role });
-  const session = { uid, provider, authTime, issuedAt, expiresAt, version: account?.version || 0, role };
+  const session = { uid, provider, authTime, issuedAt, lastActivityAt: issuedAt, expiresAt, version: account?.version || 0, role };
   const bridgeToken = await auth.createCustomToken(uid, { role, appSessionId: sid, appAuthTime: authTime });
   const jwt = await new SignJWT({ sid }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).setSubject(uid).setIssuer('academia').setAudience('academia-web').setIssuedAt(authTime).setExpirationTime(Math.floor(expiresAt / 1000)).sign(key);
   await db.collection('authSessions').doc(sid).set(session);
@@ -61,7 +62,7 @@ export async function nativeIdentity(req: Request) {
   const { auth, db } = services();
   const [snap, accountSnap, user] = await Promise.all([db.collection('authSessions').doc(payload.sid).get(), db.collection('authAccounts').doc(payload.sub).get(), auth.getUser(payload.sub)]);
   const session = snap.data();
-  if (!session || session.uid !== payload.sub || session.expiresAt <= Date.now() || session.version !== (accountSnap.data()?.version || 0) || (accountSnap.data()?.demoExpiresAt && accountSnap.data()!.demoExpiresAt <= Date.now()) || user.disabled || Date.parse(user.tokensValidAfterTime || '') > session.issuedAt) throw Object.assign(new Error(), { code: 'auth/id-token-revoked' });
+  if (!session || sessionIdleExpired(session) || session.uid !== payload.sub || session.expiresAt <= Date.now() || session.version !== (accountSnap.data()?.version || 0) || (accountSnap.data()?.demoExpiresAt && accountSnap.data()!.demoExpiresAt <= Date.now()) || user.disabled || Date.parse(user.tokensValidAfterTime || '') > session.issuedAt) throw Object.assign(new Error(), { code: 'auth/id-token-revoked' });
   return { uid: user.uid, sub: user.uid, email: user.email, name: user.displayName, role: user.customClaims?.role || 'particulier', auth_time: session.authTime, appSessionId: payload.sid };
 }
 export async function resetLink(uid: string) {

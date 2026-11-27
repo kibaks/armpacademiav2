@@ -1,3 +1,4 @@
+import { sessionIdleExpired } from './sessionIdle.js';
 import { synthesizePiperTutor } from './piperTutorSpeech.js';
 import { normalizeSpeechPronunciation, parsePronunciationEntries } from '../shared/speechPronunciation.js';
 import { readSpeechPronunciation, saveSpeechPronunciation } from './speechPronunciation.js';
@@ -27,7 +28,7 @@ export const authenticateIdentity: RequestHandler = async (req: AuthRequest, res
       const db = services().db;
       const [sessionSnap, accountSnap] = await Promise.all([db.collection('authSessions').doc(identity.appSessionId).get(), db.collection('authAccounts').doc(identity.uid).get()]);
       const session = sessionSnap.data();
-      if (!session || session.uid !== identity.uid || session.role !== identity.role || session.expiresAt <= Date.now() || session.version !== (accountSnap.data()?.version || 0) || (accountSnap.data()?.demoExpiresAt && accountSnap.data()!.demoExpiresAt <= Date.now()) || session.authTime !== (identity.appAuthTime || identity.auth_time)) throw Object.assign(new Error(), { code: 'auth/id-token-revoked' });
+      if (!session || sessionIdleExpired(session) || session.uid !== identity.uid || session.role !== identity.role || session.expiresAt <= Date.now() || session.version !== (accountSnap.data()?.version || 0) || (accountSnap.data()?.demoExpiresAt && accountSnap.data()!.demoExpiresAt <= Date.now()) || session.authTime !== (identity.appAuthTime || identity.auth_time)) throw Object.assign(new Error(), { code: 'auth/id-token-revoked' });
       req.identity = { ...identity, auth_time: session.authTime };
     }
   }

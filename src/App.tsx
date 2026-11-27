@@ -1,3 +1,4 @@
+import { watchSessionIdle } from './utils/sessionIdle';
 import { operationsApi } from './lib/operationsApi';
 import { downloadOperation } from './lib/operationsApi';
 import { InitiationPathway } from './components/InitiationPathway';
@@ -346,6 +347,17 @@ export default function App() {
   const storedProfile = profiles[currentRole] || profiles['cgpmp_member'];
   useEffect(() => {
     if (isAuthenticated && auth.currentUser?.uid === storedProfile.id) void prewarmTutor().catch(() => {});
+  }, [isAuthenticated, storedProfile.id]);
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!isAuthenticated || uid !== storedProfile.id) return;
+    return watchSessionIdle(
+      () => { void authenticatedFetch('/api/auth/activity', {method:'POST'}).then(response => {
+        if (response.status === 401) window.dispatchEvent(new CustomEvent('academia-session-required', {detail:{uid,code:'SESSION_INVALID'}}));
+      }).catch(() => {}); },
+      () => { window.dispatchEvent(new CustomEvent('academia-session-required', {detail:{uid,code:'SESSION_INVALID'}})); },
+      `academia-last-activity:${uid}`,
+    );
   }, [isAuthenticated, storedProfile.id]);
   const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
   const [initiationDeadline, setInitiationDeadline] = useState<{ uid: string; expiresAt: number; enforced: boolean } | null>(null);

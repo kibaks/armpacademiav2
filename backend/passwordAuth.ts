@@ -1,3 +1,4 @@
+import { sessionIdleExpired } from './sessionIdle.js';
 import { authEmailConfigured, sendAppEmail } from './authEmail.js';
 import { passwordEmail } from './emailTemplates.js';
 import { Router } from 'express';
@@ -112,6 +113,25 @@ passwordRouter.post('/auth/bridge', wrap(async (req, res) => {
   try { identity = await nativeIdentity(req); } catch (error: any) { if (error.code?.startsWith('auth/')) return res.status(401).json({ code: 'SESSION_INVALID', error: 'Reconnectez-vous.' }); throw error; }
   const bridgeToken = await services().auth.createCustomToken(identity.uid, { role: identity.role, appSessionId: identity.appSessionId, appAuthTime: identity.auth_time });
   res.json({ uid: identity.uid, bridgeToken, appSessionId: identity.appSessionId, role: identity.role });
+}));
+// Only an explicit user-activity request extends the idle deadline.
+passwordRouter.post('/auth/activity', wrap(async (req, res) => {
+  let identity;
+  try { identity = await nativeIdentity(req); }
+  catch (error: any) {
+    if (error.code?.startsWith('auth/')) return res.status(401).json({code:'SESSION_INVALID'});
+    throw error;
+  }
+  const db = services().db;
+  const ref = db.collection('authSessions').doc(identity.appSessionId);
+  const valid = await db.runTransaction(async tx => {
+    const session = (await tx.get(ref)).data();
+    const now = Date.now();
+    if (!session || sessionIdleExpired(session, now) || session.expiresAt <= now) return false;
+    tx.update(ref, {lastActivityAt: now});
+    return true;
+  });
+  return res.status(valid ? 204 : 401).json(valid ? undefined : {code:'SESSION_INVALID'});
 }));
 passwordRouter.post('/auth/logout', wrap(async (req, res) => {
   try {
