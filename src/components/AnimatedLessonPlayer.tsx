@@ -1,3 +1,4 @@
+import { cachedCourseVideo } from '../utils/courseVideoPreload';
 import publishedTutorSource from '../assets/courses/init-01-chapitre-01-tutrice-v1.json';
 import publishedTutorFilm from '../assets/courses/init-01-chapitre-01-tutrice-v1.mp4';
 import publishedTutorPoster from '../assets/courses/init-01-chapitre-01-tutrice-v1.jpg';
@@ -138,7 +139,9 @@ export const AnimatedLessonPlayer: React.FC<AnimatedLessonPlayerProps> = ({
   const safeTitle = lesson?.title || course.title || 'Module Marchés Publics RDC';
   const safeContent = lesson?.content || course.description || '';
   const hasPublishedTutorFilm = course.id === publishedTutorSource.courseId && lessonIndex === publishedTutorSource.lessonIndex && safeContent === publishedTutorSource.content;
-  const uploadedVideoUrl = hasPublishedTutorFilm ? publishedTutorFilm : lesson?.mediaUrl;
+  const originalVideoUrl = hasPublishedTutorFilm ? publishedTutorFilm : lesson?.mediaUrl;
+  // Keep the chosen source stable during playback; use the downloaded film on entry.
+  const uploadedVideoUrl = useMemo(() => cachedCourseVideo(originalVideoUrl), [originalVideoUrl]);
 
   // Resolve connected user profile from prop or active session in localStorage
   const effectiveUserProfile = useMemo(() => {

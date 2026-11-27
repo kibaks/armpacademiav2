@@ -1,3 +1,4 @@
+import { preloadCourseVideos, clearCourseVideoPreload } from './utils/courseVideoPreload';
 import { watchSessionIdle } from './utils/sessionIdle';
 import { operationsApi } from './lib/operationsApi';
 import { downloadOperation } from './lib/operationsApi';
@@ -364,6 +365,13 @@ export default function App() {
       `academia-last-activity:${uid}`,
     );
   }, [isAuthenticated, storedProfile.id]);
+  useEffect(() => {
+    if (!isAuthenticated || auth.currentUser?.uid !== storedProfile.id) return;
+    const controller = new AbortController();
+    void preloadCourseVideos(courses, controller.signal);
+    return () => controller.abort();
+  }, [isAuthenticated, storedProfile.id, courses]);
+  useEffect(() => () => clearCourseVideoPreload(), [isAuthenticated, storedProfile.id]);
   const [verifiedStage, setVerifiedStage] = useState<{ uid: string; stage: LearningStage } | null>(null);
   const [initiationDeadline, setInitiationDeadline] = useState<{ uid: string; expiresAt: number; enforced: boolean } | null>(null);
   useEffect(() => {
