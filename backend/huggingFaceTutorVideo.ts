@@ -1,3 +1,4 @@
+import { put as putBlob, get as getBlob, del as deleteBlob } from '@vercel/blob';
 import { preparePrivateSpace, PRIVATE_SPACE_HOST, transientHuggingFaceError } from './huggingFaceSpace.js';
 import { trustedHuggingFaceEndpoint } from './huggingFaceEndpoint.js';
 /** Private HF JSON transport and durable, owner-checked cache used by MuseTalk routes. */
@@ -34,15 +35,30 @@ export async function huggingFaceVideoRequest(endpoint: URL, key: string, path: 
   return Response.json(result.body || {}, {status});
 }
 
-export async function saveVideoPayload(ref: any, kind: 'audio' | 'video', bytes: Buffer) {
+export async function saveVideoPayload(ref: any, kind: 'audio' | 'video', bytes: Buffer, blobOps = {put:putBlob,del:deleteBlob}) {
   if (!bytes.length || bytes.length > MAX_BYTES) throw new Error('Payload size exceeded');
+  if(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) {
+    if(!/^[a-f0-9]{64}$/.test(ref.id))throw new Error('Invalid video identifier');
+    const blob=await blobOps.put(`academia/tutor/${ref.id}/${kind}.${kind==='video'?'mp4':'mp3'}`,bytes,{access:'private',addRandomSuffix:true,contentType:kind==='video'?'video/mp4':'audio/mpeg'});
+    try {await ref.update({[`${kind}BlobPath`]:blob.pathname,[`${kind}Bytes`]:bytes.length,hfCacheExpiresAt:Date.now()+86400000});}
+    catch(error){await blobOps.del(blob.pathname).catch(()=>{});throw error;}
+    return;
+  }
   const count = Math.ceil(bytes.length / PART_BYTES);
   // Each document remains well below Firestore's 1 MiB document limit.
   for (let i=0; i<count; i++) await ref.collection('hfPayload').doc(`${kind}-${i}`).set({data:bytes.subarray(i*PART_BYTES,(i+1)*PART_BYTES).toString('base64')});
   await ref.update({[`${kind}Parts`]:count,[`${kind}Bytes`]:bytes.length,hfCacheExpiresAt:Date.now()+86400000});
 }
 
-export async function loadVideoPayload(ref: any, job: any, kind: 'audio' | 'video') {
+export async function loadVideoPayload(ref: any, job: any, kind: 'audio' | 'video', blobOps={get:getBlob}) {
+  const blobPath=job[`${kind}BlobPath`];
+  if(typeof blobPath==='string') {
+    if(!/^[a-f0-9]{64}$/.test(ref.id)||!blobPath.startsWith(`academia/tutor/${ref.id}/`))throw new Error('Invalid media path');
+    const result=await blobOps.get(blobPath,{access:'private'});if(!result||result.statusCode!==200)throw new Error('Missing media');
+    const reader=result.stream.getReader(),chunks:Buffer[]=[];let size=0;
+    try {while(true){const item=await reader.read();if(item.done)break;size+=item.value.byteLength;if(size>MAX_BYTES){await reader.cancel();throw new Error('Payload size exceeded');}chunks.push(Buffer.from(item.value));}}finally{reader.releaseLock();}
+    if(size!==job[`${kind}Bytes`])throw new Error('Incomplete cached media');return Buffer.concat(chunks);
+  }
   const count=job[`${kind}Parts`], size=job[`${kind}Bytes`];
   if (!Number.isInteger(count) || count<1 || count>54 || !Number.isInteger(size) || size<1 || size>MAX_BYTES) throw new Error('Invalid cached media');
   const parts: Buffer[]=[];
@@ -62,6 +78,7 @@ export async function purgeExpiredVideoCache(db: any) {
   for(const entry of expired.docs){
     const job=entry.data();
     for(const kind of ['audio','video']) {
+      const blobPath=job[`${kind}BlobPath`];if(typeof blobPath==='string' && blobPath.startsWith(`academia/tutor/${entry.id}/`))await deleteBlob(blobPath);
       const count=job[`${kind}Parts`];
       if(Number.isInteger(count) && count>0 && count<=54)
         for(let i=0;i<count;i++)await entry.ref.collection('hfPayload').doc(`${kind}-${i}`).delete();

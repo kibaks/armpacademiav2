@@ -1,7 +1,8 @@
+import { upload as uploadToBlob } from '@vercel/blob/client';
 import { normalizeStorageUrls, stableStorageUrl } from '../../shared/storageUrls';
 import { auth } from '../firebase';
 import { MAX_IMAGE_BYTES, imageMime, IMAGE_EXTENSIONS } from '../../shared/imageUpload';
-/** Authenticated uploads go directly to the configured Vast storage service. */
+/** Authenticated uploads go directly to private Vercel Blob when configured. */
 export const ACADEMIA_API_URL = '';
 const API = '/api/storage';
 
@@ -105,6 +106,13 @@ export async function uploadFile(file: File, opts: UploadOptions = {}): Promise<
   });
   const ticket = await response.json();
   if (!response.ok) throw new Error(ticket.message || ticket.error || 'Autorisation d’upload refusée.');
+  if(ticket.provider==='vercel-blob') {
+    await uploadToBlob(ticket.pathname,file,{access:'private',handleUploadUrl:API+'/blob-upload',headers:authorization,clientPayload:JSON.stringify({id:ticket.id}),contentType:ticket.contentType,multipart:file.size>8*1024*1024,onUploadProgress:event=>opts.onProgress?.(Math.min(99,Math.round(event.percentage)))});
+    if(auth.currentUser!==user)throw new Error('La session a changé.');
+    const completed=await fetch(`${API}/files/${ticket.id}/complete`,{method:'POST',headers:await accessHeaders()});
+    const data=await completed.json();if(!completed.ok||!data.data?.url)throw new Error(data.message||'Validation du fichier indisponible.');
+    opts.onProgress?.(100);return data.data as AcademiaFile;
+  }
   return new Promise((resolve,reject)=>{
     const xhr = new XMLHttpRequest();
     xhr.open('POST', ticket.url); xhr.timeout = 300000;

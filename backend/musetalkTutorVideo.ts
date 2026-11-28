@@ -183,11 +183,11 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         if(!submitted.ok)throw new Error('SUBMISSION_FAILED');
         await entry.ref.update({status:'PENDING',hfResubmit:false});return res.json({status:'PENDING'});
       };
-      const queuedNational=hf && !entry.job.audioParts && entry.job.hfSpeech?.language && entry.job.hfSpeech.language!=='fr';
+      const queuedNational=hf && !(entry.job.audioParts || entry.job.audioBlobPath) && entry.job.hfSpeech?.language && entry.job.hfSpeech.language!=='fr';
       if(queuedNational && entry.job.hfResubmit)return await resumeNational();
       if (hf && entry.job.hfResubmit) {
         let audio: string;
-        if (entry.job.audioParts) {
+        if (entry.job.audioParts || entry.job.audioBlobPath) {
           audio=(await loadVideoPayload(entry.ref,entry.job,'audio')).toString('base64');
         } else {
           if(!entry.job.hfSpeech)throw new Error('MISSING_SPEECH');
@@ -209,7 +209,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
       const response = await remote(`/jobs/${req.params.id}`);
       if(hf && (response.status===503 || response.status===429))return res.json({status:'WARMING'});
       if(queuedNational && response.status===404)return await resumeNational();
-      if(hf && response.status===404 && !entry.job.audioParts && entry.job.hfSpeech){
+      if(hf && response.status===404 && !(entry.job.audioParts || entry.job.audioBlobPath) && entry.job.hfSpeech){
         const voiced=await remote('/speech',{method:'POST',body:JSON.stringify({...entry.job.hfSpeech,language:'fr'})});
         if(voiced.status===503 || voiced.status===429)return res.json({status:'WARMING'});
         if(!voiced.ok)throw new Error('NO_AUDIO');
@@ -222,7 +222,7 @@ export function createMuseTalkTutorVideoRouter(deps: Deps = {}) {
         if(submitted.ok||submitted.status===503||submitted.status===429)return res.json({status:submitted.ok?'PENDING':'WARMING'});
         throw new Error('SUBMISSION_FAILED');
       }
-      if(hf && response.status===404 && entry.job.audioParts){
+      if(hf && response.status===404 && (entry.job.audioParts || entry.job.audioBlobPath)){
         const audio=await loadVideoPayload(entry.ref,entry.job,'audio');
         const submitted=await remote('/jobs',{method:'POST',body:JSON.stringify({id:req.params.id,audio:audio.toString('base64'),...(entry.job.hfLesson?{lesson:entry.job.hfLesson}:{})})});
         if(submitted.ok || submitted.status===503 || submitted.status===429)return res.json({status:submitted.ok?'PENDING':'WARMING'});

@@ -1,3 +1,4 @@
+import { createBlobStorageRouter, blobStorageConfigured } from './blobStorage.js';
 import express, { Router, type RequestHandler } from 'express';
 import { randomUUID } from 'node:crypto';
 import { authenticate } from './admin.js';
@@ -57,4 +58,7 @@ export function createStorageRouter(dependencies: { authenticate?: RequestHandle
   router.delete('/files/:id', forward);
   return router;
 }
-export const storageRouter = createStorageRouter();
+const legacyStorageRouter=createStorageRouter(),vercelBlobRouter=createBlobStorageRouter();
+export const storageRouter=Router();
+storageRouter.use((req,res,next)=>blobStorageConfigured()?vercelBlobRouter(req,res,next):next());
+storageRouter.use(legacyStorageRouter);
