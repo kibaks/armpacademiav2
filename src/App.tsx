@@ -1,3 +1,4 @@
+import { EngineStartupNotice } from './components/EngineStartupNotice';
 import { prepareInitiationVideos, clearGeneratedInitiationVideos } from './utils/initiationVideoBackground';
 import { preloadCourseVideos, clearCourseVideoPreload } from './utils/courseVideoPreload';
 import { watchSessionIdle } from './utils/sessionIdle';
@@ -6,7 +7,7 @@ import { downloadOperation } from './lib/operationsApi';
 import { InitiationPathway } from './components/InitiationPathway';
 import type { LearningStage } from '../shared/learnerProgression';
 import { getLearnerOnboarding } from './utils/learnerOnboarding';
-import { authenticatedFetch, prewarmTutor } from './lib/adminApi';
+import { authenticatedFetch } from './lib/adminApi';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Header 
@@ -352,9 +353,6 @@ export default function App() {
   }, []);
 
   const storedProfile = profiles[currentRole] || profiles['cgpmp_member'];
-  useEffect(() => {
-    if (isAuthenticated && auth.currentUser?.uid === storedProfile.id) void prewarmTutor().catch(() => {});
-  }, [isAuthenticated, storedProfile.id]);
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!isAuthenticated || uid !== storedProfile.id) return;
@@ -919,6 +917,7 @@ export default function App() {
       
       {/* Institutional Preloader */}
       <InstitutionalPreloader isLoading={isAppLoading} statusText={preloaderStatus} />
+      {isAuthenticated && <EngineStartupNotice key={storedProfile.id} userId={storedProfile.id} />}
 
       {/* Toast Notification */}
       {toastMessage && (

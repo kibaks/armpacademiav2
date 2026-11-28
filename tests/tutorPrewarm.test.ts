@@ -29,3 +29,22 @@ test('private wakeup uses a bounded health probe and never returns provider cred
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
  }
 });
+
+test('login readiness waits for both speech and video; pending jobs are never submitted twice',async()=>{
+ const env={TUTOR_LLM_PROVIDER:'huggingface',HF_MUSETALK_URL:'https://example.endpoints.huggingface.cloud',HF_MUSETALK_TOKEN:'private-test-key',MUSETALK_PROVIDER:'huggingface',TUTOR_VIDEO_ENABLED:'true'};
+ let state='absent',submits=0;
+ const app=express();app.use(createTutorWarmupRouter(env,async(url,init)=>{
+  if(String(url).endsWith('/health'))return Response.json({ready:true});
+  const body=JSON.parse(String(init?.body)).inputs;
+  if(body.operation==='/jobs') {submits++;assert.equal(body.body.speech.language,'fr');state='PENDING';return Response.json({statusCode:202,body:{}});}
+  assert.match(body.operation,/^\/jobs\/[a-f0-9]{64}$/);
+  return Response.json({statusCode:state==='absent'?404:200,body:{status:state}});
+ }));
+ const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
+ const url=`http://127.0.0.1:${(server.address() as any).port}/tutor/wake`;
+ try{
+  for(let i=0;i<2;i++){const response=await fetch(url,{method:'POST'});assert.equal(response.status,202);assert.equal((await response.json()).phase,'media');}
+  assert.equal(submits,1);
+  state='COMPLETED';const response=await fetch(url,{method:'POST'});assert.equal(response.status,200);assert.equal((await response.json()).ready,true);assert.equal(submits,1);
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
