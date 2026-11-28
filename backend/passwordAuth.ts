@@ -98,6 +98,9 @@ passwordRouter.post('/auth/register', wrap(async (req, res) => {
   res.status(201).json(await issueSession(user.uid, 'password', res));
 }));
 passwordRouter.post('/auth/google', wrap(async (req, res) => {
+  const started=Date.now();
+  const stage=(name:string)=>{req.accountStage=name;console.info('[Account Google]',{stage:name,elapsedMs:Date.now()-started});};
+  stage('google.verify');
   if (typeof req.body?.idToken !== 'string') return res.status(400).json({ error: 'Identité Google requise.' });
   let identity;
   try { identity = await services().auth.verifyIdToken(req.body.idToken, true); }
@@ -106,7 +109,7 @@ passwordRouter.post('/auth/google', wrap(async (req, res) => {
     throw error;
   }
   if (identity.firebase?.sign_in_provider !== 'google.com' || !identity.email_verified || Math.abs(Date.now() / 1000 - identity.auth_time) > 300) return res.status(401).json({ error: 'Une connexion Google récente et vérifiée est requise.' });
-  res.json(await issueSession(identity.uid, 'google', res));
+  res.json(await issueSession(identity.uid, 'google', res, stage));
 }));
 passwordRouter.post('/auth/bridge', wrap(async (req, res) => {
   let identity;

@@ -30,15 +30,17 @@ export async function passwordMatches(password: string, stored: string) {
   const key = await derive(password, salt);
   return timingSafeEqual(key, Buffer.from(expected, 'hex'));
 }
-export async function issueSession(uid: string, provider: 'password' | 'google', res: Response) {
+export async function issueSession(uid: string, provider: 'password' | 'google', res: Response, stage: (name: string) => void = () => {}) {
   const key = signingKey();
   const { auth, db } = services();
+  stage('session.user');
   const user = await auth.getUser(uid);
   if (user.disabled) throw Object.assign(new Error(), { code: 'auth/user-disabled' });
   const sid = randomBytes(32).toString('hex');
   const issuedAt = Date.now();
   const authTime = Math.floor(issuedAt / 1000);
   const expiresAt = issuedAt + 12 * 3600000;
+  stage('session.profile');
   const [accountSnap, profileSnap] = await Promise.all([db.collection('authAccounts').doc(uid).get(), db.collection('users').doc(uid).get()]);
   const account = accountSnap.data();
   if (account?.demoExpiresAt && account.demoExpiresAt <= Date.now()) throw Object.assign(new Error(), { code: 'auth/user-disabled' });
@@ -47,10 +49,13 @@ export async function issueSession(uid: string, provider: 'password' | 'google',
   const role = user.customClaims?.role || (['cgpmp_member', 'ac_agent', 'pme', 'grande_entreprise', 'societe_civile', 'independant', 'particulier'].includes(profile?.role) ? profile!.role : 'particulier');
   if (!user.customClaims?.role) await auth.setCustomUserClaims(uid, { ...user.customClaims, role });
   const session = { uid, provider, authTime, issuedAt, lastActivityAt: issuedAt, expiresAt, version: account?.version || 0, role };
+  stage('session.bridge');
   const bridgeToken = await auth.createCustomToken(uid, { role, appSessionId: sid, appAuthTime: authTime });
   const jwt = await new SignJWT({ sid }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).setSubject(uid).setIssuer('academia').setAudience('academia-web').setIssuedAt(authTime).setExpirationTime(Math.floor(expiresAt / 1000)).sign(key);
+  stage('session.save');
   await db.collection('authSessions').doc(sid).set(session);
   res.cookie(sessionCookie, jwt, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 12 * 3600000 });
+  stage('session.ready');
   return { uid, bridgeToken, appSessionId: sid, role };
 }
 export async function nativeIdentity(req: Request) {
