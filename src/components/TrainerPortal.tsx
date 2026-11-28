@@ -286,7 +286,7 @@ L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'éval
         targetAudience: (Array.isArray(m.targetAudience) ? m.targetAudience : aiAudiences) as UserRole[],
         duration: m.duration || '2h 15min',
         level: (m.level || aiLevel) as CourseModule['level'],
-        legalRef: m.legalReference || aiLegalRef,
+        legalRef: m.legalRef || m.legalReference || aiLegalRef,
         description: m.description || `Module animé généré par l'IA à partir du support de ${currentProfile.name}.`,
         coverImage: newCourseCover || imgTraining,
         chaptersCount: Array.isArray(m.lessons) ? m.lessons.length : 3,
@@ -311,7 +311,7 @@ L'intégralité du dossier (PPM, DAO, ANO DGCMP, PV d'ouverture, rapport d'éval
       };
       setAiGeneratedCourse(generated);
       setAiPreviewLessonIdx(0);
-      setAiEngineLabel(data.engine === 'gemini-ai-studio' ? 'Cerveau IA Gemini • Scénarisation Animée Prof. Aïsha' : 'Moteur Pédagogique Structuré ACADEMIA IA');
+      setAiEngineLabel(data.source === 'local-qwen' ? 'Qwen hébergé • Brouillon à relire avant publication' : 'Préparation pédagogique • Brouillon à relire');
       setTrainerNotice(`Module animé « ${generated.title} » généré avec succès (${generated.lessons.length} leçons animées + ${generated.quiz.length} QCM) !`);
     } catch (err: any) {
       console.warn('AI module generation error:', err);
@@ -1004,7 +1004,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                   className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/25 transition flex items-center space-x-1.5 active:scale-95"
                 >
                   <Sparkles className="w-4 h-4 text-slate-950" />
-                  <span>Générer Module Animé (IA)</span>
+                  <span>Générer une formation</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1041,7 +1041,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
               {[
                 { id: 'dashboard' as const, label: 'Tableau de bord', icon: BarChart3 },
                 { id: 'courses' as const, label: 'Mes Formations', icon: BookOpen, badge: trainerCourses.length },
-                { id: 'ai_generator' as const, label: 'Générateur IA Animé', icon: Sparkles, badge: 'IA' },
+                { id: 'ai_generator' as const, label: 'Générer une formation', icon: Sparkles, badge: 'IA' },
                 { id: 'authoring' as const, label: 'Créateur de Cours', icon: FolderPlus },
                 { id: 'studio' as const, label: 'Studio Vidéo', icon: Tv },
                 { id: 'quiz_bank' as const, label: 'Banque QCM', icon: ListOrdered },
@@ -1899,7 +1899,7 @@ Commençons par examiner l'article 5 relatif aux quatre principes inviolables de
                 className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shrink-0 transition flex items-center gap-1.5 self-start sm:self-center"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Ouvrir le Générateur IA Animé</span>
+                <span>Ouvrir le Générer une formation</span>
               </button>
             </div>
             {/* Stepper identique mais dans header immersif */}

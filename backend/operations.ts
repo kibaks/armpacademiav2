@@ -30,7 +30,13 @@ export function createOperationsRouter(deps: { authenticate?: RequestHandler; db
     await staff(req);
     const b=req.body;
     if(typeof b.sourceText!=='string' || b.sourceText.trim().length<20 || b.sourceText.length>30000 || typeof b.sourceTitle!=='string' || b.sourceTitle.length>250) throw fail(400,'Titre et contenu source requis (20 à 30 000 caractères).');
-    const text:string=await (deps.generate || generateQwenAuthor)(`Tu prépares un brouillon pédagogique pour un formateur. Réponds uniquement avec un objet JSON valide sans Markdown : {"title":"...","description":"...","lessons":[{"title":"...","content":"...","duration":"10 min","keyArticles":[]}],"quiz":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}. Fais exactement 2 chapitres de 40 mots et 2 questions très courtes. Limite le JSON à 2 000 caractères. N'invente pas de référence légale absente du contenu source. Titre : ${b.sourceTitle}. Source : ${b.sourceText.slice(0,20000)}`);
+    let text:string;
+    try {
+    text=await (deps.generate || generateQwenAuthor)(`Tu prépares un brouillon pédagogique pour un formateur. Réponds uniquement avec un objet JSON valide sans Markdown : {"title":"...","description":"...","lessons":[{"title":"...","content":"...","duration":"10 min","keyArticles":[]}],"quiz":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}. Fais exactement 2 chapitres de 40 mots et 2 questions très courtes. Limite le JSON à 2 000 caractères. N'invente pas de référence légale absente du contenu source. Titre : ${b.sourceTitle}. Source : ${b.sourceText.slice(0,20000)}`);
+    } catch (error) {
+      if (error instanceof Error && /QWEN_HTTP_(503|429)/.test(error.message)) return res.status(503).json({code:'TUTOR_WARMING',error:'Le moteur prépare votre formation. La demande sera reprise automatiquement.'});
+      throw error;
+    }
     let module:any; try { module=JSON.parse(text.slice(text.indexOf('{'),text.lastIndexOf('}')+1)); }catch {throw fail(502,'Le moteur n’a pas produit un module valide. Réessayez.');}
     const valid=module && typeof module.title==='string' && module.title.trim() && typeof module.description==='string' && Array.isArray(module.lessons) && module.lessons.length>=1 && module.lessons.length<=12 && module.lessons.every((l:any)=>typeof l.title==='string' && typeof l.content==='string' && l.content.trim()) && Array.isArray(module.quiz) && module.quiz.length>=1 && module.quiz.length<=20 && module.quiz.every((q:any)=>typeof q.question==='string' && Array.isArray(q.options) && q.options.length===4 && q.options.every((v:any)=>typeof v==='string' && v.trim()) && Number.isInteger(q.correctIndex) && q.correctIndex>=0 && q.correctIndex<4);
     if(!valid) throw fail(502,'Le module généré est incomplet. Aucune publication effectuée. Réessayez.');
